@@ -1268,6 +1268,13 @@ def cmd_snippets_update(root, args, agent_root):
             return 1
 
         pkg_dir = find_package_dir(root, agent_root) if not args.no_validate else None
+        if pkg_dir is None and not args.no_validate:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": "package not found and --no-validate not set"},
+                args.as_json,
+            )
+            return 1
         if pkg_dir is not None:
             session = _new_session(root, args, pkg_dir)
             code_runner = session.exec
@@ -1284,11 +1291,20 @@ def cmd_snippets_update(root, args, agent_root):
         write_snippet_file(root, args.snippet_id, new_text)
 
         audit = load_audit(root)
-        e = audit["snippets"][args.snippet_id]
+        e = audit["snippets"].get(args.snippet_id)
+        if e is None:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": f"audit entry missing for {args.snippet_id}; "
+                            f"snippet file written but audit not updated"},
+                args.as_json,
+            )
+            return 1
         if not args.no_validate:
             e["verified_at"] = _now()
             e["unverified"] = False
         else:
+            e["verified_at"] = None
             e["unverified"] = True
         save_audit(root, audit)
 
@@ -1338,20 +1354,27 @@ def cmd_snippets_update(root, args, agent_root):
     new_text = existing
     if new_summary != snip["summary"]:
         new_text = re.sub(
-            r"(^summary:\s*).+$", rf"\g<1>{new_summary}",
+            r"(^summary:).+$",
+            lambda m: m.group(1) + " " + new_summary,
             new_text, count=1, flags=re.MULTILINE,
         )
     for argname, desc in arg_desc_updates.items():
-        pattern = re.compile(
-            rf"(- name: {re.escape(argname)}\n(?:    [^\n]+\n)*?)"
-            rf"(    description:[^\n]*\n)?",
+        # Step 1: remove any existing description: line for this arg.
+        # Match "- name: argname\n" followed by 4-space-indent lines, scoped
+        # so we only edit lines belonging to this specific arg's block.
+        block_re = re.compile(
+            rf"(?P<head>- name: {re.escape(argname)}\n(?P<body>(?:    [^\n]+\n)*))",
             re.MULTILINE,
         )
-        def _repl(m):
-            head = m.group(1)
-            new_line = f"    description: {desc}\n"
-            return head + new_line
-        new_text = pattern.sub(_repl, new_text, count=1)
+        m = block_re.search(new_text)
+        if not m:
+            # The arg exists in parsed schema but block_re missed it; skip silently.
+            continue
+        body_lines = [ln for ln in m.group("body").splitlines(keepends=True)
+                      if not ln.startswith("    description:")]
+        body_lines.append(f"    description: {desc}\n")
+        replacement = m.group("head").split("\n", 1)[0] + "\n" + "".join(body_lines)
+        new_text = new_text[:m.start()] + replacement + new_text[m.end():]
 
     write_snippet_file(root, args.snippet_id, new_text)
     _print_envelope(
