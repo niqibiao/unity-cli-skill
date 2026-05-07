@@ -36,6 +36,7 @@ CLI commands exposed through Claude Code's skill system.
 - **Workflow-aware.** Understands Unity's compile lifecycle, play mode, domain reload.
 - **Automatic custom command discovery.** User-defined C# commands are synced into the skill catalog.
 - **Runtime / IL2CPP support.** Works with HybridCLR for runtime builds.
+- **Self-evolving snippet library** — project-local C# snippets (`.md` files, no compilation) with validation gate, usage tracking, and aging. Discover and grow via `cs snippets` and the `unity-cli-snippets` skill.
 
 
 ### 🚀 Quick Start — Claude Code
@@ -139,6 +140,8 @@ python cli/cs.py batch --json --project . '[{"ns":"gameobject","action":"create"
 python cli/cs.py list-commands --json --project . --timeout 10
 python cli/cs.py catalog sync --json --project .
 python cli/cs.py catalog list --json --project .
+python cli/cs.py snippets list --json --project .
+python cli/cs.py snippets search "physics" --json --project .
 ```
 
 ### 📦 Commands
@@ -284,6 +287,22 @@ python cli/cs.py catalog list --json --project .
 | Action | Description                                      |
 | ------ | ------------------------------------------------ |
 | `list` | List all registered commands (built-in + custom) |
+
+
+#### snippets
+
+
+| Action       | Description                                          |
+| ------------ | ---------------------------------------------------- |
+| `list`       | Browse the local snippet library                     |
+| `show`       | Show a snippet's full content and metadata           |
+| `search`     | Search snippets by keyword                           |
+| `use`        | Run a snippet (executes its C# code)                 |
+| `add`        | Add a new snippet to the library                     |
+| `update`     | Update an existing snippet                           |
+| `deprecate`  | Mark a snippet as deprecated                         |
+| `prune`      | Remove aged-out or deprecated snippets               |
+| `stats`      | Show usage statistics for the snippet library        |
 
 
 ### 🔧 Custom Commands
