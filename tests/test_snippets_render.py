@@ -80,5 +80,105 @@ class RenderLiteralTests(unittest.TestCase):
         self.assertEqual(render_literal("int[]", []), "new int[] { }")
 
 
+from cli.snippets.render import render_submission
+
+
+SAMPLE_BODY = '''using System.Linq;
+
+static List<string> Run(string layerName) {
+    return UnityEngine.Object.FindObjectsOfType<GameObject>()
+        .Where(g => LayerMask.LayerToName(g.layer) == layerName)
+        .Select(g => g.name).ToList();
+}'''
+
+
+SAMPLE_ARGS_SCHEMA = [
+    {"name": "layerName", "type": "string"},
+]
+
+
+class RenderSubmissionTests(unittest.TestCase):
+    def test_extracts_using_directive(self):
+        text = render_submission(
+            snippet_id="scene.find_in_layer",
+            body=SAMPLE_BODY,
+            args_schema=SAMPLE_ARGS_SCHEMA,
+            arg_values={"layerName": "Default"},
+        )
+        first_line = text.splitlines()[0].strip()
+        self.assertEqual(first_line, "using System.Linq;")
+
+    def test_wraps_body_in_unique_class(self):
+        text = render_submission(
+            snippet_id="scene.find_in_layer",
+            body=SAMPLE_BODY,
+            args_schema=SAMPLE_ARGS_SCHEMA,
+            arg_values={"layerName": "Default"},
+        )
+        self.assertIn("static class __Snip_", text)
+        self.assertIn("static List<string> Run(string layerName)", text)
+
+    def test_call_line_is_last_and_qualified(self):
+        text = render_submission(
+            snippet_id="scene.find_in_layer",
+            body=SAMPLE_BODY,
+            args_schema=SAMPLE_ARGS_SCHEMA,
+            arg_values={"layerName": "Default"},
+        )
+        last = text.splitlines()[-1]
+        self.assertRegex(last, r'^__Snip_[0-9a-f]{16}\.Run\("Default"\)$')
+
+    def test_hash_stable_across_calls(self):
+        a = render_submission(
+            snippet_id="x.y", body="static int Run() { return 1; }",
+            args_schema=[], arg_values={},
+        )
+        b = render_submission(
+            snippet_id="x.y", body="static int Run() { return 1; }",
+            args_schema=[], arg_values={},
+        )
+        self.assertEqual(_extract_class_name(a), _extract_class_name(b))
+
+    def test_hash_changes_with_body(self):
+        a = render_submission(
+            snippet_id="x.y", body="static int Run() { return 1; }",
+            args_schema=[], arg_values={},
+        )
+        b = render_submission(
+            snippet_id="x.y", body="static int Run() { return 2; }",
+            args_schema=[], arg_values={},
+        )
+        self.assertNotEqual(_extract_class_name(a), _extract_class_name(b))
+
+    def test_default_used_when_arg_missing(self):
+        schema = [
+            {"name": "layerName", "type": "string"},
+            {"name": "limit", "type": "int", "default": 10},
+        ]
+        body = ("static int Run(string layerName, int limit) "
+                "{ return limit; }")
+        text = render_submission(
+            snippet_id="x.y",
+            body=body,
+            args_schema=schema,
+            arg_values={"layerName": "Default"},
+        )
+        self.assertIn(".Run(\"Default\", 10)", text)
+
+    def test_missing_required_arg_raises(self):
+        with self.assertRaises(ValueError):
+            render_submission(
+                snippet_id="x.y", body=SAMPLE_BODY,
+                args_schema=SAMPLE_ARGS_SCHEMA,
+                arg_values={},
+            )
+
+
+def _extract_class_name(text):
+    import re
+    m = re.search(r"static class (__Snip_[0-9a-f]{16})", text)
+    return m.group(1) if m else None
+
+
 if __name__ == "__main__":
     unittest.main()

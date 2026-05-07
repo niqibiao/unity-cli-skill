@@ -1,6 +1,8 @@
 """Type-safe substitution of JSON arg values into C# literals."""
 
+import hashlib
 import json
+import re
 
 
 def _float_lit(v):
@@ -91,3 +93,55 @@ def render_literal(type_name, value):
         return f"new float[] {{{inner}}}"
 
     raise ValueError(f"unsupported snippet arg type: {type_name!r}")
+
+
+_USING_RE = re.compile(r"^\s*using\s+[^;]+;\s*$", re.MULTILINE)
+
+
+def _split_usings(body):
+    """Return (using_lines, remaining_body) by extracting top-level usings."""
+    usings = _USING_RE.findall(body)
+    remaining = _USING_RE.sub("", body).strip("\n")
+    return [u.strip() for u in usings], remaining
+
+
+def _wrapper_class_name(snippet_id, body):
+    digest = hashlib.sha1(f"{snippet_id}\n{body}".encode("utf-8")).hexdigest()
+    return f"__Snip_{digest[:16]}"
+
+
+def render_submission(snippet_id, body, args_schema, arg_values):
+    """Build the cs exec submission for a single snippet invocation.
+
+    Output shape:
+
+        <usings hoisted from body>
+        static class __Snip_<hash16> {
+            <body without usings>
+        }
+        __Snip_<hash16>.Run(<typed-literal>, ...)
+    """
+    rendered_args = []
+    for spec in args_schema:
+        name = spec["name"]
+        type_name = spec["type"]
+        if name in arg_values:
+            value = arg_values[name]
+        elif "default" in spec:
+            value = spec["default"]
+        else:
+            raise ValueError(f"missing required arg: {name}")
+        rendered_args.append(render_literal(type_name, value))
+
+    usings, body_no_usings = _split_usings(body)
+    cls = _wrapper_class_name(snippet_id, body)
+    parts = []
+    for u in usings:
+        parts.append(u)
+    if usings:
+        parts.append("")
+    parts.append(f"static class {cls} {{")
+    parts.append(body_no_usings)
+    parts.append("}")
+    parts.append(f"{cls}.Run({', '.join(rendered_args)})")
+    return "\n".join(parts)
