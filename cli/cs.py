@@ -1385,6 +1385,43 @@ def cmd_snippets_update(root, args, agent_root):
     return 0
 
 
+def cmd_snippets_deprecate(root, args):
+    from cli.snippets.store import read_snippet_file
+    from cli.snippets.stats import mark_deprecated, load_audit
+
+    if read_snippet_file(root, args.snippet_id) is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"snippet not found: {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+    audit = load_audit(root)
+    if args.snippet_id not in audit["snippets"]:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"no audit entry for {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+    if args.supersede and read_snippet_file(root, args.supersede) is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"--supersede target not found: {args.supersede}"},
+            args.as_json,
+        )
+        return 1
+    mark_deprecated(root, args.snippet_id,
+                    reason=args.reason, supersede=args.supersede)
+    _print_envelope(
+        {"ok": True, "exitCode": 0,
+         "summary": f"deprecated {args.snippet_id}"
+                    + (f" (superseded by {args.supersede})" if args.supersede else "")},
+        args.as_json,
+    )
+    return 0
+
+
 def cmd_snippets_show(root, args):
     from cli.snippets.store import read_snippet_file, parse_snippet_file
     from cli.snippets.stats import load_audit, load_stats
@@ -1563,6 +1600,13 @@ def main():
                                    "Repeat for multiple. Cannot change args/example/safety/expected/body.")
     sp_sn_update.add_argument("--no-validate", dest="no_validate", action="store_true")
 
+    sp_sn_dep = sn_sub.add_parser("deprecate", parents=[shared],
+                                   help="Deprecate a snippet")
+    sp_sn_dep.add_argument("snippet_id")
+    sp_sn_dep.add_argument("--reason", default=None)
+    sp_sn_dep.add_argument("--supersede", default=None,
+                           help="Id of a snippet that replaces this one")
+
     args = p.parse_args()
 
     # Apply defaults for any shared arg the user didn't pass (SUPPRESS leaves
@@ -1651,6 +1695,8 @@ def main():
             sys.exit(cmd_snippets_search(root, args))
         elif args.snippets_cmd == "update":
             sys.exit(cmd_snippets_update(root, args, agent_root))
+        elif args.snippets_cmd == "deprecate":
+            sys.exit(cmd_snippets_deprecate(root, args))
         else:
             sp_sn.print_help()
             sys.exit(1)
