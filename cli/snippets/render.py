@@ -69,7 +69,8 @@ def render_literal(type_name, value):
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             raise ValueError(f"string[] expects a list of strings, got {value!r}")
         items = ", ".join(json.dumps(v, ensure_ascii=False) for v in value)
-        return f"new string[] {{ {items} }}"
+        inner = f" {items} " if items else " "
+        return f"new string[] {{{inner}}}"
 
     if type_name == "int[]":
         if not isinstance(value, list) or not all(
@@ -77,12 +78,16 @@ def render_literal(type_name, value):
         ):
             raise ValueError(f"int[] expects a list of ints, got {value!r}")
         items = ", ".join(str(v) for v in value)
-        return f"new int[] {{ {items} }}"
+        inner = f" {items} " if items else " "
+        return f"new int[] {{{inner}}}"
 
     if type_name == "float[]":
-        if not isinstance(value, list):
+        if not isinstance(value, list) or not all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in value
+        ):
             raise ValueError(f"float[] expects a list of numbers, got {value!r}")
         items = ", ".join(_float_lit(v) for v in value)
-        return f"new float[] {{ {items} }}"
+        inner = f" {items} " if items else " "
+        return f"new float[] {{{inner}}}"
 
     raise ValueError(f"unsupported snippet arg type: {type_name!r}")

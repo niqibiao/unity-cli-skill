@@ -69,6 +69,16 @@ class RenderLiteralTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             render_literal("vector3", [1, 2])
 
+    def test_float_array_rejects_bool(self):
+        with self.assertRaises(ValueError):
+            render_literal("float[]", [True])
+
+    def test_empty_string_array(self):
+        self.assertEqual(render_literal("string[]", []), "new string[] { }")
+
+    def test_empty_int_array(self):
+        self.assertEqual(render_literal("int[]", []), "new int[] { }")
+
 
 if __name__ == "__main__":
     unittest.main()
