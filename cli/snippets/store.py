@@ -62,7 +62,11 @@ def _parse_block(block_lines):
     stripped = [ln for ln in block_lines if ln.strip()]
     if not stripped:
         return {}
-    first = stripped[0].lstrip()
+    # Skip leading comment lines when detecting the block type.
+    non_comment = [ln for ln in stripped if not ln.lstrip().startswith("#")]
+    if not non_comment:
+        return {}
+    first = non_comment[0].lstrip()
     if first.startswith("- "):
         return _parse_list_of_dicts(stripped)
     return _parse_mapping_block(stripped)
@@ -73,6 +77,8 @@ def _parse_list_of_dicts(lines):
     current = None
     for ln in lines:
         s = ln.lstrip()
+        if s.startswith("#"):
+            continue
         if s.startswith("- "):
             if current is not None:
                 items.append(current)
@@ -97,6 +103,8 @@ def _parse_mapping_block(lines):
     out = {}
     for ln in lines:
         s = ln.strip()
+        if s.startswith("#"):
+            continue
         if ":" not in s:
             raise SnippetParseError(f"malformed mapping line: {ln!r}")
         k, _, v = s.partition(":")
@@ -107,8 +115,17 @@ def _parse_mapping_block(lines):
 def _parse_scalar_or_inline(text):
     if text == "":
         return None
+    # JSON-shaped values (quoted strings, lists, objects) handle their own escaping
+    # and don't get comment-stripped — `json.loads` rejects trailing garbage.
     if text.startswith("[") or text.startswith("{") or text.startswith('"'):
         return json.loads(text)
+    # For bare scalars, strip a trailing `# comment` if present.
+    if "#" in text:
+        # Naive: anything after the first ` #` is a comment.
+        # We require space-hash-space or hash-at-EOL so identifiers containing
+        # `#` (none in practice) wouldn't be split. Simplest correct rule:
+        # split on ` #` (space + hash), keep the left side stripped.
+        text = text.split(" #", 1)[0].rstrip()
     if text in ("true", "false"):
         return text == "true"
     if text in ("null", "~"):
@@ -164,6 +181,9 @@ def parse_snippet_file(text):
     Returns a dict with keys: id, summary, safety, args, example,
     expected (optional), body. Raises SnippetParseError on any issue.
     """
+    # Normalize line endings — snippet files saved on Windows / by git with
+    # core.autocrlf=true contain \r\n; the regexes are written against \n.
+    text = text.replace("\r\n", "\n")
     m = _FRONTMATTER_RE.match(text)
     if not m:
         raise SnippetParseError("missing frontmatter (--- ... ---) block")
@@ -174,7 +194,10 @@ def parse_snippet_file(text):
     if not code_match:
         raise SnippetParseError("missing ```csharp code block")
     body = code_match.group(1).strip("\n")
-    if not _RUN_METHOD_RE.search(body):
+    # Strip single-line comments before checking for Run declaration
+    # to avoid matching `// static T Run(...)` commented-out signatures.
+    body_no_line_comments = re.sub(r"//[^\n]*", "", body)
+    if not _RUN_METHOD_RE.search(body_no_line_comments):
         raise SnippetParseError("snippet body must declare a `static Run(...)` method")
     snip["body"] = body
     return snip

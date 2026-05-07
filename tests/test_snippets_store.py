@@ -86,6 +86,44 @@ class ParseSnippetTests(unittest.TestCase):
         with self.assertRaises(SnippetParseError):
             parse_snippet_file(text)
 
+    def test_crlf_line_endings_parse(self):
+        crlf = SAMPLE.replace("\n", "\r\n")
+        snip = parse_snippet_file(crlf)
+        self.assertEqual(snip["id"], "scene.find_active_in_layer")
+
+    def test_comment_in_args_block_is_skipped(self):
+        text = SAMPLE.replace(
+            "args:\n  - name: layerName\n    type: string\n",
+            "args:\n  # the layer to filter by\n  - name: layerName\n    type: string\n",
+        )
+        snip = parse_snippet_file(text)
+        self.assertEqual(len(snip["args"]), 1)
+        self.assertEqual(snip["args"][0]["name"], "layerName")
+
+    def test_inline_comment_stripped_from_scalar(self):
+        text = SAMPLE.replace(
+            "summary: Find active GameObjects in a specific layer\n",
+            "summary: Find active GameObjects # was: GOs\n",
+        )
+        snip = parse_snippet_file(text)
+        self.assertEqual(snip["summary"], "Find active GameObjects")
+
+    def test_commented_out_run_is_rejected(self):
+        body = (
+            "// static int Run() { return 1; }\n"
+            "static int Other() { return 2; }"
+        )
+        text = SAMPLE.replace(
+            "static List<string> Run(string layerName) {\n"
+            "    return UnityEngine.Object.FindObjectsOfType<GameObject>()\n"
+            "        .Where(g => LayerMask.LayerToName(g.layer) == layerName)\n"
+            "        .Select(g => g.name).ToList();\n"
+            "}",
+            body,
+        )
+        with self.assertRaises(SnippetParseError):
+            parse_snippet_file(text)
+
 
 if __name__ == "__main__":
     unittest.main()
