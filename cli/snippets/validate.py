@@ -56,6 +56,10 @@ def validate_snippet(snippet, code_runner, no_validate=False):
         args_schema=snippet["args"],
         arg_values=snippet["example"],
     )
+    if code_runner is None:
+        raise ValidationError(
+            "internal error: validate_snippet reached runner with code_runner=None"
+        )
     response = code_runner(submission)
     if not response.get("ok") or response.get("exitCode", 0) != 0:
         msg = response.get("summary") or response.get("error") or "validation runner failed"

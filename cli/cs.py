@@ -889,7 +889,7 @@ def cmd_snippets_add(root, args, agent_root):
     from cli.snippets.store import (parse_snippet_file, write_snippet_file,
                                     SnippetParseError)
     from cli.snippets.validate import validate_snippet, ValidationError
-    from cli.snippets.stats import init_audit_entry, init_stats_entry, load_audit
+    from cli.snippets.stats import init_audit_entry, init_stats_entry
     from cli.core_bridge import find_package_dir
 
     try:
@@ -944,11 +944,10 @@ def cmd_snippets_add(root, args, agent_root):
         code_runner = session.exec
 
     try:
-        validate_snippet(
-            snip,
-            code_runner or (lambda code: {"ok": False, "summary": "no runner"}),
-            no_validate=args.no_validate,
-        )
+        # When no_validate=True, validate_snippet short-circuits before calling
+        # code_runner, so passing None is safe. The earlier guard ensures
+        # code_runner is not None whenever no_validate=False.
+        validate_snippet(snip, code_runner, no_validate=args.no_validate)
     except ValidationError as e:
         _print_envelope(
             {"ok": False, "exitCode": 1, "summary": f"validation failed: {e}"},
@@ -956,11 +955,37 @@ def cmd_snippets_add(root, args, agent_root):
         )
         return 1
 
-    write_snippet_file(root, args.snippet_id, text)
-    init_audit_entry(root, args.snippet_id, verified=not args.no_validate)
-    audit_after = load_audit(root)
-    created_at = audit_after["snippets"][args.snippet_id]["created_at"]
-    init_stats_entry(root, args.snippet_id, created_at=created_at)
+    from cli.snippets.stats import _now
+    when = _now()
+    try:
+        init_audit_entry(root, args.snippet_id, verified=not args.no_validate, when=when)
+        init_stats_entry(root, args.snippet_id, created_at=when)
+        write_snippet_file(root, args.snippet_id, text)
+    except Exception as e:
+        # Rollback partial state on failure: remove file if written, audit entry if added.
+        try:
+            from cli.snippets.store import snippet_path
+            p = snippet_path(root, args.snippet_id)
+            if p.is_file():
+                p.unlink()
+        except Exception:
+            pass
+        try:
+            from cli.snippets.stats import load_audit, save_audit, load_stats, save_stats
+            audit = load_audit(root)
+            audit["snippets"].pop(args.snippet_id, None)
+            save_audit(root, audit)
+            stats = load_stats(root)
+            stats["snippets"].pop(args.snippet_id, None)
+            save_stats(root, stats)
+        except Exception:
+            pass
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"failed to register {args.snippet_id}: {e}"},
+            args.as_json,
+        )
+        return 1
 
     _print_envelope(
         {"ok": True, "exitCode": 0,
@@ -1091,7 +1116,7 @@ def main():
     sp_sn_list.add_argument("--sort", choices=["hot", "cold", "recent"], default=None)
 
     sp_sn_show = sn_sub.add_parser("show", parents=[shared],
-                                    help="Show a snippet body and metadata")
+                                   help="Show a snippet body and metadata")
     sp_sn_show.add_argument("snippet_id")
 
     args = p.parse_args()
