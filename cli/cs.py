@@ -997,8 +997,93 @@ def cmd_snippets_add(root, args, agent_root):
 
 
 def cmd_snippets_use(root, args, agent_root):
-    print("not yet implemented", file=sys.stderr)
-    return 2
+    from cli.snippets.store import read_snippet_file, parse_snippet_file
+    from cli.snippets.render import render_submission
+    from cli.snippets.stats import load_audit, record_success, record_failure
+    from cli.core_bridge import find_package_dir
+
+    text = read_snippet_file(root, args.snippet_id)
+    if text is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"snippet not found: {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+
+    snip = parse_snippet_file(text)
+
+    audit = load_audit(root)
+    audit_entry = audit["snippets"].get(args.snippet_id)
+    if audit_entry and audit_entry.get("deprecated"):
+        reason = audit_entry.get("deprecated_reason")
+        suffix = f" ({reason})" if reason else ""
+        print(f"warning: snippet {args.snippet_id!r} is deprecated{suffix}",
+              file=sys.stderr)
+
+    arg_values = {}
+    if args.snippet_args:
+        try:
+            arg_values = json.loads(args.snippet_args)
+        except json.JSONDecodeError as e:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": f"--args is not valid JSON: {e}"},
+                args.as_json,
+            )
+            return 1
+        if not isinstance(arg_values, dict):
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": "--args must decode to a JSON object"},
+                args.as_json,
+            )
+            return 1
+
+    try:
+        submission = render_submission(
+            snippet_id=snip["id"],
+            body=snip["body"],
+            args_schema=snip["args"],
+            arg_values=arg_values,
+        )
+    except ValueError as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"arg error: {e}"},
+            args.as_json,
+        )
+        return 1
+
+    if args.dry_run:
+        _print_envelope(
+            {"ok": True, "exitCode": 0, "summary": "dry run",
+             "data": {"submission": submission}},
+            args.as_json,
+        )
+        return 0
+
+    pkg_dir = find_package_dir(root, agent_root)
+    if pkg_dir is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": "package not found"},
+            args.as_json,
+        )
+        return 1
+    session = _new_session(root, args, pkg_dir)
+    code_runner = session.exec
+    response = code_runner(submission)
+
+    if response.get("ok") and response.get("exitCode", 0) == 0:
+        record_success(root, args.snippet_id)
+    else:
+        record_failure(root, args.snippet_id)
+
+    if args.as_json:
+        json.dump(response, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        session.emit(response)
+    return response.get("exitCode", 0)
 
 
 def cmd_snippets_list(root, args):
