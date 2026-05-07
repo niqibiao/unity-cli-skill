@@ -1011,7 +1011,24 @@ def cmd_snippets_use(root, args, agent_root):
         )
         return 1
 
-    snip = parse_snippet_file(text)
+    from cli.snippets.store import SnippetParseError
+    try:
+        snip = parse_snippet_file(text)
+    except SnippetParseError as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"snippet file is corrupt: {e}"},
+            args.as_json,
+        )
+        return 1
+
+    if snip["id"] != args.snippet_id:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"id mismatch: file declares {snip['id']!r}, "
+                        f"CLI got {args.snippet_id!r}"},
+            args.as_json,
+        )
+        return 1
 
     audit = load_audit(root)
     audit_entry = audit["snippets"].get(args.snippet_id)
@@ -1055,11 +1072,14 @@ def cmd_snippets_use(root, args, agent_root):
         return 1
 
     if args.dry_run:
-        _print_envelope(
-            {"ok": True, "exitCode": 0, "summary": "dry run",
-             "data": {"submission": submission}},
-            args.as_json,
-        )
+        if args.as_json:
+            _print_envelope(
+                {"ok": True, "exitCode": 0, "summary": "dry run",
+                 "data": {"submission": submission}},
+                True,
+            )
+        else:
+            print(submission)
         return 0
 
     pkg_dir = find_package_dir(root, agent_root)
@@ -1073,6 +1093,11 @@ def cmd_snippets_use(root, args, agent_root):
     code_runner = session.exec
     response = code_runner(submission)
 
+    # Stats: any non-ok response counts as a failure today. Network/env errors
+    # currently propagate as exceptions (uncaught) rather than non-ok responses,
+    # so they don't reach record_failure — an accidental but desirable behavior.
+    # If the transport layer ever returns an envelope for env failures, this
+    # branch will need a way to distinguish Run-body errors from env errors.
     if response.get("ok") and response.get("exitCode", 0) == 0:
         record_success(root, args.snippet_id)
     else:
