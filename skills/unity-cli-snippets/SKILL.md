@@ -1,0 +1,136 @@
+---
+name: unity-cli-snippets
+description: >
+  Self-evolving library of reusable C# snippets executed via cs exec. Use when
+  performing Unity Editor operations that need custom code: scene queries, batch
+  ops, workflow automation. Library lives in project at .unity-cli/snippets~/
+  and grows through agent-distilled patterns. Triggers on any non-trivial cs
+  exec scenario, recurring Unity automation, or when the user mentions "save as
+  snippet" / "reuse this".
+---
+
+# Unity CLI Snippets
+
+## Decision Order (strict)
+
+Before writing ad-hoc `cs exec` for any non-trivial Unity automation:
+
+1. `cs list-commands [--type custom]` — built-in or custom command available?
+2. `cs snippets search <description>` — matching snippet?
+3. Only if neither match: ad-hoc `cs exec`.
+
+"Non-trivial" = >3 lines, or uses LINQ / reflection / AssetDatabase / multi-step.
+
+**Never** `Read` or `ls` `.unity-cli/snippets~/` directly. Always go through the CLI.
+
+## Workflow
+
+```
+search → (show) → use → (distill if reusable)
+```
+
+## CLI Quick Reference
+
+The 5 you'll actually use:
+
+| Command | Purpose |
+|---------|---------|
+| `cs snippets search <q>` | Top-N lexical hits over id + summary |
+| `cs snippets show <id>` | Full body and metadata for one snippet |
+| `cs snippets use <id> --args '<json>'` | Run with typed args; tracks stats |
+| `cs snippets add <id> --file <md>` | Validate and register a new snippet |
+| `cs snippets deprecate <id> [--supersede <new>]` | Retire a snippet without deletion |
+
+Full set: `list / show / search / use / add / update / deprecate / prune / stats` — see `cs snippets --help`.
+
+## Snippet Anatomy
+
+```markdown
+---
+id: scene.find_active_in_layer
+summary: Find active GameObjects in a specific layer
+safety: read-only
+args:
+  - name: layerName
+    type: string
+example:
+  layerName: "Default"
+expected: ["Main Camera", "Directional Light"]   # optional
+---
+
+```csharp
+using System.Linq;
+
+static List<string> Run(string layerName) {
+    return UnityEngine.Object.FindObjectsOfType<GameObject>()
+        .Where(g => g.activeInHierarchy && LayerMask.LayerToName(g.layer) == layerName)
+        .Select(g => g.name).ToList();
+}
+```
+```
+
+- Body must define one `static Run(...)` method matching `args` order.
+- Helpers go alongside `Run` as `static` members. No local functions.
+- The CLI wraps body+call in a unique class name on submission; symbols don't leak across snippets.
+
+## When to Distill
+
+All must hold:
+
+- Code is parameterized (or trivially can be parameterized into 1–4 typed args).
+- Solves a recurring concept: query, batch op, common workflow.
+- User signaled "save this", OR you judge the pattern likely to recur.
+
+## When NOT to Distill
+
+Any one disqualifies:
+
+- One-shot tied to an exact path/name/id.
+- Trivial enough that the snippet wrapper isn't shorter than the original.
+- Depends on ephemeral or generated symbols (autogen code, runtime-injected types) that won't exist after a fresh checkout.
+- Half-working / WIP.
+
+## Safety Classes
+
+- **`read-only`** — pure query, auto-validated by `add` / `update --file`.
+- **`mutates`** — side effects on scene, assets, files, settings. Cannot be auto-validated. Requires `--no-validate`; audit marks `unverified: true` and `list` prefixes the row with UNVERIFIED.
+
+Snippets that touch `AssetDatabase`, write files, change `ProjectSettings`, trigger refreshes, or affect domain reload are always `mutates`.
+
+## Validation Gate
+
+`add` (and `update --file`) runs the snippet's `example` once through the REPL:
+
+- `read-only`: must return `ok=true`. With optional `expected:` field, return value is also checked for deep equality.
+- `mutates`: refused unless `--no-validate`.
+
+The gate is a **smoke test**, not a correctness oracle. Use `expected:` for return-value assertions.
+
+## Argument Types
+
+| Type | JSON shape | Generated literal |
+|------|-----------|-------------------|
+| `string` | `"foo"` | `"foo"` (escaped) |
+| `int` / `float` / `bool` | `42` / `3.14` / `true` | `42` / `3.14f` / `true` |
+| `vector2` / `vector3` / `vector4` | `[x, y, ...]` | `new UnityEngine.Vector3(x, y, z)` |
+| `color` | `[r, g, b]` or `[r, g, b, a]` | `new UnityEngine.Color(r, g, b, a)` |
+| `string[]` / `int[]` / `float[]` | `[...]` | `new T[] { ... }` |
+
+No `Quaternion` (use `vector3` Euler or `vector4` raw inside `Run`). No `expr` (build the expression inside `Run`). Optional args declare a `default:` field.
+
+## Aging
+
+`stats` fields track `successes`, `failures`, `last_used`, `consecutive_failures`. Snippets are auto-deprecated only when `consecutive_failures >= 5` AND the streak spans ≥ 7 days. Cold detection (low usage / old) is **informational** in `list --sort cold`; `prune --cold` is opt-in.
+
+## DO NOT
+
+- Read `.unity-cli/snippets~/` directly with shell tools.
+- Hand-edit snippet `.md` files; use `add` / `update --file` so validation runs.
+- Skip `cs list-commands` and `cs snippets search` before ad-hoc `cs exec`.
+- Distill one-shot operations or trivial one-liners.
+
+## Boundary with `cs command` / `cs exec`
+
+- Built-in/custom command available → `cs command` (see `unity-cli-command` skill).
+- One-off ad-hoc → `cs exec` (see `unity-cli-exec-code` skill).
+- Reusable ad-hoc → `cs snippets`.
