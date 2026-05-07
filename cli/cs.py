@@ -307,6 +307,37 @@ def _new_session(root, args, pkg_dir):
                           compile_ip=args.compile_ip, compile_port=args.compile_port)
 
 
+_GITIGNORE_BLOCK_LINES = [
+    "# unity-cli-plugin: snippet stats are observability data, not project state",
+    ".unity-cli/snippets-stats.json",
+]
+
+
+def _ensure_gitignore_entry(project_root):
+    """Append snippet-stats lines to project .gitignore if not already present.
+
+    Idempotent: scans for the exact path line before appending.
+    """
+    gitignore = Path(project_root) / ".gitignore"
+    existing = ""
+    if gitignore.is_file():
+        try:
+            existing = gitignore.read_text(encoding="utf-8")
+        except OSError:
+            return  # silently skip — not fatal
+    target = ".unity-cli/snippets-stats.json"
+    for line in existing.splitlines():
+        if line.strip() == target:
+            return
+    block = ("\n" if existing and not existing.endswith("\n") else "") \
+            + "\n".join(_GITIGNORE_BLOCK_LINES) + "\n"
+    try:
+        with gitignore.open("a", encoding="utf-8") as f:
+            f.write(block)
+    except OSError:
+        pass
+
+
 def cmd_setup(root, args, agent_root=None):
     if root is None:
         print("Error: no Unity project found. Use --project to specify the path.", file=sys.stderr)
@@ -405,6 +436,7 @@ def cmd_setup(root, args, agent_root=None):
     deps[PACKAGE_NAME] = dep_value
     manifest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
     print(f"Added {PACKAGE_NAME} to {manifest}")
+    _ensure_gitignore_entry(root)
     # Cache the resolved package path for subsequent CLI commands
     if method == "local":
         save_pkg_path(agent_root, local_dir)
