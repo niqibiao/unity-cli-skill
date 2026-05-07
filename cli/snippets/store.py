@@ -201,3 +201,37 @@ def parse_snippet_file(text):
         raise SnippetParseError("snippet body must declare a `static Run(...)` method")
     snip["body"] = body
     return snip
+
+
+from pathlib import Path
+
+DATA_DIR_NAME = ".unity-cli"
+SNIPPETS_SUBDIR = "snippets~"
+
+
+def snippets_dir(project_root):
+    return Path(project_root) / DATA_DIR_NAME / SNIPPETS_SUBDIR
+
+
+def snippet_path(project_root, snippet_id):
+    return snippets_dir(project_root) / f"{snippet_id}.md"
+
+
+def write_snippet_file(project_root, snippet_id, text):
+    p = snippet_path(project_root, snippet_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+def read_snippet_file(project_root, snippet_id):
+    p = snippet_path(project_root, snippet_id)
+    if not p.is_file():
+        return None
+    return p.read_text(encoding="utf-8")
+
+
+def list_snippet_ids(project_root):
+    d = snippets_dir(project_root)
+    if not d.is_dir():
+        return []
+    return sorted(p.stem for p in d.glob("*.md"))

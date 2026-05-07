@@ -125,5 +125,50 @@ class ParseSnippetTests(unittest.TestCase):
             parse_snippet_file(text)
 
 
+import tempfile
+from pathlib import Path
+
+from cli.snippets.store import (
+    snippets_dir, snippet_path,
+    write_snippet_file, read_snippet_file, list_snippet_ids,
+)
+
+
+class StorageIOTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_snippets_dir_uses_tilde(self):
+        d = snippets_dir(self.root)
+        self.assertTrue(d.name.endswith("snippets~"))
+        self.assertEqual(d.parent.name, ".unity-cli")
+
+    def test_snippet_path_for_id(self):
+        p = snippet_path(self.root, "scene.find_active_in_layer")
+        self.assertEqual(p.name, "scene.find_active_in_layer.md")
+        self.assertEqual(p.parent, snippets_dir(self.root))
+
+    def test_write_then_read(self):
+        write_snippet_file(self.root, "scene.find_active_in_layer", SAMPLE)
+        text = read_snippet_file(self.root, "scene.find_active_in_layer")
+        self.assertEqual(text, SAMPLE)
+
+    def test_read_missing_returns_none(self):
+        self.assertIsNone(read_snippet_file(self.root, "no.such.snippet"))
+
+    def test_list_ids_alphabetical(self):
+        write_snippet_file(self.root, "b.x", SAMPLE.replace("scene.find_active_in_layer", "b.x"))
+        write_snippet_file(self.root, "a.y", SAMPLE.replace("scene.find_active_in_layer", "a.y"))
+        ids = list_snippet_ids(self.root)
+        self.assertEqual(ids, ["a.y", "b.x"])
+
+    def test_list_ids_empty_when_dir_missing(self):
+        self.assertEqual(list_snippet_ids(self.root), [])
+
+
 if __name__ == "__main__":
     unittest.main()
