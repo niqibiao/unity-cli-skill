@@ -1112,13 +1112,116 @@ def cmd_snippets_use(root, args, agent_root):
 
 
 def cmd_snippets_list(root, args):
-    print("not yet implemented", file=sys.stderr)
-    return 2
+    from cli.snippets.store import (list_snippet_ids, read_snippet_file,
+                                    parse_snippet_file)
+    from cli.snippets.stats import load_audit, load_stats
+
+    ids = list_snippet_ids(root)
+    audit = load_audit(root)
+    stats = load_stats(root)
+    rows = []
+    for sid in ids:
+        a = audit["snippets"].get(sid, {})
+        if a.get("deprecated") and not args.include_deprecated:
+            continue
+        text = read_snippet_file(root, sid) or ""
+        try:
+            snip = parse_snippet_file(text)
+        except Exception:
+            continue
+        if args.safety and snip["safety"] != args.safety:
+            continue
+        st = stats["snippets"].get(sid, {})
+        rows.append({
+            "id": sid,
+            "summary": snip["summary"],
+            "safety": snip["safety"],
+            "deprecated": a.get("deprecated", False),
+            "unverified": a.get("unverified", False),
+            "successes": st.get("successes", 0),
+            "failures": st.get("failures", 0),
+            "last_used": st.get("last_used"),
+        })
+
+    if args.sort == "hot":
+        rows.sort(key=lambda r: -r["successes"])
+    elif args.sort == "recent":
+        rows.sort(key=lambda r: r["last_used"] or "", reverse=True)
+    elif args.sort == "cold":
+        rows.sort(key=lambda r: (r["successes"], r["last_used"] or ""))
+
+    result = {
+        "ok": True, "exitCode": 0,
+        "summary": f"{len(rows)} snippet(s)",
+        "data": {"snippets": rows},
+    }
+    if args.as_json:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        print(result["summary"])
+        for r in rows:
+            tags = []
+            if r["unverified"]:
+                tags.append("⚠unverified")
+            if r["deprecated"]:
+                tags.append("DEPRECATED")
+            tag_s = f" [{', '.join(tags)}]" if tags else ""
+            print(f"  {r['id']} ({r['safety']}){tag_s} — {r['summary']}")
+    return 0
 
 
 def cmd_snippets_show(root, args):
-    print("not yet implemented", file=sys.stderr)
-    return 2
+    from cli.snippets.store import read_snippet_file, parse_snippet_file
+    from cli.snippets.stats import load_audit, load_stats
+
+    text = read_snippet_file(root, args.snippet_id)
+    if text is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"snippet not found: {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+    try:
+        snip = parse_snippet_file(text)
+    except Exception as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"parse error: {e}"},
+            args.as_json,
+        )
+        return 1
+    audit = load_audit(root)["snippets"].get(args.snippet_id, {})
+    stats = load_stats(root)["snippets"].get(args.snippet_id, {})
+
+    if args.as_json:
+        json.dump({
+            "ok": True, "exitCode": 0,
+            "data": {
+                "id": snip["id"], "summary": snip["summary"],
+                "safety": snip["safety"], "args": snip["args"],
+                "example": snip["example"],
+                "expected": snip.get("expected"),
+                "body": snip["body"],
+                "audit": audit, "stats": stats,
+            },
+        }, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        print(f"{snip['id']} ({snip['safety']}) — {snip['summary']}")
+        print()
+        print("Args:")
+        for spec in snip["args"]:
+            default = f" = {spec['default']!r}" if "default" in spec else ""
+            print(f"  {spec['name']}: {spec['type']}{default}")
+        print()
+        print("Example:", snip["example"])
+        if snip.get("expected") is not None:
+            print("Expected:", snip["expected"])
+        print()
+        print("Body:")
+        print(snip["body"])
+    return 0
 
 
 # ── Main ────────────────────────────────────────────────────────────────
