@@ -11,6 +11,23 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+### Added
+
+- Self-evolving C# snippet library: `cs snippets list / show / search / use /
+  add / update / deprecate / prune / stats`. Snippets are project-local markdown
+  files at `.unity-cli/snippets~/<id>.md` containing a `static Run(...)` method;
+  the CLI wraps each submission in a unique `static class __Snip_<hash>` for
+  symbol isolation across REPL sessions. Validation gate runs each new snippet's
+  `example` through the REPL (read-only auto-validated; mutates requires
+  `--no-validate` and is recorded as unverified). Usage tracking auto-deprecates
+  snippets after 5 consecutive failures spanning ≥ 7 days. Cold detection is
+  informational only; `prune --cold` is opt-in.
+- `unity-cli-snippets` skill: operator's manual for the snippet library, with
+  hard decision order (command → snippet → ad-hoc) and distill criteria.
+- `cs setup` automatically adds `.unity-cli/snippets-stats.json` to the project
+  `.gitignore` to avoid PR churn from routine usage tracking. The audit file
+  (`snippets-audit.json`) remains committed as project state.
+
 ### Changed
 
 - `cs --json` (slim mode) now parses `data.resultJson` automatically when the
