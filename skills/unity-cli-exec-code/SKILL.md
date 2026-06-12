@@ -69,9 +69,11 @@ var go = GameObject.Find("Main Camera"); go.m_InstanceID
 ### LINQ queries over live scene
 
 ```csharp
-using System.Linq; GameObject.FindObjectsOfType<Rigidbody>().Select(r => $"{r.name}: mass={r.mass}").ToList()
+// Prefer FindObjectsByType (Unity 2023.1+); FindObjectsOfType is deprecated.
+using System.Linq; UnityEngine.Object.FindObjectsByType<Rigidbody>(FindObjectsSortMode.None).Select(r => $"{r.name}: mass={r.mass}").ToList()
 // System.Linq persists — no need to re-import
 Resources.FindObjectsOfTypeAll<GameObject>().Where(g => !g.activeInHierarchy).Select(g => g.name).ToList()
+// Resources.FindObjectsOfTypeAll is still current — it returns inactive/asset objects too.
 ```
 
 ### AssetDatabase

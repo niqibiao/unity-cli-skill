@@ -1,8 +1,8 @@
 ---
-description: "Sync command catalog with running Unity Editor to detect new or removed commands"
+description: "Audit the built-in command tables in SKILL.md against the live Unity Editor"
 ---
 
-Compare the built-in command catalog in `SKILL.md` with the live command list from the running Unity Editor.
+**Audience:** plugin maintainers. This command checks whether the static built-in tables in `unity-cli-command/SKILL.md` have drifted from the commands registered in the running Editor (new actions added upstream, removed actions, changed signatures). It does **not** touch the per-project custom-command cache — for that, run `/unity-cli-refresh-commands`.
 
 Steps:
 
@@ -11,7 +11,7 @@ Steps:
 python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" list-commands --json --project "$(pwd)"
 ```
 
-2. Parse `data.resultJson.commands` from the JSON output. This contains all registered commands (built-in + custom).
+2. Parse `data.commands` from the JSON output. This contains all registered commands (built-in + custom).
 
 3. Compare with the static catalog in `${CLAUDE_PLUGIN_ROOT}/skills/unity-cli-command/SKILL.md`. The built-in namespaces are: editor, gameobject, component, transform, material, prefab, project, scene, screenshot, profiler, session, command.
 

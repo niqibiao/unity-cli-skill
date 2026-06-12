@@ -125,8 +125,8 @@ Claude picks the right command or writes C# code as needed.
 | `/unity-cli-setup`            | Install the Unity package                    |
 | `/unity-cli-status`           | Check package and service status             |
 | `/unity-cli-refresh`          | Trigger asset refresh / recompile            |
-| `/unity-cli-refresh-commands` | Refresh cached custom command list           |
-| `/unity-cli-sync-catalog`     | Compare local command catalog with live list |
+| `/unity-cli-refresh-commands` | Refresh per-project custom command cache     |
+| `/unity-cli-sync-catalog`     | Audit built-in tables in SKILL.md vs live Editor (maintainer) |
 
 
 #### 💻 Direct CLI

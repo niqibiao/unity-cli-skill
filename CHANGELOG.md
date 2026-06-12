@@ -11,8 +11,31 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- `cs --json` (slim mode) now parses `data.resultJson` automatically when the
+  underlying response carries it as a JSON string. `cs list-commands --json`
+  consumers should read `data.commands` directly (previously they had to
+  `json.loads(data)` first). The old shape is still emitted under `--verbose`.
+
 ### Fixed
 
+- `cs catalog sync` now reads `commandNamespace` and `arguments` from the
+  wire response. Previously it looked for `namespace` and `args`, which the
+  service does not emit — so every synced custom-command entry ended up with
+  an empty namespace, a broken `id` like `".action"`, and an empty `args`
+  list, and the next sync's diff would falsely flag all prior entries as
+  removed. Both legacy field names are still accepted for forward
+  compatibility.
+- `cs list-commands --type {builtin,custom}` now actually filters when the
+  underlying response carries `resultJson` as a parsed dict. Previously the
+  filter wrote to `data.commands` but left `data.resultJson` unchanged, and
+  `_slim_result` then surfaced the unfiltered `resultJson`, so all three
+  `--type` values returned the same list.
+- `/unity-cli-sync-catalog` description corrected: it audits the built-in
+  tables in `unity-cli-command/SKILL.md` against the live Editor and is
+  intended for plugin maintainers, not for refreshing the per-project custom
+  command cache (use `/unity-cli-refresh-commands` for that).
 - `cs exec --mode runtime` now actually runs on the player. Previously the
   CLI's `ConsoleSession.exec` unconditionally called `execute_editor_request`,
   so runtime-mode snippets were POSTed to the editor's `"editor"` endpoint

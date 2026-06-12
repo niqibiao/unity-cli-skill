@@ -125,8 +125,8 @@ Claude 会自动选择合适的命令，或在需要时编写 C# 代码。
 | `/unity-cli-setup`            | 安装 Unity 包      |
 | `/unity-cli-status`           | 检查包和服务状态        |
 | `/unity-cli-refresh`          | 触发资产刷新 / 重编译    |
-| `/unity-cli-refresh-commands` | 刷新缓存的自定义命令列表    |
-| `/unity-cli-sync-catalog`     | 对比本地命令目录与实际命令列表 |
+| `/unity-cli-refresh-commands` | 刷新每项目自定义命令缓存    |
+| `/unity-cli-sync-catalog`     | 审计 SKILL.md 的内置命令表与实时 Editor 是否一致（维护者用） |
 
 
 #### 💻 直接使用 CLI

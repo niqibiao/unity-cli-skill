@@ -90,9 +90,17 @@ def _slim_result(result):
     out = {k: v for k, v in result.items() if k not in _SLIM_DROP}
     data = out.get("data")
     if isinstance(data, dict):
-        # command: flatten resultJson, drop request echo
+        # command/list-commands/exec: flatten resultJson, parsing if it's a
+        # JSON string so agents see structured data instead of a stringified
+        # blob. Falls back to the raw value on parse failure.
         if "resultJson" in data:
-            out["data"] = data["resultJson"]
+            rj = data["resultJson"]
+            if isinstance(rj, str):
+                try:
+                    rj = json.loads(rj)
+                except (ValueError, TypeError):
+                    pass
+            out["data"] = rj
         # command echo removal
         elif "command" in data and len(data) == 1:
             out.pop("data", None)
@@ -618,30 +626,40 @@ def cmd_check_update(root, args, agent_root=None):
 
 
 def _filter_commands_by_type(result, type_filter):
-    """Filter list-commands result by commandType field."""
+    """Filter list-commands result by commandType field.
+
+    Handles three response shapes:
+      - data.resultJson as a JSON string (canonical post-2024 wire format)
+      - data.resultJson as a parsed dict (pre-parsed by transport)
+      - data.commands as a flat list (already-flattened response)
+    In all three cases we update *both* resultJson and data.commands so
+    downstream callers (notably _slim_result) see consistent filtered data.
+    """
     if type_filter == "all":
         return result
     data = result.get("data", {})
-    rj = data.get("resultJson", data)
-    if isinstance(rj, str):
+    raw_rj = data.get("resultJson")
+    if isinstance(raw_rj, str):
         try:
-            rj = json.loads(rj)
+            rj = json.loads(raw_rj)
         except (ValueError, TypeError):
             return result
+    elif isinstance(raw_rj, dict):
+        rj = raw_rj
+    else:
+        rj = data
     commands = rj.get("commands", [])
     filtered = [c for c in commands if c.get("commandType", "builtin") == type_filter]
     rj = dict(rj)
     rj["commands"] = filtered
-    if isinstance(data.get("resultJson"), str):
-        data = dict(data)
+    data = dict(data)
+    data["commands"] = filtered
+    if isinstance(raw_rj, str):
         data["resultJson"] = json.dumps(rj)
-        result = dict(result)
-        result["data"] = data
-    else:
-        data = dict(data)
-        data["commands"] = filtered
-        result = dict(result)
-        result["data"] = data
+    elif isinstance(raw_rj, dict):
+        data["resultJson"] = rj
+    result = dict(result)
+    result["data"] = data
     return result
 
 
@@ -749,10 +767,11 @@ def cmd_catalog_sync(root, args, agent_root):
         except (OSError, json.JSONDecodeError, KeyError):
             pass
 
-    # Build catalog entries
+    # Build catalog entries. The live wire format uses `commandNamespace` and
+    # `arguments`; accept both names so older package versions still sync.
     entries = []
     for c in custom:
-        ns = c.get("namespace", "")
+        ns = c.get("commandNamespace") or c.get("namespace") or ""
         action = c.get("action", "")
         entry = {
             "id": f"{ns}.{action}",
@@ -760,7 +779,7 @@ def cmd_catalog_sync(root, args, agent_root):
             "action": action,
             "summary": c.get("summary", ""),
             "editorOnly": c.get("editorOnly", False),
-            "args": c.get("args", []),
+            "args": c.get("arguments") or c.get("args") or [],
         }
         entries.append(entry)
 

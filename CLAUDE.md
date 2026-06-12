@@ -81,10 +81,10 @@ All post-setup commands return: `{ "ok": bool, "exitCode": int, "summary": str, 
 
 ## Command Catalog
 
-Built-in commands (59) are statically documented in `skills/unity-cli-command/SKILL.md`.
-User-defined custom commands are cached in `skills/unity-cli-command/dynamic-commands.md` (git-ignored, auto-generated).
-Run `/unity-cli-refresh-commands` after registering new C# commands to update the cache.
-Run `/unity-cli-sync-catalog` to compare the local catalog with the live command list.
+Built-in commands are statically documented in `skills/unity-cli-command/SKILL.md`.
+User-defined custom commands are cached per-project as JSON (default `{project}/.unity-cli/catalog.json`; the path is remembered after the first sync and can be overridden via `cs catalog sync --catalog-path ...`). The agent reads this cache via `cs catalog list --json`.
+Run `/unity-cli-refresh-commands` (i.e. `cs catalog sync`) after registering new C# commands to refresh the cache.
+Run `/unity-cli-sync-catalog` (maintainer-only) to audit the built-in tables in `SKILL.md` against the live Editor and surface upstream additions/removals/signature changes.
 
 ## Release Process
 
