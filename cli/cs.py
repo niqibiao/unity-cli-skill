@@ -116,6 +116,17 @@ def _slim_result(result):
     return out
 
 
+def _print_envelope(result, as_json):
+    if as_json:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        if result.get("ok"):
+            print(result.get("summary", "OK"))
+        else:
+            print(f"Error: {result.get('summary', 'failed')}", file=sys.stderr)
+
+
 # ── Pre-setup commands (pure stdlib, no core needed) ────────────────────
 
 _PROGRESS_RE = re.compile(r"^(.+?):\s+(\d+)%\s+\((\d+)/(\d+)\)")
@@ -296,6 +307,37 @@ def _new_session(root, args, pkg_dir):
                           compile_ip=args.compile_ip, compile_port=args.compile_port)
 
 
+_GITIGNORE_BLOCK_LINES = [
+    "# unity-cli-plugin: snippet stats are observability data, not project state",
+    ".unity-cli/snippets-stats.json",
+]
+
+
+def _ensure_gitignore_entry(project_root):
+    """Append snippet-stats lines to project .gitignore if not already present.
+
+    Idempotent: scans for the exact path line before appending.
+    """
+    gitignore = Path(project_root) / ".gitignore"
+    existing = ""
+    if gitignore.is_file():
+        try:
+            existing = gitignore.read_text(encoding="utf-8")
+        except OSError:
+            return  # silently skip — not fatal
+    target = ".unity-cli/snippets-stats.json"
+    for line in existing.splitlines():
+        if line.strip() == target:
+            return
+    block = ("\n" if existing and not existing.endswith("\n") else "") \
+            + "\n".join(_GITIGNORE_BLOCK_LINES) + "\n"
+    try:
+        with gitignore.open("a", encoding="utf-8") as f:
+            f.write(block)
+    except OSError:
+        pass
+
+
 def cmd_setup(root, args, agent_root=None):
     if root is None:
         print("Error: no Unity project found. Use --project to specify the path.", file=sys.stderr)
@@ -384,6 +426,9 @@ def cmd_setup(root, args, agent_root=None):
                         _warn_version_mismatch(pkg_dir)
                 except Exception:
                     pass
+                # Existing installs return here without rewriting the manifest;
+                # still make sure the snippet-stats gitignore entry is present.
+                _ensure_gitignore_entry(root)
                 return 0
             # --update: remove and re-add to force Unity re-resolve
             print(f"Forcing re-resolve of {PACKAGE_NAME} ...")
@@ -394,6 +439,7 @@ def cmd_setup(root, args, agent_root=None):
     deps[PACKAGE_NAME] = dep_value
     manifest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
     print(f"Added {PACKAGE_NAME} to {manifest}")
+    _ensure_gitignore_entry(root)
     # Cache the resolved package path for subsequent CLI commands
     if method == "local":
         save_pkg_path(agent_root, local_dir)
@@ -874,6 +920,929 @@ def cmd_catalog_list(root, args):
     return 0
 
 
+def cmd_snippets_add(root, args, agent_root):
+    from cli.snippets.store import (parse_snippet_file, write_snippet_file,
+                                    SnippetParseError)
+    from cli.snippets.validate import validate_snippet, ValidationError
+    from cli.snippets.stats import (init_audit_entry, init_stats_entry,
+                                    load_audit, save_audit, load_stats,
+                                    save_stats, _now)
+    from cli.core_bridge import find_package_dir
+
+    try:
+        text = Path(args.file).read_text(encoding="utf-8-sig")
+    except OSError as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"cannot read --file: {e}"},
+            args.as_json,
+        )
+        return 1
+
+    try:
+        snip = parse_snippet_file(text)
+    except SnippetParseError as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"parse error: {e}"},
+            args.as_json,
+        )
+        return 1
+
+    if snip["id"] != args.snippet_id:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"id mismatch: file declares {snip['id']!r}, "
+                        f"CLI got {args.snippet_id!r}"},
+            args.as_json,
+        )
+        return 1
+
+    audit = load_audit(root)
+    if args.snippet_id in audit["snippets"]:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"snippet {args.snippet_id!r} already exists; "
+                        f"use `cs snippets update`"},
+            args.as_json,
+        )
+        return 1
+
+    pkg_dir = find_package_dir(root, agent_root) if not args.no_validate else None
+    if pkg_dir is None and not args.no_validate:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": "package not found and --no-validate not set"},
+            args.as_json,
+        )
+        return 1
+
+    code_runner = None
+    if pkg_dir is not None:
+        session = _new_session(root, args, pkg_dir)
+        code_runner = session.exec
+
+    try:
+        # When no_validate=True, validate_snippet short-circuits before calling
+        # code_runner, so passing None is safe. The earlier guard ensures
+        # code_runner is not None whenever no_validate=False.
+        validate_snippet(snip, code_runner, no_validate=args.no_validate)
+    except ValidationError as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"validation failed: {e}"},
+            args.as_json,
+        )
+        return 1
+
+    when = _now()
+    try:
+        init_audit_entry(root, args.snippet_id, verified=not args.no_validate, when=when)
+        init_stats_entry(root, args.snippet_id, created_at=when)
+        write_snippet_file(root, args.snippet_id, text)
+    except Exception as e:
+        # Rollback partial state on failure: remove file if written, audit entry if added.
+        try:
+            from cli.snippets.store import snippet_path
+            p = snippet_path(root, args.snippet_id)
+            if p.is_file():
+                p.unlink()
+        except Exception:
+            pass
+        try:
+            audit = load_audit(root)
+            audit["snippets"].pop(args.snippet_id, None)
+            save_audit(root, audit)
+            stats = load_stats(root)
+            stats["snippets"].pop(args.snippet_id, None)
+            save_stats(root, stats)
+        except Exception:
+            pass
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"failed to register {args.snippet_id}: {e}"},
+            args.as_json,
+        )
+        return 1
+
+    # `add` just initialized snippets-stats.json; ensure it is gitignored even
+    # on projects where `cs setup` was never re-run after this feature landed.
+    _ensure_gitignore_entry(root)
+    _print_envelope(
+        {"ok": True, "exitCode": 0,
+         "summary": f"registered {args.snippet_id}"
+                    + (" (unverified)" if args.no_validate else "")},
+        args.as_json,
+    )
+    return 0
+
+
+def cmd_snippets_use(root, args, agent_root):
+    from cli.snippets.store import read_snippet_file, parse_snippet_file
+    from cli.snippets.render import render_submission
+    from cli.snippets.stats import load_audit, record_success, record_failure
+    from cli.core_bridge import find_package_dir
+
+    text = read_snippet_file(root, args.snippet_id)
+    if text is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"snippet not found: {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+
+    from cli.snippets.store import SnippetParseError
+    try:
+        snip = parse_snippet_file(text)
+    except SnippetParseError as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"snippet file is corrupt: {e}"},
+            args.as_json,
+        )
+        return 1
+
+    if snip["id"] != args.snippet_id:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"id mismatch: file declares {snip['id']!r}, "
+                        f"CLI got {args.snippet_id!r}"},
+            args.as_json,
+        )
+        return 1
+
+    audit = load_audit(root)
+    audit_entry = audit["snippets"].get(args.snippet_id)
+    if audit_entry and audit_entry.get("deprecated"):
+        reason = audit_entry.get("deprecated_reason")
+        suffix = f" ({reason})" if reason else ""
+        print(f"warning: snippet {args.snippet_id!r} is deprecated{suffix}",
+              file=sys.stderr)
+
+    arg_values = {}
+    if args.snippet_args:
+        try:
+            arg_values = json.loads(args.snippet_args)
+        except json.JSONDecodeError as e:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": f"--args is not valid JSON: {e}"},
+                args.as_json,
+            )
+            return 1
+        if not isinstance(arg_values, dict):
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": "--args must decode to a JSON object"},
+                args.as_json,
+            )
+            return 1
+
+    try:
+        submission = render_submission(
+            snippet_id=snip["id"],
+            body=snip["body"],
+            args_schema=snip["args"],
+            arg_values=arg_values,
+        )
+    except ValueError as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"arg error: {e}"},
+            args.as_json,
+        )
+        return 1
+
+    if args.dry_run:
+        if args.as_json:
+            _print_envelope(
+                {"ok": True, "exitCode": 0, "summary": "dry run",
+                 "data": {"submission": submission}},
+                True,
+            )
+        else:
+            print(submission)
+        return 0
+
+    pkg_dir = find_package_dir(root, agent_root)
+    if pkg_dir is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": "package not found"},
+            args.as_json,
+        )
+        return 1
+    session = _new_session(root, args, pkg_dir)
+    code_runner = session.exec
+    response = code_runner(submission)
+
+    # Stats taxonomy: only Run-body errors (compile / runtime) count toward
+    # the failure streak. Environment errors — Unity not running, network —
+    # come back as ok=false envelopes with type "system_error" (core_bridge
+    # wraps transport exceptions into envelopes; verified empirically) and
+    # must not poison the streak, or offline retries would auto-deprecate
+    # perfectly good snippets.
+    recorded = False
+    if response.get("ok") and response.get("exitCode", 0) == 0:
+        record_success(root, args.snippet_id)
+        recorded = True
+    elif response.get("type") != "system_error":
+        record_failure(root, args.snippet_id)
+        recorded = True
+        from cli.snippets.stats import auto_deprecate_if_broken
+        if auto_deprecate_if_broken(root, args.snippet_id):
+            print(f"warning: snippet {args.snippet_id!r} auto-deprecated "
+                  f"after a qualifying failure streak "
+                  f"(see `cs snippets stats --id {args.snippet_id}`)",
+                  file=sys.stderr)
+
+    # use just wrote snippets-stats.json; keep it gitignored even on checkouts
+    # where setup never ran (committed snippets/audit, fresh clone).
+    if recorded:
+        _ensure_gitignore_entry(root)
+
+    if args.as_json:
+        json.dump(response, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        session.emit(response)
+    return response.get("exitCode", 0)
+
+
+def cmd_snippets_list(root, args):
+    from cli.snippets.store import (list_snippet_ids, read_snippet_file,
+                                    parse_snippet_file)
+    from cli.snippets.stats import load_audit, load_stats
+
+    ids = list_snippet_ids(root)
+    audit = load_audit(root)
+    stats = load_stats(root)
+    rows = []
+    for sid in ids:
+        a = audit["snippets"].get(sid, {})
+        if a.get("deprecated") and not args.include_deprecated:
+            continue
+        text = read_snippet_file(root, sid) or ""
+        try:
+            snip = parse_snippet_file(text)
+        except Exception:
+            continue
+        if args.safety and snip["safety"] != args.safety:
+            continue
+        st = stats["snippets"].get(sid, {})
+        rows.append({
+            "id": sid,
+            "summary": snip["summary"],
+            "safety": snip["safety"],
+            "deprecated": a.get("deprecated", False),
+            "unverified": a.get("unverified", False),
+            "successes": st.get("successes", 0),
+            "failures": st.get("failures", 0),
+            "last_used": st.get("last_used"),
+        })
+
+    if args.sort == "hot":
+        rows.sort(key=lambda r: -r["successes"])
+    elif args.sort == "recent":
+        rows.sort(key=lambda r: r["last_used"] or "", reverse=True)
+    elif args.sort == "cold":
+        rows.sort(key=lambda r: (r["successes"], r["last_used"] or ""))
+
+    result = {
+        "ok": True, "exitCode": 0,
+        "summary": f"{len(rows)} snippet(s)",
+        "data": {"snippets": rows},
+    }
+    if args.as_json:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        print(result["summary"])
+        for r in rows:
+            tags = []
+            if r["unverified"]:
+                tags.append("UNVERIFIED")
+            if r["deprecated"]:
+                tags.append("DEPRECATED")
+            tag_s = f" [{', '.join(tags)}]" if tags else ""
+            print(f"  {r['id']} ({r['safety']}){tag_s} — {r['summary']}")
+    return 0
+
+
+def cmd_snippets_search(root, args):
+    from cli.snippets.store import (list_snippet_ids, read_snippet_file,
+                                    parse_snippet_file)
+    from cli.snippets.stats import load_audit
+
+    all_ids = list_snippet_ids(root)
+    if not all_ids:
+        # Empty-library fast path: tell the agent explicitly so it can skip
+        # further snippet lookups this session instead of paying the search
+        # tax on every non-trivial exec task.
+        result = {
+            "ok": True, "exitCode": 0,
+            "summary": "snippet library is empty — skip snippet lookup and "
+                       "go ad-hoc (cs exec); consider distilling afterwards",
+            "data": {"results": [], "libraryEmpty": True},
+        }
+        if args.as_json:
+            json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+            print()
+        else:
+            print(result["summary"])
+        return 0
+
+    audit = load_audit(root)
+    q = args.query.lower()
+    q_terms = [t for t in q.split() if t]
+    hits = []
+    for sid in all_ids:
+        a = audit["snippets"].get(sid, {})
+        if a.get("deprecated"):
+            continue
+        text = read_snippet_file(root, sid) or ""
+        try:
+            snip = parse_snippet_file(text)
+        except Exception:
+            continue
+        haystack = f"{sid} {snip['summary']}".lower()
+        score = sum(1 for t in q_terms if t in haystack)
+        if score > 0:
+            hits.append((score, sid, snip))
+    hits.sort(key=lambda x: (-x[0], x[1]))
+    top = hits[: args.top]
+    rows = []
+    for score, sid, snip in top:
+        args_summary = ", ".join(
+            f"{a['name']}:{a['type']}" for a in snip["args"]
+        )
+        rows.append({
+            "id": sid, "summary": snip["summary"],
+            "args": args_summary, "score": score,
+        })
+    result = {
+        "ok": True, "exitCode": 0,
+        "summary": f"{len(rows)} hit(s) for {args.query!r}",
+        "data": {"results": rows},
+    }
+    if args.as_json:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        print(result["summary"])
+        for r in rows:
+            print(f"  {r['id']}({r['args']}) — {r['summary']}")
+    return 0
+
+
+def cmd_snippets_update(root, args, agent_root):
+    from cli.snippets.store import (read_snippet_file, parse_snippet_file,
+                                    write_snippet_file, SnippetParseError)
+    from cli.snippets.validate import validate_snippet, ValidationError
+    from cli.snippets.stats import load_audit, save_audit, _now
+    from cli.core_bridge import find_package_dir
+
+    if not args.file and not args.set_field:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": "must pass --file or --set"},
+            args.as_json,
+        )
+        return 1
+
+    existing = read_snippet_file(root, args.snippet_id)
+    if existing is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"snippet not found: {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+
+    if args.file:
+        try:
+            new_text = Path(args.file).read_text(encoding="utf-8-sig")
+        except OSError as e:
+            _print_envelope(
+                {"ok": False, "exitCode": 1, "summary": f"cannot read --file: {e}"},
+                args.as_json,
+            )
+            return 1
+        try:
+            new_snip = parse_snippet_file(new_text)
+        except SnippetParseError as e:
+            _print_envelope(
+                {"ok": False, "exitCode": 1, "summary": f"parse error: {e}"},
+                args.as_json,
+            )
+            return 1
+        if new_snip["id"] != args.snippet_id:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": "id mismatch between --file and CLI argument"},
+                args.as_json,
+            )
+            return 1
+
+        pkg_dir = find_package_dir(root, agent_root) if not args.no_validate else None
+        if pkg_dir is None and not args.no_validate:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": "package not found and --no-validate not set"},
+                args.as_json,
+            )
+            return 1
+        if pkg_dir is not None:
+            session = _new_session(root, args, pkg_dir)
+            code_runner = session.exec
+        else:
+            code_runner = None
+        try:
+            validate_snippet(new_snip, code_runner, no_validate=args.no_validate)
+        except ValidationError as e:
+            _print_envelope(
+                {"ok": False, "exitCode": 1, "summary": f"validation failed: {e}"},
+                args.as_json,
+            )
+            return 1
+
+        # Check the audit entry BEFORE writing the body. An integrity-drift
+        # case (file present, audit entry gone) must not leave a half-updated
+        # snippet — a rewritten body with stale verified_at/unverified. Refuse
+        # up front (fail-closed) and point at doctor, which reports this as an
+        # orphan_file finding.
+        audit = load_audit(root)
+        e = audit["snippets"].get(args.snippet_id)
+        if e is None:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": f"audit entry missing for {args.snippet_id}; "
+                            f"refusing to update (run `cs snippets doctor`)"},
+                args.as_json,
+            )
+            return 1
+
+        write_snippet_file(root, args.snippet_id, new_text)
+        if not args.no_validate:
+            e["verified_at"] = _now()
+            e["unverified"] = False
+        else:
+            e["verified_at"] = None
+            e["unverified"] = True
+        save_audit(root, audit)
+
+        _print_envelope(
+            {"ok": True, "exitCode": 0,
+             "summary": f"updated {args.snippet_id}"
+                        + (" (unverified)" if args.no_validate else "")},
+            args.as_json,
+        )
+        return 0
+
+    snip = parse_snippet_file(existing)
+    new_summary = snip["summary"]
+    arg_desc_updates = {}
+    for kv in args.set_field:
+        if "=" not in kv:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": f"--set expects key=value, got {kv!r}"},
+                args.as_json,
+            )
+            return 1
+        k, _, v = kv.partition("=")
+        k = k.strip()
+        v = v.strip()
+        if k == "summary":
+            new_summary = v
+        elif k.startswith("arg.") and k.endswith(".description"):
+            argname = k[4:-len(".description")]
+            if not any(a["name"] == argname for a in snip["args"]):
+                _print_envelope(
+                    {"ok": False, "exitCode": 1,
+                     "summary": f"no such arg: {argname!r}"},
+                    args.as_json,
+                )
+                return 1
+            arg_desc_updates[argname] = v
+        else:
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": f"--set field {k!r} not allowed; only `summary` and "
+                            f"`arg.<name>.description` can be updated without --file"},
+                args.as_json,
+            )
+            return 1
+
+    new_text = existing
+    if new_summary != snip["summary"]:
+        new_text = re.sub(
+            r"(^summary:).+$",
+            lambda m: m.group(1) + " " + new_summary,
+            new_text, count=1, flags=re.MULTILINE,
+        )
+    for argname, desc in arg_desc_updates.items():
+        # Step 1: remove any existing description: line for this arg.
+        # Match "- name: argname\n" followed by 4-space-indent lines, scoped
+        # so we only edit lines belonging to this specific arg's block.
+        block_re = re.compile(
+            rf"(?P<head>- name: {re.escape(argname)}\n(?P<body>(?:    [^\n]+\n)*))",
+            re.MULTILINE,
+        )
+        m = block_re.search(new_text)
+        if not m:
+            # The arg exists in parsed schema but block_re missed it; skip silently.
+            continue
+        body_lines = [ln for ln in m.group("body").splitlines(keepends=True)
+                      if not ln.startswith("    description:")]
+        body_lines.append(f"    description: {desc}\n")
+        replacement = m.group("head").split("\n", 1)[0] + "\n" + "".join(body_lines)
+        new_text = new_text[:m.start()] + replacement + new_text[m.end():]
+
+    write_snippet_file(root, args.snippet_id, new_text)
+    _print_envelope(
+        {"ok": True, "exitCode": 0,
+         "summary": f"updated {args.snippet_id} metadata"},
+        args.as_json,
+    )
+    return 0
+
+
+def cmd_snippets_deprecate(root, args):
+    from cli.snippets.store import read_snippet_file
+    from cli.snippets.stats import mark_deprecated, load_audit
+
+    if read_snippet_file(root, args.snippet_id) is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"snippet not found: {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+    audit = load_audit(root)
+    if args.snippet_id not in audit["snippets"]:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"no audit entry for {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+    if args.supersede and read_snippet_file(root, args.supersede) is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"--supersede target not found: {args.supersede}"},
+            args.as_json,
+        )
+        return 1
+    mark_deprecated(root, args.snippet_id,
+                    reason=args.reason, supersede=args.supersede)
+    _print_envelope(
+        {"ok": True, "exitCode": 0,
+         "summary": f"deprecated {args.snippet_id}"
+                    + (f" (superseded by {args.supersede})" if args.supersede else "")},
+        args.as_json,
+    )
+    return 0
+
+
+def cmd_snippets_prune(root, args):
+    from cli.snippets.store import (snippet_path, list_snippet_ids)
+    from cli.snippets.stats import (load_audit, save_audit, load_stats,
+                                    save_stats, classify_state, mark_deprecated, _now)
+    from datetime import datetime, timezone
+
+    audit = load_audit(root)
+    stats = load_stats(root)
+
+    actions = {"deprecate": [], "remove": []}
+    now_iso = _now()
+
+    # Default prune only acts on already-deprecated entries (spec: without
+    # --remove it is a no-op). Broken-streak auto-deprecation happens at
+    # `use` time, never here. --cold opts in to deprecating cold snippets.
+    if args.cold:
+        for sid in list_snippet_ids(root):
+            a = audit["snippets"].get(sid)
+            if a is None or a.get("deprecated"):
+                continue
+            entry = stats["snippets"].get(sid, {})
+            if classify_state(entry, now_iso) == "cold":
+                actions["deprecate"].append((sid, "cold"))
+
+    if args.remove:
+        now = datetime.now(timezone.utc)
+        for sid, a in audit["snippets"].items():
+            if not a.get("deprecated"):
+                continue
+            dep_at = a.get("deprecated_at")
+            if not dep_at:
+                continue
+            d = datetime.strptime(dep_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            if (now - d).days >= args.max_age_days:
+                actions["remove"].append(sid)
+
+    if args.dry_run:
+        result = {
+            "ok": True, "exitCode": 0,
+            "summary": (f"plan: deprecate {len(actions['deprecate'])}, "
+                        f"remove {len(actions['remove'])}"),
+            "data": {
+                "deprecate": [sid for sid, _ in actions["deprecate"]],
+                "remove": actions["remove"],
+            },
+        }
+        if args.as_json:
+            json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+            print()
+        else:
+            print(result["summary"])
+            for sid, st in actions["deprecate"]:
+                print(f"  deprecate ({st}): {sid}")
+            for sid in actions["remove"]:
+                print(f"  remove:    {sid}")
+        return 0
+
+    for sid, _state in actions["deprecate"]:
+        mark_deprecated(root, sid, reason="cold (low usage)")
+
+    if actions["remove"]:
+        # Reload: mark_deprecated persisted entries after our initial load;
+        # writing back the stale in-memory copy would erase them.
+        audit = load_audit(root)
+        stats = load_stats(root)
+        for sid in actions["remove"]:
+            p = snippet_path(root, sid)
+            try:
+                p.unlink()
+            except OSError:
+                pass
+            audit["snippets"].pop(sid, None)
+            stats["snippets"].pop(sid, None)
+        save_audit(root, audit)
+        save_stats(root, stats)
+
+    summary = (f"deprecated {len(actions['deprecate'])}, "
+               f"removed {len(actions['remove'])}")
+    _print_envelope(
+        {"ok": True, "exitCode": 0, "summary": summary,
+         "data": {
+             "deprecate": [sid for sid, _ in actions["deprecate"]],
+             "remove": actions["remove"],
+         }},
+        args.as_json,
+    )
+    return 0
+
+
+def cmd_snippets_stats(root, args):
+    from cli.snippets.stats import load_stats, classify_state, _now
+
+    stats = load_stats(root)
+    items = stats.get("snippets", {})
+    rows = []
+    now_iso = _now()
+    target = (items.items() if not args.snippet_id
+              else [(args.snippet_id, items.get(args.snippet_id))])
+    for sid, entry in target:
+        if entry is None:
+            continue
+        rows.append({
+            "id": sid,
+            "successes": entry.get("successes", 0),
+            "failures": entry.get("failures", 0),
+            "invocations": entry.get("successes", 0) + entry.get("failures", 0),
+            "last_used": entry.get("last_used"),
+            "consecutive_failures": entry.get("consecutive_failures", 0),
+            "state": classify_state(entry, now_iso),
+        })
+
+    rows.sort(key=lambda r: -r["successes"])
+    result = {
+        "ok": True, "exitCode": 0,
+        "summary": f"stats for {len(rows)} snippet(s)",
+        "data": {"stats": rows},
+    }
+    if args.as_json:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        print(result["summary"])
+        for r in rows:
+            print(f"  {r['id']:40s} successes={r['successes']:4d} "
+                  f"failures={r['failures']:4d} state={r['state']}")
+    return 0
+
+
+def cmd_snippets_doctor(root, args, agent_root):
+    """Library health check: integrity + staleness diagnosis (anti-rot).
+
+    Read-only by default. With --revalidate, re-runs the validation gate on
+    every live read-only snippet against the running Unity (catching API
+    drift) and refreshes verified_at on passes. Never touches usage stats —
+    doctor runs are diagnostics, not invocations.
+    """
+    from cli.snippets.store import (list_snippet_ids, read_snippet_file,
+                                    parse_snippet_file, SnippetParseError)
+    from cli.snippets.stats import (load_audit, save_audit, load_stats,
+                                    classify_state, _now)
+    from datetime import datetime, timezone
+
+    audit = load_audit(root)
+    stats = load_stats(root)
+    now_iso = _now()
+    file_ids = list_snippet_ids(root)
+    audit_ids = set(audit["snippets"])
+
+    findings = []
+
+    def finding(ftype, sid, detail, action):
+        findings.append({"type": ftype, "id": sid,
+                         "detail": detail, "action": action})
+
+    # --- integrity -------------------------------------------------------
+    parsed = {}
+    for sid in file_ids:
+        if sid not in audit_ids:
+            finding("orphan_file", sid,
+                    "snippet file has no audit entry",
+                    "re-register: cs snippets add <id> --file "
+                    ".unity-cli/snippets~/<id>.md (or delete the file)")
+        text = read_snippet_file(root, sid) or ""
+        try:
+            snip = parse_snippet_file(text)
+        except SnippetParseError as e:
+            finding("corrupt", sid, str(e),
+                    "fix via cs snippets update --file, or deprecate")
+            continue
+        if snip["id"] != sid:
+            finding("id_mismatch", sid,
+                    f"file declares id {snip['id']!r}",
+                    "fix via cs snippets update --file")
+            continue
+        parsed[sid] = snip
+
+    for sid in sorted(audit_ids):
+        if sid not in file_ids:
+            finding("missing_file", sid,
+                    "audit entry exists but the snippet file is gone",
+                    "restore the file from git history, or remove the "
+                    "audit entry by hand (snippets-audit.json is plain "
+                    "project state)")
+
+    live = [sid for sid in file_ids
+            if sid in audit_ids and not audit["snippets"][sid].get("deprecated")]
+
+    # --- staleness -------------------------------------------------------
+    for sid in live:
+        state = classify_state(stats["snippets"].get(sid, {}), now_iso)
+        if state == "broken":
+            finding("broken", sid,
+                    "qualifying failure streak (>=5 over >=7d)",
+                    "diagnose; cs snippets update --file or deprecate")
+        elif state == "cold":
+            finding("cold", sid,
+                    "not used in 90d with <3 successes",
+                    "informational; cs snippets prune --cold to retire")
+        if audit["snippets"][sid].get("unverified"):
+            finding("unverified", sid,
+                    "mutates snippet was registered without validation",
+                    "manual review")
+
+    now = datetime.now(timezone.utc)
+    for sid, a in sorted(audit["snippets"].items()):
+        if a.get("deprecated") and a.get("deprecated_at"):
+            d = datetime.strptime(a["deprecated_at"],
+                                  "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            if (now - d).days >= 30:
+                finding("removable", sid,
+                        f"deprecated since {a['deprecated_at']}",
+                        "cs snippets prune --remove (destructive — confirm)")
+
+    # --- live revalidation (opt-in) ---------------------------------------
+    revalidated = None
+    if args.revalidate:
+        from cli.core_bridge import find_package_dir
+        from cli.snippets.validate import validate_snippet, ValidationError
+
+        pkg_dir = find_package_dir(root, agent_root)
+        if pkg_dir is None:
+            _print_envelope(
+                {"ok": False, "exitCode": 1, "summary": "package not found"},
+                args.as_json,
+            )
+            return 1
+        session = _new_session(root, args, pkg_dir)
+        health = session.health()
+        if not health.get("ok"):
+            _print_envelope(
+                {"ok": False, "exitCode": 1,
+                 "summary": "Unity service not reachable — revalidation "
+                            f"needs a running editor ({health.get('summary')})"},
+                args.as_json,
+            )
+            return 1
+
+        passed = []
+        failed = 0
+        for sid in live:
+            snip = parsed.get(sid)
+            if snip is None or snip["safety"] != "read-only":
+                continue
+            try:
+                validate_snippet(snip, session.exec)
+            except ValidationError as e:
+                failed += 1
+                finding("revalidation_failed", sid, str(e),
+                        "API drift? cs snippets update --file with a fixed "
+                        "body, or deprecate")
+            else:
+                passed.append(sid)
+        if passed:
+            audit = load_audit(root)
+            for sid in passed:
+                # A read-only snippet that just passed the gate is verified —
+                # clear the unverified flag too (e.g. one added with
+                # --no-validate), or list/doctor would keep flagging it.
+                audit["snippets"][sid]["verified_at"] = now_iso
+                audit["snippets"][sid]["unverified"] = False
+            save_audit(root, audit)
+        revalidated = {"passed": len(passed), "failed": failed}
+
+    counts = {}
+    for f in findings:
+        counts[f["type"]] = counts.get(f["type"], 0) + 1
+    data = {"findings": findings, "counts": counts,
+            "files": len(file_ids), "live": len(live)}
+    if revalidated is not None:
+        data["revalidated"] = revalidated
+    result = {
+        "ok": True, "exitCode": 0,
+        "summary": f"{len(findings)} finding(s) across {len(file_ids)} "
+                   f"snippet file(s)",
+        "data": data,
+    }
+    if args.as_json:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        print(result["summary"])
+        for f in findings:
+            print(f"  [{f['type']}] {f['id']} — {f['detail']}")
+            print(f"      -> {f['action']}")
+        if revalidated is not None:
+            print(f"  revalidated: {revalidated['passed']} passed, "
+                  f"{revalidated['failed']} failed")
+    return 0
+
+
+def cmd_snippets_show(root, args):
+    from cli.snippets.store import read_snippet_file, parse_snippet_file
+    from cli.snippets.stats import load_audit, load_stats
+
+    text = read_snippet_file(root, args.snippet_id)
+    if text is None:
+        _print_envelope(
+            {"ok": False, "exitCode": 1,
+             "summary": f"snippet not found: {args.snippet_id}"},
+            args.as_json,
+        )
+        return 1
+    try:
+        snip = parse_snippet_file(text)
+    except Exception as e:
+        _print_envelope(
+            {"ok": False, "exitCode": 1, "summary": f"parse error: {e}"},
+            args.as_json,
+        )
+        return 1
+    audit = load_audit(root)["snippets"].get(args.snippet_id, {})
+    stats = load_stats(root)["snippets"].get(args.snippet_id, {})
+
+    if args.as_json:
+        json.dump({
+            "ok": True, "exitCode": 0,
+            "summary": snip["summary"],
+            "data": {
+                "id": snip["id"], "summary": snip["summary"],
+                "safety": snip["safety"], "args": snip["args"],
+                "example": snip["example"],
+                "expected": snip.get("expected"),
+                "body": snip["body"],
+                "audit": audit, "stats": stats,
+            },
+        }, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        print(f"{snip['id']} ({snip['safety']}) — {snip['summary']}")
+        print()
+        print("Args:")
+        for spec in snip["args"]:
+            default = f" = {spec['default']!r}" if "default" in spec else ""
+            print(f"  {spec['name']}: {spec['type']}{default}")
+        print()
+        print("Example:", snip["example"])
+        if snip.get("expected") is not None:
+            print("Expected:", snip["expected"])
+        print()
+        print("Body:")
+        print(snip["body"])
+    return 0
+
+
 # ── Main ────────────────────────────────────────────────────────────────
 
 def main():
@@ -955,6 +1924,77 @@ def main():
     sp_cat_list.add_argument("--catalog-path", dest="catalog_path", default=None,
                              help="Override the cached catalog file path for this read")
 
+    sp_sn = sub.add_parser("snippets", parents=[shared], help="Reusable C# snippet library")
+    sn_sub = sp_sn.add_subparsers(dest="snippets_cmd")
+
+    sp_sn_add = sn_sub.add_parser("add", parents=[shared], help="Validate and register a snippet")
+    sp_sn_add.add_argument("snippet_id", help="Snippet id (dotted, e.g. scene.find_in_layer)")
+    sp_sn_add.add_argument("--file", "-f", dest="file", required=True,
+                           help="Path to the snippet markdown file")
+    sp_sn_add.add_argument("--no-validate", dest="no_validate", action="store_true",
+                           help="Skip validation gate; register as unverified (required for mutates)")
+
+    sp_sn_use = sn_sub.add_parser("use", parents=[shared], help="Run a snippet")
+    sp_sn_use.add_argument("snippet_id")
+    sp_sn_use.add_argument("--args", dest="snippet_args", default=None,
+                           help="JSON object of arg values")
+    sp_sn_use.add_argument("--dry-run", dest="dry_run", action="store_true",
+                           help="Print the wrapped submission without executing")
+
+    sp_sn_list = sn_sub.add_parser("list", parents=[shared], help="List snippets")
+    sp_sn_list.add_argument("--include-deprecated", dest="include_deprecated",
+                            action="store_true")
+    sp_sn_list.add_argument("--safety", choices=["read-only", "mutates"], default=None)
+    sp_sn_list.add_argument("--sort", choices=["hot", "cold", "recent"], default=None)
+
+    sp_sn_show = sn_sub.add_parser("show", parents=[shared],
+                                   help="Show a snippet body and metadata")
+    sp_sn_show.add_argument("snippet_id")
+
+    sp_sn_search = sn_sub.add_parser("search", parents=[shared],
+                                      help="Search snippet library")
+    sp_sn_search.add_argument("query", help="Free-text query")
+    sp_sn_search.add_argument("--top", type=int, default=5)
+
+    sp_sn_update = sn_sub.add_parser("update", parents=[shared],
+                                      help="Update an existing snippet")
+    sp_sn_update.add_argument("snippet_id")
+    sp_sn_update.add_argument("--file", "-f", dest="file", default=None,
+                              help="Replace the snippet body (re-runs validation gate)")
+    sp_sn_update.add_argument("--set", dest="set_field", action="append", default=[],
+                              metavar="key=value",
+                              help="Update a metadata-only field (summary or arg description). "
+                                   "Repeat for multiple. Cannot change args/example/safety/expected/body.")
+    sp_sn_update.add_argument("--no-validate", dest="no_validate", action="store_true")
+
+    sp_sn_dep = sn_sub.add_parser("deprecate", parents=[shared],
+                                   help="Deprecate a snippet")
+    sp_sn_dep.add_argument("snippet_id")
+    sp_sn_dep.add_argument("--reason", default=None)
+    sp_sn_dep.add_argument("--supersede", default=None,
+                           help="Id of a snippet that replaces this one")
+
+    sp_sn_prune = sn_sub.add_parser("prune", parents=[shared],
+                                     help="Clean up the snippet library")
+    sp_sn_prune.add_argument("--cold", action="store_true",
+                             help="Also mark cold snippets as deprecated (opt-in)")
+    sp_sn_prune.add_argument("--remove", action="store_true",
+                             help="Hard-delete deprecated snippets older than --max-age-days")
+    sp_sn_prune.add_argument("--max-age-days", type=int, default=30, dest="max_age_days")
+    sp_sn_prune.add_argument("--dry-run", dest="dry_run", action="store_true")
+
+    sp_sn_stats = sn_sub.add_parser("stats", parents=[shared],
+                                     help="Show usage stats")
+    sp_sn_stats.add_argument("--id", dest="snippet_id", default=None,
+                             help="Show stats for a single snippet (default: all)")
+
+    sp_sn_doc = sn_sub.add_parser("doctor", parents=[shared],
+                                   help="Library health check (anti-rot audit)")
+    sp_sn_doc.add_argument("--revalidate", action="store_true",
+                           help="Re-run the validation gate on live read-only "
+                                "snippets against the running Unity; refreshes "
+                                "verified_at on passes (never touches usage stats)")
+
     args = p.parse_args()
 
     # Apply defaults for any shared arg the user didn't pass (SUPPRESS leaves
@@ -1027,6 +2067,43 @@ def main():
         else:
             sp_cat.print_help()
             sys.exit(1)
+    if args.cmd == "snippets":
+        if root is None:
+            print("Error: no Unity project found.", file=sys.stderr)
+            sys.exit(1)
+        from cli.snippets.stats import SnippetDataError
+        try:
+            if args.snippets_cmd == "add":
+                rc = cmd_snippets_add(root, args, agent_root)
+            elif args.snippets_cmd == "use":
+                rc = cmd_snippets_use(root, args, agent_root)
+            elif args.snippets_cmd == "list":
+                rc = cmd_snippets_list(root, args)
+            elif args.snippets_cmd == "show":
+                rc = cmd_snippets_show(root, args)
+            elif args.snippets_cmd == "search":
+                rc = cmd_snippets_search(root, args)
+            elif args.snippets_cmd == "update":
+                rc = cmd_snippets_update(root, args, agent_root)
+            elif args.snippets_cmd == "deprecate":
+                rc = cmd_snippets_deprecate(root, args)
+            elif args.snippets_cmd == "prune":
+                rc = cmd_snippets_prune(root, args)
+            elif args.snippets_cmd == "stats":
+                rc = cmd_snippets_stats(root, args)
+            elif args.snippets_cmd == "doctor":
+                rc = cmd_snippets_doctor(root, args, agent_root)
+            else:
+                sp_sn.print_help()
+                rc = 1
+        except SnippetDataError as e:
+            # Corrupt committed audit — fail closed instead of overwriting it.
+            _print_envelope(
+                {"ok": False, "exitCode": 1, "summary": str(e)},
+                args.as_json,
+            )
+            rc = 1
+        sys.exit(rc)
     if not args.cmd:
         p.print_help()
         sys.exit(1)

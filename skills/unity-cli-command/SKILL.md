@@ -16,6 +16,8 @@ Run framework commands in the Unity Editor via the C# Console command protocol.
 
 Always prefer `cs command` over `cs exec` when a built-in framework command exists. Only fall back to `cs exec` for ad-hoc C# that no existing command covers.
 
+If no built-in or custom command matches the task, **next** check `unity-cli-snippets` (run `cs snippets search <description>`) before falling back to ad-hoc `cs exec` via `unity-cli-exec-code`. The decision order is: command → snippet → ad-hoc.
+
 ## Usage
 
 ```bash

@@ -36,6 +36,7 @@ Claude:  完成。10 个 Cube 已在半径 5 处创建，均已添加 Rigidbody 
 - **感知工作流。** 理解 Unity 的编译生命周期、Play Mode、域重载。
 - **自定义命令自动发现。** 用户定义的 C# 命令会自动同步到 Skill 目录。
 - **运行时 / IL2CPP 支持。** 配合 HybridCLR 可在运行时构建中使用。
+- **自我进化的代码片段库** — 项目本地 C# 片段（`.md` 文件，不参与编译），带验证门、使用频次跟踪、自动老化。通过 `cs snippets` 子命令和 `unity-cli-snippets` skill 发现和演化。
 
 
 ### 🚀 快速开始 — Claude Code
@@ -139,6 +140,8 @@ python cli/cs.py batch --json --project . '[{"ns":"gameobject","action":"create"
 python cli/cs.py list-commands --json --project . --timeout 10
 python cli/cs.py catalog sync --json --project .
 python cli/cs.py catalog list --json --project .
+python cli/cs.py snippets list --json --project .
+python cli/cs.py snippets search "physics" --json --project .
 ```
 
 ### 📦 命令
@@ -284,6 +287,22 @@ python cli/cs.py catalog list --json --project .
 | Action | 说明                  |
 | ------ | ------------------- |
 | `list` | 列出所有已注册命令（内置 + 自定义） |
+
+
+#### snippets
+
+
+| Action      | 说明                         |
+| ----------- | -------------------------- |
+| `list`      | 浏览本地代码片段库                  |
+| `show`      | 查看片段的完整内容和元数据              |
+| `search`    | 按关键词搜索片段                   |
+| `use`       | 运行片段（执行其 C# 代码）            |
+| `add`       | 向片段库添加新片段                  |
+| `update`    | 更新已有片段                     |
+| `deprecate` | 将片段标记为已废弃                  |
+| `prune`     | 移除已老化或废弃的片段                |
+| `stats`     | 查看片段库的使用统计                 |
 
 
 ### 🔧 自定义命令

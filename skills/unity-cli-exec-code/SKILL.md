@@ -12,6 +12,8 @@ description: >
 Execute raw C# in a running Unity Editor via the Roslyn-based CSharpConsole REPL.
 Always prefer the `unity-cli-command` skill first.
 
+Then check the snippet library (`cs snippets search <description>`) before writing ad-hoc code. After solving a non-trivial task that's likely to recur, consider distilling it into a snippet — see the `unity-cli-snippets` skill.
+
 ## Usage
 
 Inline code:
