@@ -5,3 +5,4 @@ __pycache__/
 .catalog-cache.json
 skills/unity-cli-command/dynamic-commands.md
 docs
+tests/
