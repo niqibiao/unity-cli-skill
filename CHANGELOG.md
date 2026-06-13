@@ -11,6 +11,8 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-13
+
 ### Added
 
 - Self-evolving C# snippet library: `cs snippets list / show / search / use /
