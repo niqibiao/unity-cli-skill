@@ -343,5 +343,70 @@ class DoctorTests(_BaseTmpProject):
         self.assertFalse(payload["ok"])
 
 
+class AddTests(_BaseTmpProject):
+    PROBE_MD = (
+        "---\n"
+        "id: probe.add\n"
+        "summary: add probe\n"
+        "safety: read-only\n"
+        "args:\n"
+        "  - name: a\n    type: int\n"
+        "  - name: b\n    type: int\n"
+        "example:\n  a: 2\n  b: 3\n"
+        'expected: "5"\n'
+        "---\n\n"
+        "```csharp\n"
+        "static string Run(int a, int b) { return (a + b).ToString(); }\n"
+        "```\n"
+    )
+
+    def _write_md(self, text=None):
+        import os
+        fd, path = tempfile.mkstemp(suffix=".md")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text if text is not None else self.PROBE_MD)
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
+        return path
+
+    def _add(self, snippet_id="probe.add", md=None, exec_resp=None, no_validate=False):
+        args = SimpleNamespace(snippet_id=snippet_id, file=self._write_md(md),
+                               no_validate=no_validate, as_json=True)
+        session = SimpleNamespace(
+            exec=lambda code: exec_resp or {"ok": True, "exitCode": 0,
+                                            "data": {"text": "5"}})
+        with mock.patch("cli.core_bridge.find_package_dir",
+                        return_value=Path(self.root)), \
+             mock.patch.object(cs, "_new_session", return_value=session), \
+             redirect_stdout(io.StringIO()) as out:
+            rc = cs.cmd_snippets_add(self.root, args, None)
+        return rc, json.loads(out.getvalue())
+
+    def test_add_read_only_registers(self):
+        """Also a regression guard for the UnboundLocalError: load_audit must
+        be imported at function top, not only inside the rollback block."""
+        from cli.snippets.store import read_snippet_file
+        rc, payload = self._add()
+        self.assertEqual(rc, 0, payload)
+        self.assertTrue(payload["ok"])
+        self.assertIsNotNone(read_snippet_file(self.root, "probe.add"))
+        self.assertIn("probe.add", load_audit(self.root)["snippets"])
+        self.assertIn("probe.add", load_stats(self.root)["snippets"])
+
+    def test_add_duplicate_refused(self):
+        self._add()
+        rc, payload = self._add()
+        self.assertEqual(rc, 1)
+        self.assertIn("already exists", payload["summary"])
+
+    def test_add_expected_mismatch_fails_closed(self):
+        from cli.snippets.store import read_snippet_file
+        rc, payload = self._add(exec_resp={"ok": True, "exitCode": 0,
+                                           "data": {"text": "6"}})
+        self.assertEqual(rc, 1)
+        self.assertIsNone(read_snippet_file(self.root, "probe.add"))
+        self.assertNotIn("probe.add", load_audit(self.root)["snippets"])
+        self.assertNotIn("probe.add", load_stats(self.root)["snippets"])
+
+
 if __name__ == "__main__":
     unittest.main()

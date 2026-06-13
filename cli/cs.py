@@ -921,7 +921,9 @@ def cmd_snippets_add(root, args, agent_root):
     from cli.snippets.store import (parse_snippet_file, write_snippet_file,
                                     SnippetParseError)
     from cli.snippets.validate import validate_snippet, ValidationError
-    from cli.snippets.stats import init_audit_entry, init_stats_entry
+    from cli.snippets.stats import (init_audit_entry, init_stats_entry,
+                                    load_audit, save_audit, load_stats,
+                                    save_stats, _now)
     from cli.core_bridge import find_package_dir
 
     try:
@@ -987,7 +989,6 @@ def cmd_snippets_add(root, args, agent_root):
         )
         return 1
 
-    from cli.snippets.stats import _now
     when = _now()
     try:
         init_audit_entry(root, args.snippet_id, verified=not args.no_validate, when=when)
@@ -1003,7 +1004,6 @@ def cmd_snippets_add(root, args, agent_root):
         except Exception:
             pass
         try:
-            from cli.snippets.stats import load_audit, save_audit, load_stats, save_stats
             audit = load_audit(root)
             audit["snippets"].pop(args.snippet_id, None)
             save_audit(root, audit)
