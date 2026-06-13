@@ -24,6 +24,12 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   informational only; `prune --cold` is opt-in.
 - `unity-cli-snippets` skill: operator's manual for the snippet library, with
   hard decision order (command → snippet → ad-hoc) and distill criteria.
+- `cs snippets doctor [--revalidate]`: anti-rot health check — integrity
+  drift (orphan files, missing files, corrupt bodies), staleness (broken /
+  cold / unverified), removal candidates, and opt-in live revalidation of
+  read-only snippets to catch Unity API drift after upgrades. Paired with
+  the `unity-cli-snippets-audit` skill (triage table; destructive cleanup
+  always requires user confirmation).
 - `cs setup` automatically adds `.unity-cli/snippets-stats.json` to the project
   `.gitignore` to avoid PR churn from routine usage tracking. The audit file
   (`snippets-audit.json`) remains committed as project state.

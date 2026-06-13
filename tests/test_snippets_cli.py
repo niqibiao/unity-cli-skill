@@ -255,5 +255,93 @@ class PruneSemanticsTests(_BaseTmpProject):
         self.assertFalse(self._audit_entry(cold_id)["deprecated"])
 
 
+class DoctorTests(_BaseTmpProject):
+    def _run_doctor(self, revalidate=False, session=None):
+        args = SimpleNamespace(revalidate=revalidate, as_json=True)
+        ctx = mock.patch("cli.core_bridge.find_package_dir",
+                         return_value=Path(self.root)) if session else None
+        with redirect_stdout(io.StringIO()) as out:
+            if session:
+                with ctx, mock.patch.object(cs, "_new_session",
+                                            return_value=session):
+                    rc = cs.cmd_snippets_doctor(self.root, args, None)
+            else:
+                rc = cs.cmd_snippets_doctor(self.root, args, None)
+        return rc, json.loads(out.getvalue())
+
+    def _types(self, payload):
+        return [f["type"] for f in payload["data"]["findings"]]
+
+    def test_clean_library_reports_zero_findings(self):
+        self._register()
+        rc, payload = self._run_doctor()
+        self.assertEqual(rc, 0)
+        self.assertEqual(payload["data"]["findings"], [])
+
+    def test_orphan_file_detected(self):
+        write_snippet_file(self.root, SNIPPET_ID, SNIPPET_MD)  # no audit
+        _, payload = self._run_doctor()
+        self.assertIn("orphan_file", self._types(payload))
+
+    def test_missing_file_detected(self):
+        init_audit_entry(self.root, SNIPPET_ID, verified=True)
+        _, payload = self._run_doctor()
+        self.assertIn("missing_file", self._types(payload))
+
+    def test_corrupt_file_detected(self):
+        self._register()
+        write_snippet_file(self.root, SNIPPET_ID, "not a snippet at all")
+        _, payload = self._run_doctor()
+        self.assertIn("corrupt", self._types(payload))
+
+    def test_removable_after_cooldown(self):
+        self._register()
+        audit = load_audit(self.root)
+        audit["snippets"][SNIPPET_ID].update(
+            {"deprecated": True, "deprecated_at": _days_ago(40)})
+        save_audit(self.root, audit)
+        _, payload = self._run_doctor()
+        self.assertIn("removable", self._types(payload))
+
+    def test_revalidate_pass_refreshes_verified_at(self):
+        self._register()
+        audit = load_audit(self.root)
+        audit["snippets"][SNIPPET_ID]["verified_at"] = _days_ago(120)
+        save_audit(self.root, audit)
+        session = SimpleNamespace(
+            health=lambda: {"ok": True},
+            exec=lambda code: {"ok": True, "exitCode": 0, "data": {"text": "1"}},
+        )
+        rc, payload = self._run_doctor(revalidate=True, session=session)
+        self.assertEqual(rc, 0)
+        self.assertEqual(payload["data"]["revalidated"],
+                         {"passed": 1, "failed": 0})
+        self.assertGreater(self._audit_entry()["verified_at"], _days_ago(1))
+
+    def test_revalidate_failure_flagged_without_touching_stats(self):
+        self._register()
+        session = SimpleNamespace(
+            health=lambda: {"ok": True},
+            exec=lambda code: {"ok": False, "exitCode": 1,
+                               "type": "compile_error",
+                               "summary": "CS0619: obsolete API"},
+        )
+        _, payload = self._run_doctor(revalidate=True, session=session)
+        self.assertIn("revalidation_failed", self._types(payload))
+        e = self._stats_entry()
+        self.assertEqual(e["failures"], 0)          # diagnostics ≠ usage
+        self.assertFalse(self._audit_entry()["deprecated"])
+
+    def test_revalidate_aborts_when_unity_unreachable(self):
+        self._register()
+        session = SimpleNamespace(
+            health=lambda: {"ok": False, "summary": "connection refused"},
+            exec=lambda code: self.fail("must not exec when health fails"),
+        )
+        rc, payload = self._run_doctor(revalidate=True, session=session)
+        self.assertEqual(rc, 1)
+        self.assertFalse(payload["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

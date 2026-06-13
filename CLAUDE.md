@@ -39,6 +39,7 @@ When a built-in framework command exists, prefer `cs command <ns> <action>` over
 | `cs catalog list` | post | List cached custom commands (offline) |
 | `cs snippets list \| show \| search \| use` | post | Browse and run reusable C# snippets |
 | `cs snippets add \| update \| deprecate \| prune \| stats` | post | Manage snippet library |
+| `cs snippets doctor [--revalidate]` | post | Library health check / anti-rot audit |
 
 ## Architecture
 
@@ -92,7 +93,7 @@ Run `/unity-cli-sync-catalog` (maintainer-only) to audit the built-in tables in 
 
 Self-evolving project-local library of reusable C# snippets executed via `cs exec` (no Unity compilation involvement). Snippet bodies live at `<project>/.unity-cli/snippets~/<id>.md`; audit is committed, stats are gitignored. The plugin ships a `unity-cli-snippets` skill as the agent's operator manual; the skill instructs the agent to follow the decision order: built-in/custom command → snippet → ad-hoc `cs exec`.
 
-See `skills/unity-cli-snippets/SKILL.md` for usage rules and `cs snippets --help` for the full CLI.
+See `skills/unity-cli-snippets/SKILL.md` for usage rules and `cs snippets --help` for the full CLI. Library maintenance (integrity, staleness, Unity API drift) is driven by `cs snippets doctor` via the `unity-cli-snippets-audit` skill — run `doctor --revalidate` after Unity version upgrades.
 
 ## Release Process
 

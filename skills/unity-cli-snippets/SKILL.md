@@ -45,7 +45,7 @@ The 5 you'll actually use:
 | `cs snippets add <id> --file <md>` | Validate and register a new snippet |
 | `cs snippets deprecate <id> [--supersede <new>]` | Retire a snippet without deletion |
 
-Full set: `list / show / search / use / add / update / deprecate / prune / stats` — see `cs snippets --help`.
+Full set: `list / show / search / use / add / update / deprecate / prune / stats / doctor` — see `cs snippets --help`. For library health audits and anti-rot cleanup (`doctor`), use the `unity-cli-snippets-audit` skill.
 
 ## Snippet Anatomy
 

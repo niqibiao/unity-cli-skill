@@ -149,9 +149,10 @@ cs snippets update <id> [--file <md-path>] [--set key=value]
 cs snippets deprecate <id> [--reason "..."] [--supersede <new-id>]
 cs snippets prune  [--cold] [--max-age-days N] [--min-uses M] [--remove] [--dry-run]
 cs snippets stats  [--id <id>]
+cs snippets doctor [--revalidate]
 ```
 
-(9 subcommands. No standalone `remove` — deletion goes through `deprecate` then `prune --remove` to keep destructive paths funneled through one policy.)
+(10 subcommands. No standalone `remove` — deletion goes through `deprecate` then `prune --remove` to keep destructive paths funneled through one policy.)
 
 ### Behaviors
 
@@ -162,6 +163,7 @@ cs snippets stats  [--id <id>]
 - **`deprecate`**: writes audit entry; snippet stays on disk and remains usable but is hidden from default `list` / `search`.
 - **`search`**: lexical match over `id` / `summary`; results are token-cheap (`{id, summary, args-summary}` per hit, no body). Default `--top 5`.
 - **`prune`**: default action targets only already-deprecated entries (does nothing to live ones). With `--cold`, also marks cold snippets (see Aging) as deprecated. `--remove` deletes deprecated entries whose `deprecated_at > 30d ago`. `--dry-run` prints the plan, takes no action.
+- **`doctor`**: anti-rot health check, read-only by default. Reports integrity drift (orphan files without audit entries, audit entries without files, corrupt / id-mismatched files), staleness (broken / cold live snippets, unverified mutates), and removal candidates (deprecated past cool-down). With `--revalidate` (requires running Unity, gated by an upfront health check), re-runs the validation gate on every live read-only snippet — the API-drift detector — refreshing `verified_at` on passes and reporting `revalidation_failed` findings otherwise. Doctor never touches usage stats: diagnostics are not invocations. The `unity-cli-snippets-audit` skill is its operator manual (triage table, destructive-action confirmation rules).
 
 The `--help` text for `cs list-commands` and `cs catalog` cross-references `cs snippets` (and vice versa) so the agent can navigate concept boundaries.
 
