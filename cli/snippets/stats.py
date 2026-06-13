@@ -22,12 +22,26 @@ def stats_path(project_root):
     return Path(project_root) / DATA_DIR_NAME / STATS_FILE
 
 
-def _load_json(path, default):
+class SnippetDataError(Exception):
+    """A committed snippet data file exists but is unreadable/corrupt.
+
+    Raised (in strict mode) instead of silently returning an empty default,
+    so write commands don't overwrite corrupted project state.
+    """
+
+
+def _load_json(path, default, strict=False):
     if not path.is_file():
         return default
     try:
         return json.loads(path.read_text("utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as e:
+        if strict:
+            raise SnippetDataError(
+                f"{path.name} exists but could not be read/parsed ({e}); "
+                f"refusing to proceed so committed audit history is not "
+                f"overwritten — fix or remove the file"
+            )
         return default
 
 
@@ -37,7 +51,10 @@ def _save_json(path, data):
 
 
 def load_audit(project_root):
-    return _load_json(audit_path(project_root), {"version": 1, "snippets": {}})
+    # Audit is committed project state — corruption must surface, not silently
+    # reset to empty (which a subsequent save would commit, dropping history).
+    return _load_json(audit_path(project_root), {"version": 1, "snippets": {}},
+                      strict=True)
 
 
 def save_audit(project_root, data):

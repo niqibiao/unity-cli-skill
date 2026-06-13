@@ -2053,29 +2053,39 @@ def main():
         if root is None:
             print("Error: no Unity project found.", file=sys.stderr)
             sys.exit(1)
-        if args.snippets_cmd == "add":
-            sys.exit(cmd_snippets_add(root, args, agent_root))
-        elif args.snippets_cmd == "use":
-            sys.exit(cmd_snippets_use(root, args, agent_root))
-        elif args.snippets_cmd == "list":
-            sys.exit(cmd_snippets_list(root, args))
-        elif args.snippets_cmd == "show":
-            sys.exit(cmd_snippets_show(root, args))
-        elif args.snippets_cmd == "search":
-            sys.exit(cmd_snippets_search(root, args))
-        elif args.snippets_cmd == "update":
-            sys.exit(cmd_snippets_update(root, args, agent_root))
-        elif args.snippets_cmd == "deprecate":
-            sys.exit(cmd_snippets_deprecate(root, args))
-        elif args.snippets_cmd == "prune":
-            sys.exit(cmd_snippets_prune(root, args))
-        elif args.snippets_cmd == "stats":
-            sys.exit(cmd_snippets_stats(root, args))
-        elif args.snippets_cmd == "doctor":
-            sys.exit(cmd_snippets_doctor(root, args, agent_root))
-        else:
-            sp_sn.print_help()
-            sys.exit(1)
+        from cli.snippets.stats import SnippetDataError
+        try:
+            if args.snippets_cmd == "add":
+                rc = cmd_snippets_add(root, args, agent_root)
+            elif args.snippets_cmd == "use":
+                rc = cmd_snippets_use(root, args, agent_root)
+            elif args.snippets_cmd == "list":
+                rc = cmd_snippets_list(root, args)
+            elif args.snippets_cmd == "show":
+                rc = cmd_snippets_show(root, args)
+            elif args.snippets_cmd == "search":
+                rc = cmd_snippets_search(root, args)
+            elif args.snippets_cmd == "update":
+                rc = cmd_snippets_update(root, args, agent_root)
+            elif args.snippets_cmd == "deprecate":
+                rc = cmd_snippets_deprecate(root, args)
+            elif args.snippets_cmd == "prune":
+                rc = cmd_snippets_prune(root, args)
+            elif args.snippets_cmd == "stats":
+                rc = cmd_snippets_stats(root, args)
+            elif args.snippets_cmd == "doctor":
+                rc = cmd_snippets_doctor(root, args, agent_root)
+            else:
+                sp_sn.print_help()
+                rc = 1
+        except SnippetDataError as e:
+            # Corrupt committed audit — fail closed instead of overwriting it.
+            _print_envelope(
+                {"ok": False, "exitCode": 1, "summary": str(e)},
+                args.as_json,
+            )
+            rc = 1
+        sys.exit(rc)
     if not args.cmd:
         p.print_help()
         sys.exit(1)
