@@ -421,6 +421,12 @@ def _perform_copy(src, *, force):
     return 0, f"Installed CLI to {dest} (version {version})"
 
 
+def cmd_install_cli(args):
+    rc, msg = _perform_copy(_CLI_DIR, force=getattr(args, "force", False))
+    print(msg, file=sys.stderr if rc else sys.stdout)
+    return rc
+
+
 def _maybe_self_refresh(argv):
     """Keep the stable $HOME copy in sync with its source — the whole handshake.
 
@@ -1975,7 +1981,8 @@ def cmd_snippets_show(root, args):
 # ── Main ────────────────────────────────────────────────────────────────
 
 def main():
-    _maybe_self_refresh(sys.argv[1:])
+    if not (len(sys.argv) > 1 and sys.argv[1] == "install-cli"):
+        _maybe_self_refresh(sys.argv[1:])
 
     # Shared flags available on every subcommand.
     # Use SUPPRESS so subparser parses don't overwrite values supplied to the
@@ -2010,6 +2017,11 @@ def main():
                           help="Update existing installation instead of skipping")
     sp_setup.add_argument("--no-pin", dest="no_pin", action="store_true",
                           help="Install from HEAD of the default branch instead of pinning to a tag matching the plugin major.minor")
+
+    # Internal bootstrap — called only by unity-cli-setup skill. No help= arg
+    # means argparse skips it in the subcommand listing entirely.
+    sp_install = sub.add_parser("install-cli", parents=[shared])
+    sp_install.add_argument("--force", action="store_true", help=SUPPRESS)
 
     sub.add_parser("status", parents=[shared], help="Package + connection status")
 
@@ -2183,6 +2195,8 @@ def main():
             args.wait = 600
 
     # Pre-setup commands
+    if args.cmd == "install-cli":
+        sys.exit(cmd_install_cli(args))
     if args.cmd == "setup":
         rc, _ = _perform_copy(_CLI_DIR, force=False)
         if rc != 0:
