@@ -11,6 +11,20 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-06-18
+
+### Fixed
+
+- **Codex marketplace install.** The installable plugin now ships in a `plugin/`
+  subdirectory, with the repo-root `marketplace.json` pointing at it
+  (`source: "./plugin"`). Codex rejects a plugin whose marketplace source is the
+  marketplace root itself (`source: "./"` enumerates zero plugins and
+  `codex plugin add` fails with "plugin not found"), so
+  `codex plugin marketplace add niqibiao/unity-cli-plugin` +
+  `codex plugin add unity-cli-plugin@unity-cli-plugin` could not work before.
+  Claude Code consumes the same subdir-sourced marketplace unchanged. The team
+  version-pin example switches to a `git-subdir` source (`path: "plugin"`).
+
 ## [1.5.1] - 2026-06-18
 
 ### Added

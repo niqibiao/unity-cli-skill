@@ -51,8 +51,8 @@ discover commands; for reusable C#, prefer the snippet library (`cs snippets`).
 
 ## Skills (no slash commands)
 
-Everything ships as a skill (`skills/*/SKILL.md`), loaded by both Claude Code and
-Codex — there are no slash commands (Codex never loads `commands/`). The
+Everything ships as a skill (`plugin/skills/*/SKILL.md`), loaded by both Claude
+Code and Codex — there are no slash commands (Codex never loads `commands/`). The
 `unity-cli-setup` skill is the cross-agent setup entry point.
 
 ## Conventions
@@ -61,5 +61,8 @@ Codex — there are no slash commands (Codex never loads `commands/`). The
 - Project detection walks up from cwd for an `Assets/` directory; `--project`
   overrides.
 - Never `git push` without explicit user confirmation.
-- Keep `version` in lockstep across `.claude-plugin/plugin.json`,
-  `.codex-plugin/plugin.json`, and `.claude-plugin/marketplace.json`.
+- Keep `version` in lockstep across `plugin/.claude-plugin/plugin.json`,
+  `plugin/.codex-plugin/plugin.json`, and `.claude-plugin/marketplace.json`.
+- The installable plugin lives in `plugin/`; the repo root is a marketplace whose
+  `marketplace.json` points at it (`source: "./plugin"`). Codex rejects a plugin
+  sourced at the marketplace root (`source: "./"`), so the subdir is required.
