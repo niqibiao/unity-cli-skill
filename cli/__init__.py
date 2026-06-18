@@ -13,6 +13,17 @@ _PLUGIN_DIR = Path(__file__).resolve().parent.parent
 _CACHE_FILE = _PLUGIN_DIR / ".pkg-cache.json"
 
 
+def _save_json(path, data):
+    """Write *data* as pretty JSON to *path*; silently no-op if the directory is
+    read-only (e.g. an agent's plugin cache) — these files are only caches."""
+    try:
+        path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8"
+        )
+    except OSError:
+        pass
+
+
 def _load_cache():
     try:
         return json.loads(_CACHE_FILE.read_text("utf-8"))
@@ -21,9 +32,7 @@ def _load_cache():
 
 
 def _save_cache(data):
-    _CACHE_FILE.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8"
-    )
+    _save_json(_CACHE_FILE, data)
 
 
 def _agent_key(agent_root):
@@ -62,9 +71,7 @@ def _load_catalog_cache():
 
 
 def _save_catalog_cache(data):
-    _CATALOG_CACHE_FILE.write_text(
-        json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8"
-    )
+    _save_json(_CATALOG_CACHE_FILE, data)
 
 
 def save_catalog_path(project_root, catalog_file):

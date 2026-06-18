@@ -8,13 +8,20 @@ Claude Code plugin providing a thin Python CLI for interacting with Unity Editor
 
 ## CLI
 
-Entry point: `python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" <command> [--json] [args]`
+Entry point (Claude Code): `python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" <command> [--json] [args]`
+
+**Dual-agent (Claude Code + Codex):** skills invoke the CLI by one stable,
+agent-agnostic path, `python "$HOME/.unity-cli-plugin/current/cli/cs.py" <command>`,
+populated once by the internal bootstrap that `setup` runs (Codex can't expand
+`${CLAUDE_PLUGIN_ROOT}` in skill-body shells). The stable copy self-refreshes when its source changes. Slash
+commands stay Claude-Code-only and keep `${CLAUDE_PLUGIN_ROOT}`. See `AGENTS.md`
+and `docs/dual-agent-support.md`.
 
 Shared flags: `--project <path>`, `--ip` (default 127.0.0.1), `--port` (default 14500), `--mode editor|runtime`, `--compile-ip` (runtime mode only, default 127.0.0.1), `--compile-port` (runtime mode only, default auto-detect), `--timeout` (default 30), `--json`
 
 ### Two-phase lifecycle
 
-- **Pre-setup:** only `setup` and `status` work (pure stdlib, no Unity package needed)
+- **Pre-setup:** only `setup` and `status` work (pure stdlib, no Unity package needed; `setup` also runs the internal CLI bootstrap)
 - **Post-setup:** full CLI available after `com.zh1zh1.csharpconsole` is installed and Unity resolves it
 
 ### Command-first principle
@@ -25,7 +32,7 @@ When a built-in framework command exists, prefer `cs command <ns> <action>` over
 
 | Command | Phase | Description |
 |---------|-------|-------------|
-| `cs setup [--source URL] [--update]` | pre | Add/update package in Packages/manifest.json |
+| `cs setup [--source URL] [--update]` | pre | Add/update package in Packages/manifest.json (auto-bootstraps the stable `$HOME` CLI copy) |
 | `cs status` | pre | Package + connection status + version info |
 | `cs exec <code> \| --file FILE` | post | Execute C# code (inline or from file) |
 | `cs command <ns> <action> [args]` | post | Run framework command |
@@ -45,8 +52,8 @@ When a built-in framework command exists, prefer `cs command <ns> <action>` over
 
 ```
 Claude Code harness
-  ├── Skills (skills/unity-cli-command/, skills/unity-cli-exec-code/)
-  ├── Slash commands (commands/*.md): /unity-cli-setup, /unity-cli-status, /unity-cli-refresh, /unity-cli-sync-catalog
+  ├── Skills (skills/*/SKILL.md): unity-cli-{setup,status,refresh,refresh-commands,
+  │     sync-catalog,command,exec-code,snippets,snippets-audit}
   └── CLI (cli/cs.py)
        └── core_bridge.py → dynamically imports csharpconsole_core from Unity package
             └── HTTP POST → Unity Editor/Player service (port 14500 editor / 15500 player)
@@ -74,7 +81,6 @@ Connection errors are automatically retried once (1s delay) to handle transient 
 cli/__init__.py              Shared constants (PACKAGE_NAME, DEFAULT_SOURCE)
 cli/cs.py                    CLI dispatcher (argparse → pre-setup handlers or ConsoleSession)
 cli/core_bridge.py           Dynamic import bridge + ConsoleSession facade
-commands/*.md                Slash command definitions
 skills/.../SKILL.md          Skill definition with trigger conditions and usage docs
 ```
 
@@ -86,8 +92,8 @@ All post-setup commands return: `{ "ok": bool, "exitCode": int, "summary": str, 
 
 Built-in commands are statically documented in `skills/unity-cli-command/SKILL.md`.
 User-defined custom commands are cached per-project as JSON (default `{project}/.unity-cli/catalog.json`; the path is remembered after the first sync and can be overridden via `cs catalog sync --catalog-path ...`). The agent reads this cache via `cs catalog list --json`.
-Run `/unity-cli-refresh-commands` (i.e. `cs catalog sync`) after registering new C# commands to refresh the cache.
-Run `/unity-cli-sync-catalog` (maintainer-only) to audit the built-in tables in `SKILL.md` against the live Editor and surface upstream additions/removals/signature changes.
+Run the `unity-cli-refresh-commands` skill (i.e. `cs catalog sync`) after registering new C# commands to refresh the cache.
+Run the `unity-cli-sync-catalog` skill (maintainer-only) to audit the built-in tables in `SKILL.md` against the live Editor and surface upstream additions/removals/signature changes.
 
 ## Snippet Library
 
@@ -123,4 +129,4 @@ the `vX.Y.Z` release with a proper title.
 - No build step, no tests, no external deps — just stdlib Python
 - Unity project detection: walks up from cwd looking for an `Assets/` directory
 - `find_project_root()` in `cs.py` handles project auto-detection; `--project` flag overrides
-- Slash commands in `commands/` use `$ARGUMENTS` and `${CLAUDE_PLUGIN_ROOT}` template variables
+- All entry points are skills (`skills/*/SKILL.md`); there are no slash commands. Skills call the CLI by the stable `$HOME` path so they work in both Claude Code and Codex

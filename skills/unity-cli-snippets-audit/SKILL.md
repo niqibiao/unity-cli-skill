@@ -16,15 +16,20 @@ audit entries diverge via merges / hand edits), **staleness** (cold, never
 reused), and **zombie deprecations** (retired but never removed). This skill
 detects all four and funnels cleanup through the CLI.
 
+> **Running `cs`:** below, `cs` is shorthand for
+> `python "$HOME/.unity-cli-plugin/current/cli/cs.py"` — one stable path, run
+> verbatim without changing directory. If it's not installed yet, run the
+> **unity-cli-setup** skill once first.
+
 ## Workflow
 
 1. **Diagnose (offline, always safe):**
    ```bash
-   python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" snippets doctor --json --project "$(pwd)"
+   python "$HOME/.unity-cli-plugin/current/cli/cs.py" snippets doctor --json --project "$(pwd)"
    ```
 2. **Revalidate (requires running Unity — this is what catches API drift):**
    ```bash
-   python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" snippets doctor --revalidate --json --project "$(pwd)"
+   python "$HOME/.unity-cli-plugin/current/cli/cs.py" snippets doctor --revalidate --json --project "$(pwd)"
    ```
    Re-runs the validation gate on every live `read-only` snippet and refreshes
    `verified_at` on passes. Run after every Unity version upgrade. Doctor runs
@@ -59,5 +64,5 @@ detects all four and funnels cleanup through the CLI.
 
 ## When to trigger proactively
 
-- After `/unity-cli-setup --update` or any Unity version change: run step 2.
+- After running the `unity-cli-setup` skill with `--update`, or any Unity version change: run step 2.
 - If two different snippets fail in one session: run step 1 before continuing.

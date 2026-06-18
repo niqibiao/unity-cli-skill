@@ -11,6 +11,11 @@ description: >
 
 # Unity CLI Snippets
 
+> **Running `cs`:** below, `cs` is shorthand for
+> `python "$HOME/.unity-cli-plugin/current/cli/cs.py"` — one stable path, run
+> verbatim without changing directory. If it's not installed yet, run the
+> **unity-cli-setup** skill once first.
+
 ## Decision Order (strict)
 
 Before writing ad-hoc `cs exec` for any non-trivial Unity automation:

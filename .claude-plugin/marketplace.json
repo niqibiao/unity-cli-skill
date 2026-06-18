@@ -9,7 +9,7 @@
       "name": "unity-cli-plugin",
       "source": "./",
       "description": "CLI and Claude Code integration for Unity C# Console",
-      "version": "1.5.0"
+      "version": "1.5.1"
     }
   ]
 }

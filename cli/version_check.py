@@ -29,13 +29,17 @@ def is_aligned(v1, v2):
     return a[0] == b[0] and a[1] == b[1]
 
 
-def get_plugin_version():
-    """Read plugin version from .claude-plugin/plugin.json. Returns str or 'unknown'."""
+def get_plugin_version(cli_dir=None):
+    """Read plugin version from .claude-plugin/plugin.json. Returns str or 'unknown'.
+
+    cli_dir: a cli/ directory path; defaults to this file's own cli/ directory.
+    Location-relative so it works for both the installed plugin and any copy."""
     try:
-        pj = Path(__file__).resolve().parent.parent / ".claude-plugin" / "plugin.json"
+        base = Path(cli_dir) if cli_dir is not None else Path(__file__).resolve().parent
+        pj = base.parent / ".claude-plugin" / "plugin.json"
         data = json.loads(pj.read_text("utf-8"))
         return data.get("version", "unknown")
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return "unknown"
 
 

@@ -14,18 +14,23 @@ Always prefer the `unity-cli-command` skill first.
 
 Then check the snippet library (`cs snippets search <description>`) before writing ad-hoc code. After solving a non-trivial task that's likely to recur, consider distilling it into a snippet — see the `unity-cli-snippets` skill.
 
+> **Running `cs`:** below, `cs` is shorthand for
+> `python "$HOME/.unity-cli-plugin/current/cli/cs.py"` — one stable path, run
+> verbatim without changing directory. If it's not installed yet, run the
+> **unity-cli-setup** skill once first.
+
 ## Usage
 
 Inline code:
 
 ```bash
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" exec --json --project "$(pwd)" "<C# code>"
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" exec --json --project "$(pwd)" "<C# code>"
 ```
 
 From a file (avoids shell quoting hazards for long/complex snippets):
 
 ```bash
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" exec --json --project "$(pwd)" --file path/to/snippet.cs
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" exec --json --project "$(pwd)" --file path/to/snippet.cs
 ```
 
 All examples below use the inline form, showing only the C# code portion for brevity.
@@ -104,7 +109,7 @@ foreach(var r in GameObject.FindGameObjectsWithTag("Debug").SelectMany(g => g.Ge
 Reset when variable name collisions or stale state occur:
 
 ```bash
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" command --json --project "$(pwd)" session reset
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" command --json --project "$(pwd)" session reset
 ```
 
 ## Notes

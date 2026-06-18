@@ -1,6 +1,7 @@
 """Unity C# Console CLI — thin dispatcher over csharpconsole_core."""
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -14,6 +15,7 @@ if os.path.dirname(_CLI_DIR) not in sys.path:
     sys.path.insert(0, os.path.dirname(_CLI_DIR))
 
 from cli import PACKAGE_NAME, DEFAULT_SOURCE, DEFAULT_EDITOR_PORT, DEFAULT_RUNTIME_PORT, save_pkg_path
+from cli.version_check import get_plugin_version
 
 
 def _is_unity_root(d):
@@ -336,6 +338,135 @@ def _ensure_gitignore_entry(project_root):
             f.write(block)
     except OSError:
         pass
+
+
+_STABLE_ROOT = Path.home() / ".unity-cli-plugin" / "current"
+
+
+def _cli_fingerprint(cli_dir, version=None):
+    """Content fingerprint of a cli/ tree: plugin version + sha256 of every *.py
+    (relpath + bytes). Content-based, not mtime-based, so it is stable across
+    copies, git operations, and filesystem mtime quirks — only an actual code
+    change or version bump moves it, which is exactly when the stable copy should
+    re-sync from its source."""
+    cli_dir = Path(cli_dir)
+    h = hashlib.sha256()
+    h.update((version if version is not None else get_plugin_version(cli_dir)).encode("utf-8"))
+    for f in sorted(cli_dir.rglob("*.py")):
+        try:
+            data = f.read_bytes()
+        except OSError:
+            continue
+        h.update(f.relative_to(cli_dir).as_posix().encode("utf-8"))
+        h.update(b"\0")
+        h.update(data)
+    return h.hexdigest()[:16]
+
+
+def _perform_copy(src, *, force):
+    """Copy a cli/ tree to the stable $HOME location, mirror the plugin manifest,
+    and write a .source.json marker (source path + content fingerprint). Returns
+    (rc, message) and never prints — the caller decides whether to surface it.
+
+    Idempotent: skips when the copy already matches the source (version +
+    content), so a plugin upgrade or code edit re-copies but an unchanged source
+    does not."""
+    import shutil
+    src = Path(src)
+    dest_root = _STABLE_ROOT
+    dest = dest_root / "cli"
+
+    if src.resolve() == dest.resolve():
+        return 0, f"CLI already running from install location: {dest}"
+
+    version = get_plugin_version(src)
+    stamp = {"version": version, "src": str(src.resolve()),
+             "fingerprint": _cli_fingerprint(src, version=version)}
+    marker = dest_root / ".source.json"
+
+    if not force and marker.is_file() and (dest / "cs.py").is_file():
+        try:
+            if json.loads(marker.read_text("utf-8")) == stamp:
+                return 0, f"CLI already installed (up to date): {dest}"
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    try:
+        dest_root.mkdir(parents=True, exist_ok=True)
+        tmp = dest_root / "cli.tmp"
+        old = dest_root / "cli.old"
+        for p in (tmp, old):
+            shutil.rmtree(p, ignore_errors=True)  # no-op if absent
+        # Skip __pycache__ so the copy can never execute stale .pyc (whose
+        # preserved mtime would otherwise make Python prefer it over the .py).
+        shutil.copytree(src, tmp, ignore=shutil.ignore_patterns("__pycache__"))
+        # Move-aside swap: dest is always present as a whole tree (old or new),
+        # never half-deleted, so a concurrent reader can't catch a broken copy.
+        if dest.exists():
+            os.replace(dest, old)
+        os.replace(tmp, dest)
+        if old.exists():
+            shutil.rmtree(old, ignore_errors=True)
+        # Mirror the plugin manifest so get_plugin_version() still
+        # resolve from the stable path (otherwise `setup` run from here loses
+        # version pinning and alignment checks).
+        src_manifest = src.parent / ".claude-plugin" / "plugin.json"
+        if src_manifest.is_file():
+            manifest_dest_dir = dest_root / ".claude-plugin"
+            manifest_dest_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_manifest, manifest_dest_dir / "plugin.json")
+        marker.write_text(json.dumps(stamp, ensure_ascii=False, indent=2) + "\n", "utf-8")
+    except OSError as e:
+        return 1, f"Error: failed to install CLI to {dest}: {e}"
+    return 0, f"Installed CLI to {dest} (version {version})"
+
+
+def cmd_install_cli(args):
+    rc, msg = _perform_copy(_CLI_DIR, force=args.force)
+    print(msg, file=sys.stderr if rc else sys.stdout)
+    return rc
+
+
+def _maybe_self_refresh(argv):
+    """Keep the stable $HOME copy in sync with its source — the whole handshake.
+
+    When a stale copy detects its source changed, it re-execs the source CLI as a
+    child flagged with `_UCP_REFRESH_DEST`. That child refreshes the copy (nothing
+    is running from it — the refreshing process executes from the source, never the
+    copy directory it swaps, which is what makes the overwrite safe on Windows),
+    then returns so the original command proceeds from current code. The child
+    never re-delegates: it short-circuits on the flag, and the source has no
+    `.source.json` marker anyway.
+
+    Silent and best-effort: a no-op when not the stable copy, when the source is
+    gone, or already handed off; degrades to running the current copy on any
+    error rather than failing the command."""
+    if os.environ.get("_UCP_REFRESH_DEST"):
+        _perform_copy(_CLI_DIR, force=True)
+        return
+    marker = Path(_CLI_DIR).parent / ".source.json"   # only the copy has this
+    if not marker.is_file():
+        return
+    try:
+        info = json.loads(marker.read_text("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    src_cs = Path(info.get("src", "")) / "cs.py"
+    if not src_cs.is_file():
+        return  # source moved/removed (e.g. versioned cache pruned) — can't refresh here
+    src_version = get_plugin_version(src_cs.parent)
+    if src_version == info.get("version") and _cli_fingerprint(src_cs.parent, version=src_version) == info.get("fingerprint"):
+        return  # already up to date
+    # Delegate to the source (execve would be cleaner but segfaults under Windows
+    # Python, so use a child process and exit with its status).
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(src_cs)] + list(argv),
+            env=dict(os.environ, _UCP_REFRESH_DEST="1"),
+        )
+    except OSError:
+        return  # degrade: fall through and run the (stale) copy
+    sys.exit(proc.returncode)
 
 
 def cmd_setup(root, args, agent_root=None):
@@ -1846,6 +1977,9 @@ def cmd_snippets_show(root, args):
 # ── Main ────────────────────────────────────────────────────────────────
 
 def main():
+    if not (len(sys.argv) > 1 and sys.argv[1] == "install-cli"):
+        _maybe_self_refresh(sys.argv[1:])
+
     # Shared flags available on every subcommand.
     # Use SUPPRESS so subparser parses don't overwrite values supplied to the
     # top-level parser (argparse parents+subparsers footgun).  Defaults are
@@ -1867,7 +2001,9 @@ def main():
                         help="Full JSON output with all diagnostic fields")
 
     p = argparse.ArgumentParser(prog="cs", description="Unity C# Console CLI", parents=[shared])
-    sub = p.add_subparsers(dest="cmd")
+    # metavar set so the auto-generated {choices} list (which would still leak the
+    # hidden `install-cli` name) is replaced by a generic placeholder.
+    sub = p.add_subparsers(dest="cmd", metavar="<command>")
 
     sp_setup = sub.add_parser("setup", parents=[shared], help="Install Unity package")
     sp_setup.add_argument("--source", help="Git URL (default: GitHub repo)")
@@ -1877,6 +2013,11 @@ def main():
                           help="Update existing installation instead of skipping")
     sp_setup.add_argument("--no-pin", dest="no_pin", action="store_true",
                           help="Install from HEAD of the default branch instead of pinning to a tag matching the plugin major.minor")
+
+    # Internal bootstrap — called only by unity-cli-setup skill. No help= arg
+    # means argparse skips it in the subcommand listing entirely.
+    sp_install = sub.add_parser("install-cli", parents=[shared])
+    sp_install.add_argument("--force", action="store_true", help=SUPPRESS)
 
     sub.add_parser("status", parents=[shared], help="Package + connection status")
 
@@ -2050,7 +2191,12 @@ def main():
             args.wait = 600
 
     # Pre-setup commands
+    if args.cmd == "install-cli":
+        sys.exit(cmd_install_cli(args))
     if args.cmd == "setup":
+        rc, _ = _perform_copy(_CLI_DIR, force=False)
+        if rc != 0:
+            print("Warning: failed to install stable CLI copy — skills may invoke outdated code.", file=sys.stderr)
         sys.exit(cmd_setup(root, args, agent_root))
     if args.cmd == "status":
         sys.exit(cmd_status(root, args, agent_root))
@@ -2116,7 +2262,7 @@ def main():
     from cli.core_bridge import find_package_dir
     pkg_dir = find_package_dir(root, agent_root)
     if pkg_dir is None:
-        print("Error: C# Console package not found. Run 'cs setup' (or /unity-cli-setup) first.", file=sys.stderr)
+        print("Error: C# Console package not found. Run 'cs setup' (or the unity-cli-setup skill) first.", file=sys.stderr)
         sys.exit(1)
 
     s = _new_session(root, args, pkg_dir)

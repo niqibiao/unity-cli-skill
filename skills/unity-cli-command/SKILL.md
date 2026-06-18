@@ -12,6 +12,11 @@ description: >
 
 Run framework commands in the Unity Editor via the C# Console command protocol.
 
+> **Running `cs`:** below, `cs` is shorthand for
+> `python "$HOME/.unity-cli-plugin/current/cli/cs.py"` — one stable path, run
+> verbatim without changing directory. If it's not installed yet, run the
+> **unity-cli-setup** skill once first.
+
 ## Command-First Principle
 
 Always prefer `cs command` over `cs exec` when a built-in framework command exists. Only fall back to `cs exec` for ad-hoc C# that no existing command covers.
@@ -21,7 +26,7 @@ If no built-in or custom command matches the task, **next** check `unity-cli-sni
 ## Usage
 
 ```bash
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" command --json --project "$(pwd)" <namespace> <action> ['<args-json>']
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" command --json --project "$(pwd)" <namespace> <action> ['<args-json>']
 ```
 
 ## Argument & Result Conventions
@@ -34,10 +39,10 @@ python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" command --json --project "$(pwd)" <name
 
 ## Asset Refresh
 
-After writing `.cs` files or modifying assets on disk, trigger a refresh so Unity recompiles. The `/unity-cli-refresh` slash command wraps the full procedure (play-mode check, exit if needed, refresh, wait). For direct CLI use:
+After writing `.cs` files or modifying assets on disk, trigger a refresh so Unity recompiles. The `unity-cli-refresh` skill wraps the full procedure (play-mode check, exit if needed, refresh, wait). For direct CLI use:
 
 ```bash
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" refresh --wait --exit-playmode --json --project "$(pwd)"
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" refresh --wait --exit-playmode --json --project "$(pwd)"
 ```
 
 REPL sessions are cleared on domain reload.
@@ -187,9 +192,9 @@ Lookup order for custom (user-defined) commands:
 2. Read the per-project catalog cache via `cs catalog list --json`. The CLI knows the cached path for this project (default `{project}/.unity-cli/catalog.json`, remembered after first sync).
 3. If the catalog is empty, missing, or stale, fall back to a live query:
    ```bash
-   python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" list-commands --type custom --json --project "$(pwd)"
+   python "$HOME/.unity-cli-plugin/current/cli/cs.py" list-commands --type custom --json --project "$(pwd)"
    ```
-4. If a catalog refresh is needed, run `cs catalog sync --json` (or suggest `/unity-cli-refresh-commands` to the user).
+4. If a catalog refresh is needed, run `cs catalog sync --json` (or use the `unity-cli-refresh-commands` skill).
 
 ### Catalog commands
 
@@ -214,7 +219,7 @@ Most commands are **editor-only** (require the Unity Editor, not a standalone pl
 Base command for all examples:
 
 ```bash
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" command --json --project "$(pwd)" <namespace> <action> ['<args-json>']
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" command --json --project "$(pwd)" <namespace> <action> ['<args-json>']
 ```
 
 ```bash
@@ -243,16 +248,16 @@ python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" command --json --project "$(pwd)" <name
 ... prefab asset_add_component '{"assetPath":"Assets/Prefabs/Player.prefab","typeName":"BoxCollider","gameObjectPath":"Body"}'
 
 # Discover all commands (including custom)
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" list-commands --json --project "$(pwd)"
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" list-commands --json --project "$(pwd)"
 
 # Discover only custom commands
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" list-commands --type custom --json --project "$(pwd)"
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" list-commands --type custom --json --project "$(pwd)"
 
 # Sync the custom command catalog to disk
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" catalog sync --json --project "$(pwd)"
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" catalog sync --json --project "$(pwd)"
 
 # List the cached catalog
-python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" catalog list --json --project "$(pwd)"
+python "$HOME/.unity-cli-plugin/current/cli/cs.py" catalog list --json --project "$(pwd)"
 ```
 
 ## Workflow
@@ -261,5 +266,5 @@ python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" catalog list --json --project "$(pwd)"
 2. Run the command with appropriate args
 3. **After writing C# files**, follow the Asset Refresh procedure above (check play mode → exit if needed → refresh)
 4. If no matching command exists in the built-in catalog, run `cs catalog list --json` to check the per-project custom-command cache
-5. If the cache is empty or stale, run `list-commands --type custom` as a live fallback and suggest `/unity-cli-refresh-commands`
+5. If the cache is empty or stale, run `list-commands --type custom` as a live fallback and use the `unity-cli-refresh-commands` skill
 6. If no command covers the request at all, fall back to the `unity-cli-exec-code` skill

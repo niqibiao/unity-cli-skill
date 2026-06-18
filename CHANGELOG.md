@@ -11,6 +11,36 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-06-18
+
+### Added
+
+- Dual-agent support (Claude Code + Codex CLI) from a single bundle. Skills now
+  invoke the CLI by one stable, agent-agnostic path
+  (`$HOME/.unity-cli-plugin/current/cli/cs.py`); an internal bootstrap copies the
+  CLI (and the plugin manifest) there from wherever the plugin is
+  installed, so it works identically under both agents with no per-command path
+  notes and `--project "$(pwd)"` always intact. The stable copy records its
+  source path + a content fingerprint and **self-refreshes**: after a plugin
+  upgrade (or dev edit) it detects the changed source on the next run and
+  re-copies itself (then re-execs), so no manual refresh is needed. Adds a
+  `.codex-plugin/plugin.json` manifest, a cross-agent `unity-cli-setup` skill
+  (Codex has no slash commands) that is the sole bootstrap entry point, and an
+  `AGENTS.md` contributor guide. `cs setup` auto-runs the bootstrap. See
+  `docs/dual-agent-support.md`.
+- All slash commands converted to skills (`unity-cli-setup`, `unity-cli-status`,
+  `unity-cli-refresh`, `unity-cli-refresh-commands`, `unity-cli-sync-catalog`), so
+  every entry point works in both Claude Code and Codex. The `commands/` directory
+  is removed; there are no more `/unity-cli-*` slash commands (Claude Code triggers
+  the skills by intent).
+
+### Fixed
+
+- The package cache (`_save_cache` / `_save_catalog_cache`) no longer crashes
+  when the plugin directory is read-only (e.g. an agent's plugin cache) — the
+  cache is only an optimization and now degrades silently instead of raising on
+  nearly every command.
+
 ## [1.5.0] - 2026-06-13
 
 ### Added
