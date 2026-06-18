@@ -52,14 +52,14 @@ When a built-in framework command exists, prefer `cs command <ns> <action>` over
 
 ```
 Claude Code harness
-  ├── Skills (skills/*/SKILL.md): unity-cli-{setup,status,refresh,refresh-commands,
+  ├── Skills (plugin/skills/*/SKILL.md): unity-cli-{setup,status,refresh,refresh-commands,
   │     sync-catalog,command,exec-code,snippets,snippets-audit}
-  └── CLI (cli/cs.py)
+  └── CLI (plugin/cli/cs.py)
        └── core_bridge.py → dynamically imports csharpconsole_core from Unity package
             └── HTTP POST → Unity Editor/Player service (port 14500 editor / 15500 player)
 ```
 
-### Dynamic bridge (`cli/core_bridge.py`)
+### Dynamic bridge (`plugin/cli/core_bridge.py`)
 
 The CLI does **not** bundle `csharpconsole_core`. It locates and imports it at runtime from the installed Unity package to guarantee version consistency. Resolution order:
 
@@ -70,18 +70,26 @@ The CLI does **not** bundle `csharpconsole_core`. It locates and imports it at r
 
 Connection errors are automatically retried once (1s delay) to handle transient failures during domain reload.
 
-### Shared constants (`cli/__init__.py`)
+### Shared constants (`plugin/cli/__init__.py`)
 
-`PACKAGE_NAME` and `DEFAULT_SOURCE` are defined once in `cli/__init__.py` and imported by both `cs.py` and `core_bridge.py`.
+`PACKAGE_NAME` and `DEFAULT_SOURCE` are defined once in `plugin/cli/__init__.py` and imported by both `cs.py` and `core_bridge.py`.
 
 ### Plugin structure
 
+The installable plugin lives in the `plugin/` subdirectory; the repo root is a
+**marketplace** that points at it (`source: "./plugin"`). The subdir layout is
+required by Codex (a Codex marketplace cannot expose a plugin whose source is the
+marketplace root itself — `source: "./"` is rejected); Claude Code consumes the
+same subdir-sourced marketplace identically. See `docs/dual-agent-support.md`.
+
 ```
-.claude-plugin/plugin.json   Plugin manifest
-cli/__init__.py              Shared constants (PACKAGE_NAME, DEFAULT_SOURCE)
-cli/cs.py                    CLI dispatcher (argparse → pre-setup handlers or ConsoleSession)
-cli/core_bridge.py           Dynamic import bridge + ConsoleSession facade
-skills/.../SKILL.md          Skill definition with trigger conditions and usage docs
+.claude-plugin/marketplace.json   Marketplace manifest (root; source → ./plugin)
+plugin/.claude-plugin/plugin.json Plugin manifest (Claude Code)
+plugin/.codex-plugin/plugin.json  Plugin manifest (Codex)
+plugin/cli/__init__.py            Shared constants (PACKAGE_NAME, DEFAULT_SOURCE)
+plugin/cli/cs.py                  CLI dispatcher (argparse → pre-setup handlers or ConsoleSession)
+plugin/cli/core_bridge.py         Dynamic import bridge + ConsoleSession facade
+plugin/skills/.../SKILL.md        Skill definition with trigger conditions and usage docs
 ```
 
 ### JSON result envelope
@@ -90,7 +98,7 @@ All post-setup commands return: `{ "ok": bool, "exitCode": int, "summary": str, 
 
 ## Command Catalog
 
-Built-in commands are statically documented in `skills/unity-cli-command/SKILL.md`.
+Built-in commands are statically documented in `plugin/skills/unity-cli-command/SKILL.md`.
 User-defined custom commands are cached per-project as JSON (default `{project}/.unity-cli/catalog.json`; the path is remembered after the first sync and can be overridden via `cs catalog sync --catalog-path ...`). The agent reads this cache via `cs catalog list --json`.
 Run the `unity-cli-refresh-commands` skill (i.e. `cs catalog sync`) after registering new C# commands to refresh the cache.
 Run the `unity-cli-sync-catalog` skill (maintainer-only) to audit the built-in tables in `SKILL.md` against the live Editor and surface upstream additions/removals/signature changes.
@@ -99,7 +107,7 @@ Run the `unity-cli-sync-catalog` skill (maintainer-only) to audit the built-in t
 
 Self-evolving project-local library of reusable C# snippets executed via `cs exec` (no Unity compilation involvement). Snippet bodies live at `<project>/.unity-cli/snippets~/<id>.md`; audit is committed, stats are gitignored. The plugin ships a `unity-cli-snippets` skill as the agent's operator manual; the skill instructs the agent to follow the decision order: built-in/custom command → snippet → ad-hoc `cs exec`.
 
-See `skills/unity-cli-snippets/SKILL.md` for usage rules and `cs snippets --help` for the full CLI. Library maintenance (integrity, staleness, Unity API drift) is driven by `cs snippets doctor` via the `unity-cli-snippets-audit` skill — run `doctor --revalidate` after Unity version upgrades.
+See `plugin/skills/unity-cli-snippets/SKILL.md` for usage rules and `cs snippets --help` for the full CLI. Library maintenance (integrity, staleness, Unity API drift) is driven by `cs snippets doctor` via the `unity-cli-snippets-audit` skill — run `doctor --revalidate` after Unity version upgrades.
 
 ## Release Process
 
@@ -112,11 +120,12 @@ clarification on the protocol:
    The release workflow extracts this section verbatim as the GitHub Release
    body, so make sure pending entries already live under `[Unreleased]` before
    the bump (move stray notes if needed).
-2. **`.claude-plugin/plugin.json`** — bump `version` field.
-3. **`.claude-plugin/marketplace.json`** — bump the matching `version` entry
-   (must stay in lockstep with `plugin.json`).
-4. **Commit** with a `chore:` or `feat:` subject naming the version.
-5. **`git tag vX.Y.Z`** locally; **never push without explicit user
+2. **`plugin/.claude-plugin/plugin.json`** — bump `version` field.
+3. **`plugin/.codex-plugin/plugin.json`** — bump `version` (must match `plugin.json`).
+4. **`.claude-plugin/marketplace.json`** — bump the matching `version` entry
+   (all three manifests stay in lockstep at the same `major.minor`).
+5. **Commit** with a `chore:` or `feat:` subject naming the version.
+6. **`git tag vX.Y.Z`** locally; **never push without explicit user
    confirmation** (memory rule).
 
 The `release.yml` workflow handles the rest: it reads the matching CHANGELOG
@@ -129,4 +138,4 @@ the `vX.Y.Z` release with a proper title.
 - No build step, no tests, no external deps — just stdlib Python
 - Unity project detection: walks up from cwd looking for an `Assets/` directory
 - `find_project_root()` in `cs.py` handles project auto-detection; `--project` flag overrides
-- All entry points are skills (`skills/*/SKILL.md`); there are no slash commands. Skills call the CLI by the stable `$HOME` path so they work in both Claude Code and Codex
+- All entry points are skills (`plugin/skills/*/SKILL.md`); there are no slash commands. Skills call the CLI by the stable `$HOME` path so they work in both Claude Code and Codex

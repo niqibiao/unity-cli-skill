@@ -57,22 +57,22 @@ claude
 
 ### 🤖 快速开始 — Codex CLI
 
-同一套插件是双 Agent 的：所有功能都以 Skill 形式提供，两个 Agent 共享（不再有斜杠命令）。在
-Codex 中安装插件后，通过 `unity-cli-setup` skill 完成安装。
+所有功能都以 Skill 形式提供，两个 Agent 共享。
 
 **前置条件：** [Codex CLI](https://github.com/openai/codex) 0.139+、Unity 2022.3+、Python 3.7+
 
-在 Unity 项目目录下的 Codex 会话中，让它安装 unity-cli。`unity-cli-setup` skill 会先把
-CLI 引导到一个稳定路径，再安装 Unity 包并验证连接：
-
 ```bash
-# unity-cli-setup skill 会完成引导与安装；之后两个 Agent 都用这一条稳定路径，
-# 例如验证连接：
-python "$HOME/.unity-cli-plugin/current/cli/cs.py" status --project "$(pwd)"
-```
+# 1. 添加市场源并安装插件
+codex plugin marketplace add niqibiao/unity-cli-plugin
+codex plugin add unity-cli-plugin@unity-cli-plugin
 
-CLI 会被复制到 `$HOME/.unity-cli-plugin/current/cli/`，两个 Agent 都用这一个稳定路径调用。
-插件升级后，稳定副本会在下一条命令时自动检测并重新复制，无需手动刷新。
+# 2. 安装 Unity 包（在项目目录下）—— 直接让 Codex 做：
+codex
+> 安装 unity-cli
+
+# 3. 验证
+> 查看 unity-cli 状态
+```
 
 ### 🔒 团队版本管理
 
@@ -103,13 +103,13 @@ CLI 会被复制到 `$HOME/.unity-cli-plugin/current/cli/`，两个 Agent 都用
   "plugins": [
     {
       "name": "unity-cli-plugin",
-      "source": { "source": "url", "url": "https://github.com/niqibiao/unity-cli-plugin.git", "ref": "v1.5.1" }
+      "source": { "source": "git-subdir", "url": "https://github.com/niqibiao/unity-cli-plugin.git", "path": "plugin", "ref": "v1.5.1" }
     }
   ]
 }
 ```
 
-`url` 源的 `ref`（tag）或 `sha`（commit）锁死版本。Codex **没有 `autoUpdate` 等价物**：clone 后每人首次要装一次 + reload（`/plugin install`，再 `/reload-plugins`，或重启 Codex）。之后 bump `ref` 需要 `codex plugin marketplace upgrade` + reload。
+`git-subdir` 源的 `ref`（tag）或 `sha`（commit）锁死版本，`path` 指向仓库内的插件子目录。Codex **没有 `autoUpdate` 等价物**：clone 后每人首次要装一次 + reload（`/plugin install`，再 `/reload-plugins`，或重启 Codex）。之后 bump `ref` 需要 `codex plugin marketplace upgrade` + reload。
 
 **3. Unity 包** —— pin 在 `Packages/manifest.json`（由 `cs setup` 管理）：
 
@@ -154,15 +154,15 @@ Claude 会自动选择合适的命令，或在需要时编写 C# 代码。
 #### 💻 直接使用 CLI
 
 ```bash
-python cli/cs.py exec --json --project . "Debug.Log(\"Hello\")"
-python cli/cs.py command --json --project . gameobject create '{"name":"Cube","primitiveType":"Cube"}'
-python cli/cs.py refresh --json --project . --exit-playmode --wait 60
-python cli/cs.py batch --json --project . '[{"ns":"gameobject","action":"create","args":{"name":"A"}},{"ns":"gameobject","action":"create","args":{"name":"B"}}]'
-python cli/cs.py list-commands --json --project . --timeout 10
-python cli/cs.py catalog sync --json --project .
-python cli/cs.py catalog list --json --project .
-python cli/cs.py snippets list --json --project .
-python cli/cs.py snippets search "physics" --json --project .
+python plugin/cli/cs.py exec --json --project . "Debug.Log(\"Hello\")"
+python plugin/cli/cs.py command --json --project . gameobject create '{"name":"Cube","primitiveType":"Cube"}'
+python plugin/cli/cs.py refresh --json --project . --exit-playmode --wait 60
+python plugin/cli/cs.py batch --json --project . '[{"ns":"gameobject","action":"create","args":{"name":"A"}},{"ns":"gameobject","action":"create","args":{"name":"B"}}]'
+python plugin/cli/cs.py list-commands --json --project . --timeout 10
+python plugin/cli/cs.py catalog sync --json --project .
+python plugin/cli/cs.py catalog list --json --project .
+python plugin/cli/cs.py snippets list --json --project .
+python plugin/cli/cs.py snippets search "physics" --json --project .
 ```
 
 ### 📦 命令

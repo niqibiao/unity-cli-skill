@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "unity-cli-plugin",
-      "source": "./",
+      "source": "./plugin",
       "description": "CLI and Claude Code integration for Unity C# Console",
       "version": "1.5.1"
     }

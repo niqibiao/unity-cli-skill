@@ -57,25 +57,22 @@ claude
 
 ### 🤖 Quick Start — Codex CLI
 
-The same bundle is dual-agent: all functionality ships as skills shared by both
-agents (no slash commands). After installing the plugin into Codex, drive setup
-through the `unity-cli-setup` skill.
+All functionality ships as skills shared by both agents.
 
 **Prerequisites:** [Codex CLI](https://github.com/openai/codex) 0.139+, Unity 2022.3+, Python 3.7+
 
-In a Codex session inside your Unity project, ask it to set up unity-cli. The
-`unity-cli-setup` skill bootstraps the CLI to a stable path, installs the Unity
-package, and verifies the connection:
-
 ```bash
-# The unity-cli-setup skill bootstraps the CLI and installs the package; both
-# agents then invoke the one stable path — e.g. to verify the connection:
-python "$HOME/.unity-cli-plugin/current/cli/cs.py" status --project "$(pwd)"
-```
+# 1. Add the marketplace & install the plugin
+codex plugin marketplace add niqibiao/unity-cli-plugin
+codex plugin add unity-cli-plugin@unity-cli-plugin
 
-The CLI is copied once to `$HOME/.unity-cli-plugin/current/cli/` so both agents
-invoke it by a single stable path. After upgrading the plugin the stable copy
-detects the change and re-copies itself automatically on the next command.
+# 2. Install the Unity package (inside your project) — just ask Codex:
+codex
+> set up unity-cli
+
+# 3. Verify
+> check unity-cli status
+```
 
 ### 🔒 Team Version Management
 
@@ -107,13 +104,13 @@ committed files. There are **three version knobs** — keep them at the same
   "plugins": [
     {
       "name": "unity-cli-plugin",
-      "source": { "source": "url", "url": "https://github.com/niqibiao/unity-cli-plugin.git", "ref": "v1.5.1" }
+      "source": { "source": "git-subdir", "url": "https://github.com/niqibiao/unity-cli-plugin.git", "path": "plugin", "ref": "v1.5.1" }
     }
   ]
 }
 ```
 
-The `url` source's `ref` (tag) or `sha` (commit) pins the version. Codex has **no `autoUpdate` equivalent**: after cloning, each member installs + reloads once (`/plugin install`, then `/reload-plugins`, or restart Codex). A later `ref` bump needs `codex plugin marketplace upgrade` + reload.
+The `git-subdir` source's `ref` (tag) or `sha` (commit) pins the version; `path` is the plugin's subdir in the repo. Codex has **no `autoUpdate` equivalent**: after cloning, each member installs + reloads once (`/plugin install`, then `/reload-plugins`, or restart Codex). A later `ref` bump needs `codex plugin marketplace upgrade` + reload.
 
 **3. Unity package** — pinned in `Packages/manifest.json` (managed by `cs setup`):
 
@@ -159,15 +156,15 @@ Everything is a skill — Claude triggers them automatically based on what you a
 #### 💻 Direct CLI
 
 ```bash
-python cli/cs.py exec --json --project . "Debug.Log(\"Hello\")"
-python cli/cs.py command --json --project . gameobject create '{"name":"Cube","primitiveType":"Cube"}'
-python cli/cs.py refresh --json --project . --exit-playmode --wait 60
-python cli/cs.py batch --json --project . '[{"ns":"gameobject","action":"create","args":{"name":"A"}},{"ns":"gameobject","action":"create","args":{"name":"B"}}]'
-python cli/cs.py list-commands --json --project . --timeout 10
-python cli/cs.py catalog sync --json --project .
-python cli/cs.py catalog list --json --project .
-python cli/cs.py snippets list --json --project .
-python cli/cs.py snippets search "physics" --json --project .
+python plugin/cli/cs.py exec --json --project . "Debug.Log(\"Hello\")"
+python plugin/cli/cs.py command --json --project . gameobject create '{"name":"Cube","primitiveType":"Cube"}'
+python plugin/cli/cs.py refresh --json --project . --exit-playmode --wait 60
+python plugin/cli/cs.py batch --json --project . '[{"ns":"gameobject","action":"create","args":{"name":"A"}},{"ns":"gameobject","action":"create","args":{"name":"B"}}]'
+python plugin/cli/cs.py list-commands --json --project . --timeout 10
+python plugin/cli/cs.py catalog sync --json --project .
+python plugin/cli/cs.py catalog list --json --project .
+python plugin/cli/cs.py snippets list --json --project .
+python plugin/cli/cs.py snippets search "physics" --json --project .
 ```
 
 ### 📦 Commands
