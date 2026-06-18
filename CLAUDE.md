@@ -80,7 +80,7 @@ The installable plugin lives in the `plugin/` subdirectory; the repo root is a
 **marketplace** that points at it (`source: "./plugin"`). The subdir layout is
 required by Codex (a Codex marketplace cannot expose a plugin whose source is the
 marketplace root itself — `source: "./"` is rejected); Claude Code consumes the
-same subdir-sourced marketplace identically. See `docs/dual-agent-support.md`.
+same subdir-sourced marketplace identically.
 
 ```
 .claude-plugin/marketplace.json   Marketplace manifest (root; source → ./plugin)
