@@ -379,6 +379,25 @@ def _project_from_argv(argv):
     return os.getcwd()
 
 
+_VALUE_FLAGS = ("--project", "--ip", "--port", "--mode",
+                "--compile-ip", "--compile-port", "--timeout")
+
+
+def _subcommand(argv):
+    # The cs.py subcommand = first positional token, skipping shared flags and
+    # their values. Parsing it (rather than scanning argv membership) ensures a
+    # flag value or a later arg equal to "setup" (e.g. `snippets search setup`)
+    # is never mistaken for the setup subcommand.
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a.startswith("-"):
+            i += 2 if ("=" not in a and a in _VALUE_FLAGS) else 1
+            continue
+        return a
+    return None
+
+
 def _is_unity_root(d):
     return (d / "Assets").is_dir() and (d / "ProjectSettings").is_dir()
 
@@ -441,10 +460,10 @@ def _resolve(project, prefer_pending=False):
 
 def main():
     argv = sys.argv[1:]
-    # "setup" present as a token means the re-pinning op: prefer the freshly
-    # bootstrapped version so upgrades take (a project path literally named
-    # "setup" is a negligible false positive with a benign effect).
-    target = _resolve(_project_from_argv(argv), prefer_pending=("setup" in argv))
+    # Only the `setup` subcommand is the re-pinning op that may prefer a freshly
+    # bootstrapped version; every other command honors the project pin. Parse the
+    # real subcommand so e.g. `snippets search setup` is NOT treated as setup.
+    target = _resolve(_project_from_argv(argv), prefer_pending=(_subcommand(argv) == "setup"))
     if target is None:
         print("unity-cli: no CLI installed in the store. Run the unity-cli-setup skill first.",
               file=sys.stderr)
