@@ -716,11 +716,12 @@ def _maybe_self_refresh(argv):
 def cmd_setup(root, args, agent_root=None):
     """Install/update the Unity package in the project manifest.
 
-    Returns (rc, installed): installed is True only when the package was actually
-    written / cloned / updated, and False for the "already installed" no-op — the
-    caller pins the project to the running CLI only when installed is True, so a
-    no-op setup after a plugin upgrade can't strand the project on a mismatched
-    protocol."""
+    Returns (rc, should_pin). should_pin tells the caller whether to write the
+    project's pin to the running CLI version: True when the package was actually
+    installed/updated, or when an "already installed" no-op found an UNPINNED
+    project whose package is aligned with this CLI (a migration pin). False for a
+    mismatched no-op, or one that already has a pin — so a no-op after a plugin
+    upgrade can't strand the project on a mismatched CLI."""
     if root is None:
         print("Error: no Unity project found. Use --project to specify the path.", file=sys.stderr)
         return 1, False
@@ -801,17 +802,30 @@ def cmd_setup(root, args, agent_root=None):
         if PACKAGE_NAME in deps:
             if not getattr(args, "update", False):
                 print(f"Already installed: {PACKAGE_NAME}")
+                # No-op: the package is unchanged, so don't pin to the running CLI
+                # (it may be newer than the installed package — the upgrade /
+                # declined-prompt case). Exception: a project that HAS the package
+                # but NO pin (set up before pinning existed) must still get one, or
+                # the shim would reroute it to .pending/newest. Pin it only when the
+                # running CLI is aligned with the installed package; if mismatched,
+                # leave it for an explicit `setup --update`.
+                should_pin = False
                 try:
                     from cli.core_bridge import find_package_dir
                     pkg_dir = find_package_dir(root, agent_root)
                     if pkg_dir:
                         _warn_version_mismatch(pkg_dir)
+                        from cli.version_check import get_package_version, is_aligned
+                        pv = get_package_version(pkg_dir)
+                        has_pin = (Path(root) / ".unity-cli" / "cli.json").is_file()
+                        should_pin = bool(pv) and not has_pin and is_aligned(
+                            get_plugin_version(_CLI_DIR), pv)
                 except Exception:
                     pass
                 # Existing installs return here without rewriting the manifest;
                 # still make sure the snippet-stats gitignore entry is present.
                 _ensure_gitignore_entry(root)
-                return 0, False  # no-op: package unchanged → caller must not re-pin
+                return 0, should_pin
             # --update: remove and re-add to force Unity re-resolve
             print(f"Forcing re-resolve of {PACKAGE_NAME} ...")
             del deps[PACKAGE_NAME]
@@ -2449,13 +2463,13 @@ def main():
         copy_rc, _ = _perform_copy(_CLI_DIR, force=False)
         if copy_rc != 0:
             print("Warning: failed to install stable CLI copy — skills may invoke outdated code.", file=sys.stderr)
-        rc, installed = cmd_setup(root, args, agent_root)
-        # Pin only when setup actually installed/updated the package. The "already
-        # installed" no-op leaves the package — and thus the protocol-aligned CLI
-        # version — unchanged, so pinning to the running CLI here would strand the
-        # project on a mismatched CLI after a plugin upgrade (e.g. when the user
-        # declines the update prompt).
-        if rc == 0 and installed and root is not None:
+        rc, should_pin = cmd_setup(root, args, agent_root)
+        # Pin to the running CLI when cmd_setup says so — it installed/updated the
+        # package, or it was an "already installed" no-op for an UNPINNED project
+        # whose package is aligned with this CLI (a migration pin). A mismatched
+        # no-op, or one that already has a pin, is left alone so an upgrade can't
+        # strand the project on the wrong CLI.
+        if rc == 0 and should_pin and root is not None:
             _write_project_pin(root)
         # .pending is intentionally NOT consumed here: on a machine with several
         # projects pinned to an older version, each project's setup must still

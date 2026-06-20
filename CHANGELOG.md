@@ -56,6 +56,11 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 - The shim routes `install-cli` (store-level maintenance, e.g. `install-cli --gc`)
   to the newest store entry instead of the project's pinned CLI, so it is never
   dispatched to an older entry that predates newer flags like `--gc`.
+- A project that already has the package but no pin (set up before pinning
+  existed) now receives a migration pin on an "already installed" `setup` — but
+  only when its installed package is aligned with the running CLI — so it isn't
+  left to drift to `.pending`/newest. Mismatched or already-pinned projects are
+  left untouched.
 
 ## [1.5.2] - 2026-06-18
 
