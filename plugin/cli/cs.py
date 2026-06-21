@@ -469,28 +469,41 @@ main()
 
 
 def _write_shim():
-    """(Re)write the dispatch shim to the fixed path skills call, and clean up any
-    legacy single-slot full-CLI siblings left there. Idempotent and best-effort."""
+    """(Re)write the dispatch shim to the fixed path skills call, and strip any
+    non-shim leftovers there (the pre-store layout kept a whole CLI copy in this
+    dir). Idempotent and best-effort."""
     import shutil
     try:
         _SHIM_DIR.mkdir(parents=True, exist_ok=True)
         tmp = _SHIM_DIR / "cs.py.tmp"
         tmp.write_text(_SHIM_SOURCE, "utf-8")
         os.replace(tmp, _SHIM_DIR / "cs.py")
-        # Migration from the pre-store layout: the fixed dir used to hold a whole
-        # CLI copy. Drop those siblings so it now holds only the shim.
-        for name in ("__init__.py", "__main__.py", "core_bridge.py", "version_check.py"):
+        # The fixed dir holds only the shim; drop anything else — legacy full-CLI
+        # siblings from the pre-store layout, a stray __pycache__, etc.
+        for p in _SHIM_DIR.iterdir():
+            if p.name == "cs.py":
+                continue
             try:
-                (_SHIM_DIR / name).unlink()
+                if p.is_dir():
+                    shutil.rmtree(p)
+                else:
+                    p.unlink()
             except OSError:
                 pass
-        shutil.rmtree(_SHIM_DIR / "snippets", ignore_errors=True)
         try:
             (_HOME_ROOT / "current" / ".source.json").unlink()  # stale legacy marker
         except OSError:
             pass
     except OSError:
         pass
+
+
+def _shim_then(rc, msg):
+    """Refresh the dispatch shim, then return (rc, msg). Every _perform_copy
+    success path returns through here, so a valid store entry always leaves a
+    current shim behind — and the failure path, which doesn't, never clobbers it."""
+    _write_shim()
+    return rc, msg
 
 
 def _write_project_pin(root):
@@ -542,8 +555,7 @@ def _perform_copy(src, *, force):
     dest = dest_root / "cli"
 
     if src.resolve() == dest.resolve():
-        _write_shim()
-        return 0, f"CLI already running from install location: {dest}"
+        return _shim_then(0, f"CLI already running from install location: {dest}")
 
     stamp = {"version": version, "src": str(src.resolve()),
              "fingerprint": _cli_fingerprint(src, version=version)}
@@ -552,8 +564,7 @@ def _perform_copy(src, *, force):
     if not force and marker.is_file() and (dest / "cs.py").is_file():
         try:
             if json.loads(marker.read_text("utf-8")) == stamp:
-                _write_shim()
-                return 0, f"CLI already installed (up to date): {dest}"
+                return _shim_then(0, f"CLI already installed (up to date): {dest}")
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -584,10 +595,7 @@ def _perform_copy(src, *, force):
         marker.write_text(json.dumps(stamp, ensure_ascii=False, indent=2) + "\n", "utf-8")
     except OSError as e:
         return 1, f"Error: failed to install CLI to {dest}: {e}"
-    # Write the shim only after the store entry copied successfully, so a failed
-    # copy never replaces a working shim with one that points at nothing.
-    _write_shim()
-    return 0, f"Installed CLI to {dest} (version {version})"
+    return _shim_then(0, f"Installed CLI to {dest} (version {version})")
 
 
 def cmd_install_cli(args):
