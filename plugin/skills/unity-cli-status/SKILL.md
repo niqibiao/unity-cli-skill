@@ -32,3 +32,7 @@ Reports:
 plugin/package version misalignment, do NOT just report the mismatch. Directly
 ask the user whether they want to update the package now. If they confirm, run
 the **unity-cli-setup** skill (with `--update`) to perform the update.
+
+**Reporting:** report only what `status` returned. When suggesting next steps, do
+NOT invent CLI subcommands — raw C# is `cs exec`, there is no `cs run`. If unsure
+what's available, run `cs list-commands` rather than guessing.

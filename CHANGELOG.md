@@ -39,6 +39,18 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   letting the optimal pick run a compatible CLI. A failed store/shim write **fails
   `setup` before the project manifest is touched**, never half-succeeding.
 
+### Fixed
+
+- **Post-setup verify prompt regression.** The `unity-cli-setup` skill's Verify
+  step had degraded (during the command→skill refactor) into pasting a raw
+  `python "$HOME/.unity-cli-plugin/current/cli/cs.py" status …` one-liner at the
+  user; it now restores the pre-refactor behavior — tell the user to open Unity
+  and let it resolve the package, then run the **unity-cli-status** skill to
+  verify. Added guardrails so the agent stops over-claiming ("the service will be
+  reachable" — `status` is the check, not a guarantee) and stops inventing CLI
+  subcommands (raw C# is `cs exec`; there is no `cs run` — run `cs list-commands`
+  when unsure).
+
 ## [1.5.2] - 2026-06-18
 
 ### Fixed

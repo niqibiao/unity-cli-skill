@@ -52,12 +52,16 @@ confirm, re-run the setup command with `--update` appended.
 
 ## 3. Verify
 
-After a successful run (no version mismatch), tell the user to:
+After a successful run (no version mismatch), tell the user — keep it short, do
+not paste the long CLI path:
 
-1. Open the Unity Editor for the target project.
-2. Wait for the package manager to resolve `com.zh1zh1.csharpconsole`.
-3. Confirm connectivity:
+> Open the Unity Editor for this project and wait for the Package Manager to
+> resolve `com.zh1zh1.csharpconsole`. Once it's resolved, tell me and I'll check
+> status.
 
-```bash
-python "$HOME/.unity-cli-plugin/current/cli/cs.py" status --project "$(pwd)"
-```
+When the user confirms Unity has resolved the package, run the
+**unity-cli-status** skill to verify package resolution and service connectivity.
+
+Do **not** promise the service will be reachable: `status` is the check, not a
+guarantee — the editor HTTP service is only reachable once the C# Console
+service is running in the editor. Report whatever `status` actually returns.
