@@ -19,15 +19,18 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   `$HOME/.unity-cli-plugin/store/<version>/cli`; the fixed cross-agent path
   (`$HOME/.unity-cli-plugin/current/cli/cs.py`) is a tiny stdlib dispatch shim that
   runs the right one in-process via `runpy`:
-  - runtime commands run the project's **pinned** version **verbatim**
+  - a command runs the project's **pinned** version **verbatim**
     (`<project>/.unity-cli/cli.json`, written by `setup`);
-  - `setup` / `status` / `install-cli` run the **newest** installed version (they
-    must work before a project is pinned).
+  - with **no usable pin** (unpinned/legacy project, or a pin whose version isn't
+    installed) it runs the **optimal** version — the store CLI matching the
+    project's installed Unity package (`major.minor`, highest patch), else the
+    newest — so the project just works instead of erroring;
+  - `setup` / `install-cli` run the **newest** installed version.
 
-  Versions never auto-change: a project stays on its pinned version until the user
-  re-runs `setup`. `setup` warns on a package/CLI version mismatch and the user
-  decides (the `unity-cli-setup` skill prompts); the CLI never silently selects or
-  moves a version. See `adr/0001-cli-version-dispatch.md`.
+  A **pinned project never drifts** — it changes only when the user re-runs
+  `setup`. `setup` warns on a package/CLI version mismatch and the user decides
+  (the `unity-cli-setup` skill prompts); the CLI never moves a version the user
+  pinned. See `adr/0001-cli-version-dispatch.md`.
 
 ## [1.5.2] - 2026-06-18
 
