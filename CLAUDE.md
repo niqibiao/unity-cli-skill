@@ -13,12 +13,12 @@ Entry point (Claude Code): `python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" <command> [
 **Dual-agent (Claude Code + Codex):** skills invoke the CLI by one stable,
 agent-agnostic path, `python "$HOME/.unity-cli-plugin/current/cli/cs.py" <command>`
 (Codex can't expand `${CLAUDE_PLUGIN_ROOT}` in skill-body shells). That fixed path
-is a **dispatch shim** (written once by the internal bootstrap `setup` runs); it
-resolves which version the current project wants from a per-version store
-(`$HOME/.unity-cli-plugin/store/<version>/cli`) and runs it in-process — so
-multiple plugin versions coexist on one machine. `setup` pins the project to the
-installing version via `.unity-cli/cli.json`. See `AGENTS.md` and
-`docs/dual-agent-support.md`.
+is a **dispatch shim** over a per-version store
+(`$HOME/.unity-cli-plugin/store/<version>/cli`): runtime commands run the project's
+**pinned** version verbatim (`<project>/.unity-cli/cli.json`, written by `setup`);
+`setup`/`status`/`install-cli` run the **newest** installed version. Versions never
+auto-change — a project stays on its pin until the user re-runs `setup`. See
+`AGENTS.md` and `adr/0001-cli-version-dispatch.md`.
 
 Shared flags: `--project <path>`, `--ip` (default 127.0.0.1), `--port` (default 14500), `--mode editor|runtime`, `--compile-ip` (runtime mode only, default 127.0.0.1), `--compile-port` (runtime mode only, default auto-detect), `--timeout` (default 30), `--json`
 

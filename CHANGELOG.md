@@ -11,56 +11,23 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
-### Changed
-
-- **Version-namespaced CLI store + dispatch shim.** The stable cross-agent path
-  (`$HOME/.unity-cli-plugin/current/cli/cs.py`) is now a tiny dispatch shim
-  instead of one full copy of the CLI. Each plugin version is deposited under
-  `$HOME/.unity-cli-plugin/store/<version>/cli`, and on every call the shim
-  resolves which version the current project wants — its `.unity-cli/cli.json`
-  pin (written by `setup`), else the major.minor match, else the just-bootstrapped
-  version, else the newest — and runs it in-process via `runpy`. This lets
-  multiple plugin versions coexist on one machine; previously every version copied
-  into the same fixed directory, so two projects needing different versions
-  clobbered each other.
-
 ### Added
 
-- `cs install-cli --gc` prunes redundant store versions, keeping the newest patch
-  of each major.minor line plus the just-bootstrapped (`.pending`) version.
+- **Version-namespaced CLI store + dispatch shim** — multiple plugin versions can
+  coexist on one machine, each Unity project running the CLI version it was set up
+  with. Each plugin version is deposited under
+  `$HOME/.unity-cli-plugin/store/<version>/cli`; the fixed cross-agent path
+  (`$HOME/.unity-cli-plugin/current/cli/cs.py`) is a tiny stdlib dispatch shim that
+  runs the right one in-process via `runpy`:
+  - runtime commands run the project's **pinned** version **verbatim**
+    (`<project>/.unity-cli/cli.json`, written by `setup`);
+  - `setup` / `status` / `install-cli` run the **newest** installed version (they
+    must work before a project is pinned).
 
-### Fixed
-
-- Self-refresh no longer hijacks a pinned older store version onto a newer source.
-  Store entries are immutable per-version snapshots: a `store/<version>` entry now
-  re-syncs from its source only while the source is still that same version with
-  changed content (the dev-edit loop), never across versions.
-- `setup` can upgrade an already-pinned project again. When a newer version was
-  just bootstrapped (`.pending`), the shim now dispatches `setup` to that version
-  rather than the project's old exact pin — so `setup --update` after a plugin
-  upgrade actually re-pins the project (and resolves the new package tag) instead
-  of being trapped on the old version. Non-setup commands still honor the pin.
-- The shim now resolves the Unity project root (mirroring `find_project_root`)
-  before reading the per-project pin, so a `--project` pointing at a subdirectory
-  (e.g. `Assets/`) or at a parent that contains the project still finds the pin
-  `setup` wrote at the root — instead of missing it and dispatching `.pending`/newest.
-- `cs setup` no longer pins the project on the "already installed" no-op. The pin
-  now happens only when setup actually installs or updates the package, so running
-  setup after a plugin upgrade without `--update` (or declining the mismatch
-  prompt) no longer strands the project on the newer CLI while Unity still has the
-  old package/protocol.
-- `.pending` is preserved across setups instead of being consumed by the first
-  one, so on a machine with several projects pinned to an older version, each
-  project's `setup --update` still picks up the freshly bootstrapped version
-  (`.pending` is overwritten by the next `install-cli`).
-- The shim routes `install-cli` (store-level maintenance, e.g. `install-cli --gc`)
-  to the newest store entry instead of the project's pinned CLI, so it is never
-  dispatched to an older entry that predates newer flags like `--gc`.
-- A project that already has the package but no pin (set up before pinning
-  existed) now receives a migration pin on an "already installed" `setup` — but
-  only when its installed package is aligned with the running CLI — so it isn't
-  left to drift to `.pending`/newest. Mismatched or already-pinned projects are
-  left untouched.
+  Versions never auto-change: a project stays on its pinned version until the user
+  re-runs `setup`. `setup` warns on a package/CLI version mismatch and the user
+  decides (the `unity-cli-setup` skill prompts); the CLI never silently selects or
+  moves a version. See `adr/0001-cli-version-dispatch.md`.
 
 ## [1.5.2] - 2026-06-18
 

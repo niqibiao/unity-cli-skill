@@ -29,18 +29,17 @@ full derivation.
 
 On first use nothing exists at that path yet. The **unity-cli-setup** skill is
 the single bootstrap entry point — run it (or `cs setup`, which auto-runs the
-internal bootstrap). The bootstrap writes a tiny **dispatch shim** to
-`$HOME/.unity-cli-plugin/current/cli/cs.py` and deposits the bundled `cli/` (plus
-the plugin manifest, a content fingerprint, and the source path) into a
-per-version store at `$HOME/.unity-cli-plugin/store/<version>/cli`. On every call
-the shim resolves which version the current project wants — its
-`.unity-cli/cli.json` pin (written by `setup`), else the major.minor match, else
-the just-bootstrapped version, else the newest — and runs that store entry
-in-process. So different projects (and different plugin versions) coexist on one
-machine without clobbering each other. A store entry self-refreshes from its
-source only within its own version (a dev edit), never across versions;
-`cs install-cli --gc` prunes redundant older patches. See
-`docs/dual-agent-support.md` for the full mechanism.
+internal bootstrap). The bootstrap deposits the bundled `cli/` into a per-version
+store (`$HOME/.unity-cli-plugin/store/<version>/cli`) and writes a tiny **dispatch
+shim** to `$HOME/.unity-cli-plugin/current/cli/cs.py`. The shim runs the right
+store version in-process: **runtime commands run the project's pinned version
+verbatim** (`<project>/.unity-cli/cli.json`, written by `setup`); **`setup` /
+`status` / `install-cli` run the newest installed version** (they must work before
+a project is pinned). Different projects (and different plugin versions) coexist on
+one machine, each stable on its pin — the CLI never auto-selects or moves a
+version. `setup` warns on a package/CLI mismatch and the user decides. An unpinned
+project, or a pin missing from the store, errors and points at `setup`. See
+`adr/0001-cli-version-dispatch.md` for the rationale.
 
 ## Command-first principle
 
