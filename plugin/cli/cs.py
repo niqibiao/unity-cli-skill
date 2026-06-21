@@ -15,7 +15,7 @@ if os.path.dirname(_CLI_DIR) not in sys.path:
     sys.path.insert(0, os.path.dirname(_CLI_DIR))
 
 from cli import PACKAGE_NAME, DEFAULT_SOURCE, DEFAULT_EDITOR_PORT, DEFAULT_RUNTIME_PORT, save_pkg_path
-from cli.version_check import get_plugin_version
+from cli.version_check import get_plugin_version, is_aligned
 
 
 def _is_unity_root(d):
@@ -359,11 +359,12 @@ _SHIM_SOURCE = '''\
 edit. Runs the project's pinned CLI version verbatim; setup/install-cli run the
 newest; with no usable pin, runs the version best matching the installed Unity
 package. See adr/0001-cli-version-dispatch.md."""
-import json, os, runpy, sys
+import json, os, re, runpy, sys
 from pathlib import Path
 
 _STORE = Path(os.environ.get("_UCP_STORE") or (Path.home() / ".unity-cli-plugin" / "store"))
 _PKG = "com.zh1zh1.csharpconsole"
+_SEMVER_RE = re.compile(r"(\\d+\\.\\d+\\.\\d+)")
 
 # Maintenance commands that ignore the project pin and always run the newest
 # installed version.
@@ -440,35 +441,54 @@ def _read_pin(root):
         return None
 
 
-def _pkg_version(root):
-    # Best-effort installed-package version, used to pick an aligned CLI when there
-    # is no usable pin. Mirrors core_bridge._find_pkg_dir's locations: a manifest
-    # file: dep, an embedded package, then PackageCache. Returns a version or None.
-    cands = []
+def _pkg_json_version(d):
     try:
-        deps = json.loads((root / "Packages" / "manifest.json").read_text("utf-8")).get("dependencies", {})
-        val = deps.get(_PKG, "")
-        if isinstance(val, str) and val.startswith("file:"):
-            cands.append(root / "Packages" / val[5:])
+        return json.loads((d / "package.json").read_text("utf-8")).get("version")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _pkg_version(root):
+    # Installed-package version, used to pick an aligned CLI when there is no
+    # usable pin. packages-lock.json is authoritative — it records the version
+    # Unity actually resolved (a bare semver for registry deps, a URL#vX.Y.Z for
+    # git deps). Fall back to a manifest file: dep, an embedded package, then
+    # PackageCache. Returns a version string or None — and fails closed (None)
+    # when PackageCache holds multiple distinct versions, rather than guessing by
+    # filesystem order (a stale cache entry would mis-dispatch the CLI).
+    try:
+        dep = json.loads((root / "Packages" / "packages-lock.json").read_text("utf-8")) \
+            .get("dependencies", {}).get(_PKG, {})
+        m = _SEMVER_RE.search(str(dep.get("version", "")))
+        if m:
+            return m.group(1)
     except (OSError, ValueError, AttributeError):
         pass
-    cands.append(root / "Packages" / _PKG)
+    direct = []
+    try:
+        val = json.loads((root / "Packages" / "manifest.json").read_text("utf-8")) \
+            .get("dependencies", {}).get(_PKG, "")
+        if isinstance(val, str) and val.startswith("file:"):
+            direct.append(root / "Packages" / val[5:])
+    except (OSError, ValueError, AttributeError):
+        pass
+    direct.append(root / "Packages" / _PKG)
+    for c in direct:
+        v = _pkg_json_version(c)
+        if v:
+            return v
+    versions = set()
     cache = root / "Library" / "PackageCache"
     try:
         if cache.is_dir():
             for d in sorted(cache.iterdir()):
                 if d.name == _PKG or d.name.startswith(_PKG + "@"):
-                    cands.append(d)
+                    v = _pkg_json_version(d)
+                    if v:
+                        versions.add(v)
     except OSError:
         pass
-    for c in cands:
-        try:
-            v = json.loads((c / "package.json").read_text("utf-8")).get("version")
-            if v:
-                return v
-        except (OSError, ValueError, AttributeError):
-            continue
-    return None
+    return versions.pop() if len(versions) == 1 else None
 
 
 def _optimal(entries, root):
@@ -546,13 +566,28 @@ def _shim_then(rc, msg):
     return rc, msg
 
 
-def _write_project_pin(root):
+def _write_project_pin(root, target_tag=None):
     """Pin a project to the CLI version that set it up, so the shim dispatches the
-    protocol-aligned CLI for this project on every later call. Best-effort."""
+    protocol-aligned CLI for this project on every later call.
+
+    *target_tag* is the package version setup just selected (e.g. ``v1.5.2`` from
+    ``--source URL#v1.5.2``, or the discovered tag). When the running CLI is NOT
+    major.minor-aligned with it — the user deliberately installed a package off
+    the running CLI's line — writing a verbatim pin would freeze that mismatch and
+    bypass the shim's package-aligned dispatch. In that case clear any stale pin
+    instead, so the shim's `_optimal` fallback runs a compatible store CLI once
+    Unity resolves the package. An unknown tag (HEAD / no-pin install) is treated
+    as aligned. Best-effort (adr/0001-cli-version-dispatch.md)."""
+    pin_file = Path(root) / ".unity-cli" / "cli.json"
+    if target_tag and not is_aligned(get_plugin_version(_CLI_DIR), target_tag):
+        try:
+            pin_file.unlink()
+        except OSError:
+            pass
+        return
     try:
-        pin_dir = Path(root) / ".unity-cli"
-        pin_dir.mkdir(parents=True, exist_ok=True)
-        (pin_dir / "cli.json").write_text(
+        pin_file.parent.mkdir(parents=True, exist_ok=True)
+        pin_file.write_text(
             json.dumps({"version": get_plugin_version(_CLI_DIR)}, ensure_ascii=False, indent=2) + "\n",
             "utf-8")
     except OSError:
@@ -663,7 +698,14 @@ def _maybe_self_refresh(argv, maintenance=False):
     gone, or already handed off; degrades to running the current copy on any
     error rather than failing the command."""
     if os.environ.get("_UCP_REFRESH_DEST"):
-        _perform_copy(_CLI_DIR, force=True)
+        rc, msg = _perform_copy(_CLI_DIR, force=True)
+        if rc != 0 and maintenance:
+            # Picking up a newer source for `setup` failed to deposit/shim — fail
+            # now rather than letting setup mutate the project behind a broken
+            # entry point. Runtime refreshes stay best-effort (degrade silently to
+            # the current copy).
+            print(msg, file=sys.stderr)
+            sys.exit(rc)
         return
     marker = Path(_CLI_DIR).parent / ".source.json"   # only the copy has this
     if not marker.is_file():
@@ -703,18 +745,19 @@ def _maybe_self_refresh(argv, maintenance=False):
 def cmd_setup(root, args, agent_root=None):
     """Install/update the Unity package in the project manifest.
 
-    Returns (rc, installed): installed is True only when the package was actually
-    written / cloned / updated, False for the "already installed" no-op. main()
-    writes the project pin (to the version that ran setup) only when installed is
-    True. An unpinned project still runs — the shim auto-picks the CLI matching its
-    installed package (see adr/0001-cli-version-dispatch.md)."""
+    Returns (rc, installed, tag): installed is True only when the package was
+    actually written / cloned / updated, False for the "already installed" no-op;
+    tag is the package version setup selected (e.g. ``v1.5.2``), or None for an
+    unpinned / HEAD install. main() writes the project pin only when installed is
+    True, and only when the running CLI is aligned with tag (see _write_project_pin
+    and adr/0001-cli-version-dispatch.md)."""
     if root is None:
         print("Error: no Unity project found. Use --project to specify the path.", file=sys.stderr)
-        return 1, False
+        return 1, False, None
     manifest = root / "Packages" / "manifest.json"
     if not manifest.exists():
         print(f"Error: {manifest} not found.", file=sys.stderr)
-        return 1, False
+        return 1, False, None
 
     data = json.loads(manifest.read_text("utf-8"))
     deps = data.setdefault("dependencies", {})
@@ -767,9 +810,9 @@ def cmd_setup(root, args, agent_root=None):
                 else:
                     rc = _pull_local(local_dir)
                 if rc != 0:
-                    return rc, False
+                    return rc, False, None
                 _warn_version_mismatch(local_dir)
-                return 0, True
+                return 0, True, _pin_cache["tag"]
             # Directory exists but manifest points elsewhere (e.g. git) — update below
         else:
             # Remove incomplete clone leftovers before retrying
@@ -781,7 +824,7 @@ def cmd_setup(root, args, agent_root=None):
             clone_url = raw_source.split("#", 1)[0]
             rc = _clone_with_progress(clone_url, local_dir, tag=target_tag)
             if rc != 0:
-                return 1, False
+                return 1, False, None
 
         dep_value = dep_value_local
     else:
@@ -799,7 +842,7 @@ def cmd_setup(root, args, agent_root=None):
                 # the user to --update). An unpinned project still runs: the shim
                 # auto-picks the store CLI matching its installed package.
                 _ensure_gitignore_entry(root)
-                return 0, False
+                return 0, False, None
             # --update: remove and re-add to force Unity re-resolve
             print(f"Forcing re-resolve of {PACKAGE_NAME} ...")
             del deps[PACKAGE_NAME]
@@ -814,7 +857,7 @@ def cmd_setup(root, args, agent_root=None):
     if method == "local":
         save_pkg_path(agent_root, local_dir)
     print("Open Unity Editor to resolve the package, then run: cs status")
-    return 0, True
+    return 0, True, _pin_cache["tag"]
 
 
 def _cmd_status_json(root, args, agent_root=None):
@@ -2436,16 +2479,21 @@ def main():
     if args.cmd == "install-cli":
         sys.exit(cmd_install_cli(args))
     if args.cmd == "setup":
-        copy_rc, _ = _perform_copy(_CLI_DIR, force=False)
+        copy_rc, copy_msg = _perform_copy(_CLI_DIR, force=False)
         if copy_rc != 0:
-            print("Warning: failed to install stable CLI copy — skills may invoke outdated code.", file=sys.stderr)
-        rc, installed = cmd_setup(root, args, agent_root)
-        # Write the project pin only when setup actually installed/updated the
-        # package — to the version that ran setup (newest). A no-op writes nothing;
-        # an unpinned project is still handled by the shim, which auto-picks the
-        # store CLI matching its installed package (see adr/0001-cli-version-dispatch.md).
+            # The fixed-path shim/store is the skill entry point. A failed write
+            # must fail setup BEFORE the package manifest is touched: a partial
+            # success (package changed, entry point missing/stale) is worse than a
+            # clean failure (adr/0001-cli-version-dispatch.md).
+            print(copy_msg, file=sys.stderr)
+            sys.exit(copy_rc)
+        rc, installed, pin_tag = cmd_setup(root, args, agent_root)
+        # Pin the project only when setup actually installed/updated the package.
+        # _write_project_pin writes the running (newest) version when it is aligned
+        # with the selected package, else clears any stale pin so the shim auto-picks
+        # the matching store CLI (see adr/0001-cli-version-dispatch.md).
         if rc == 0 and installed and root is not None:
-            _write_project_pin(root)
+            _write_project_pin(root, pin_tag)
         sys.exit(rc)
     if args.cmd == "status":
         sys.exit(cmd_status(root, args, agent_root))

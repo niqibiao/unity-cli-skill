@@ -24,13 +24,21 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   - with **no usable pin** (unpinned/legacy project, or a pin whose version isn't
     installed) it runs the **optimal** version — the store CLI matching the
     project's installed Unity package (`major.minor`, highest patch), else the
-    newest — so the project just works instead of erroring;
+    newest — so the project just works instead of erroring. The installed package
+    version is read from `Packages/packages-lock.json` first (authoritative),
+    falling back to the manifest / embedded package / `PackageCache`; an ambiguous
+    cache fails closed to the newest CLI rather than guessing by filesystem order;
   - `setup` / `install-cli` run the **newest** installed version.
 
   A **pinned project never drifts** — it changes only when the user re-runs
   `setup`. `setup` warns on a package/CLI version mismatch and the user decides
   (the `unity-cli-setup` skill prompts); the CLI never moves a version the user
-  pinned. See `adr/0001-cli-version-dispatch.md`.
+  pinned. `setup` pins to the (newest) CLI it ran **only when that CLI is aligned
+  with the package it installed**; a deliberate off-line install
+  (`--source URL#vX.Y.Z` under a newer CLI) writes no pin and clears any stale one,
+  letting the optimal pick run a compatible CLI. A failed store/shim write **fails
+  `setup` before the project manifest is touched**, never half-succeeding. See
+  `adr/0001-cli-version-dispatch.md`.
 
 ## [1.5.2] - 2026-06-18
 
