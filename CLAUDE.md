@@ -11,11 +11,15 @@ Claude Code plugin providing a thin Python CLI for interacting with Unity Editor
 Entry point (Claude Code): `python "${CLAUDE_PLUGIN_ROOT}/cli/cs.py" <command> [--json] [args]`
 
 **Dual-agent (Claude Code + Codex):** skills invoke the CLI by one stable,
-agent-agnostic path, `python "$HOME/.unity-cli-plugin/current/cli/cs.py" <command>`,
-populated once by the internal bootstrap that `setup` runs (Codex can't expand
-`${CLAUDE_PLUGIN_ROOT}` in skill-body shells). The stable copy self-refreshes when its source changes. Slash
-commands stay Claude-Code-only and keep `${CLAUDE_PLUGIN_ROOT}`. See `AGENTS.md`
-and `docs/dual-agent-support.md`.
+agent-agnostic path, `python "$HOME/.unity-cli-plugin/current/cli/cs.py" <command>`
+(Codex can't expand `${CLAUDE_PLUGIN_ROOT}` in skill-body shells). That fixed path
+is a **dispatch shim** over a per-version store
+(`$HOME/.unity-cli-plugin/store/<version>/cli`): a command runs the project's
+**pinned** version verbatim (`<project>/.unity-cli/cli.json`, written by `setup`);
+with no usable pin it runs the **optimal** one (the store CLI matching the
+project's installed Unity package, else newest); `setup`/`install-cli` run the
+**newest**. A pinned project never drifts — it changes only when the user re-runs
+`setup`. See `AGENTS.md`.
 
 Shared flags: `--project <path>`, `--ip` (default 127.0.0.1), `--port` (default 14500), `--mode editor|runtime`, `--compile-ip` (runtime mode only, default 127.0.0.1), `--compile-port` (runtime mode only, default auto-detect), `--timeout` (default 30), `--json`
 
@@ -32,7 +36,7 @@ When a built-in framework command exists, prefer `cs command <ns> <action>` over
 
 | Command | Phase | Description |
 |---------|-------|-------------|
-| `cs setup [--source URL] [--update]` | pre | Add/update package in Packages/manifest.json (auto-bootstraps the stable `$HOME` CLI copy) |
+| `cs setup [--source URL] [--update]` | pre | Add/update package in Packages/manifest.json (auto-bootstraps the `$HOME` shim + version store) |
 | `cs status` | pre | Package + connection status + version info |
 | `cs exec <code> \| --file FILE` | post | Execute C# code (inline or from file) |
 | `cs command <ns> <action> [args]` | post | Run framework command |

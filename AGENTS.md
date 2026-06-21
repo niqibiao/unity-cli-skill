@@ -27,14 +27,19 @@ literal `$HOME` path is the only form that resolves in both agents' shells with
 no `cd` and no model path-reasoning. See `docs/dual-agent-support.md` for the
 full derivation.
 
-On first use the stable copy won't exist yet. The **unity-cli-setup** skill is
+On first use nothing exists at that path yet. The **unity-cli-setup** skill is
 the single bootstrap entry point — run it (or `cs setup`, which auto-runs the
-internal bootstrap). The bootstrap self-locates the bundled `cli/` and copies it
-(plus the plugin manifest) to `$HOME/.unity-cli-plugin/current/`, recording the
-source path and a content fingerprint in `.source.json`. It is idempotent, and
-after a plugin upgrade the stable copy detects the changed source on its next run
-and re-copies itself automatically (re-exec) — no manual refresh needed. See
-`docs/dual-agent-support.md` for the mechanism.
+internal bootstrap). The bootstrap deposits the bundled `cli/` into a per-version
+store (`$HOME/.unity-cli-plugin/store/<version>/cli`) and writes a tiny **dispatch
+shim** to `$HOME/.unity-cli-plugin/current/cli/cs.py`. The shim runs the right
+store version in-process: a command runs the project's **pinned** version verbatim
+(`<project>/.unity-cli/cli.json`, written by `setup`); with **no usable pin** it
+runs the **optimal** version — the store CLI matching the project's installed Unity
+package (`major.minor`, highest patch), else the newest — so an unpinned or legacy
+project just works; **`setup` / `install-cli`** run the newest installed version.
+Different projects (and different plugin versions) coexist on one machine; a pinned
+project never drifts — the CLI never moves a version the user pinned. `setup` warns
+on a package/CLI mismatch and the user decides.
 
 ## Command-first principle
 

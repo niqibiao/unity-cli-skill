@@ -11,6 +11,34 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **Version-namespaced CLI store + dispatch shim** — multiple plugin versions can
+  coexist on one machine, each Unity project running the CLI version it was set up
+  with. Each plugin version is deposited under
+  `$HOME/.unity-cli-plugin/store/<version>/cli`; the fixed cross-agent path
+  (`$HOME/.unity-cli-plugin/current/cli/cs.py`) is a tiny stdlib dispatch shim that
+  runs the right one in-process via `runpy`:
+  - a command runs the project's **pinned** version **verbatim**
+    (`<project>/.unity-cli/cli.json`, written by `setup`);
+  - with **no usable pin** (unpinned/legacy project, or a pin whose version isn't
+    installed) it runs the **optimal** version — the store CLI matching the
+    project's installed Unity package (`major.minor`, highest patch), else the
+    newest — so the project just works instead of erroring. The installed package
+    version is read from `Packages/packages-lock.json` first (authoritative),
+    falling back to the manifest / embedded package / `PackageCache`; an ambiguous
+    cache fails closed to the newest CLI rather than guessing by filesystem order;
+  - `setup` / `install-cli` run the **newest** installed version.
+
+  A **pinned project never drifts** — it changes only when the user re-runs
+  `setup`. `setup` warns on a package/CLI version mismatch and the user decides
+  (the `unity-cli-setup` skill prompts); the CLI never moves a version the user
+  pinned. `setup` pins to the (newest) CLI it ran **only when that CLI is aligned
+  with the package it installed**; a deliberate off-line install
+  (`--source URL#vX.Y.Z` under a newer CLI) writes no pin and clears any stale one,
+  letting the optimal pick run a compatible CLI. A failed store/shim write **fails
+  `setup` before the project manifest is touched**, never half-succeeding.
+
 ## [1.5.2] - 2026-06-18
 
 ### Fixed
