@@ -37,8 +37,7 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   with the package it installed**; a deliberate off-line install
   (`--source URL#vX.Y.Z` under a newer CLI) writes no pin and clears any stale one,
   letting the optimal pick run a compatible CLI. A failed store/shim write **fails
-  `setup` before the project manifest is touched**, never half-succeeding. See
-  `adr/0001-cli-version-dispatch.md`.
+  `setup` before the project manifest is touched**, never half-succeeding.
 
 ## [1.5.2] - 2026-06-18
 

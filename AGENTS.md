@@ -39,8 +39,7 @@ package (`major.minor`, highest patch), else the newest — so an unpinned or le
 project just works; **`setup` / `install-cli`** run the newest installed version.
 Different projects (and different plugin versions) coexist on one machine; a pinned
 project never drifts — the CLI never moves a version the user pinned. `setup` warns
-on a package/CLI mismatch and the user decides. See
-`adr/0001-cli-version-dispatch.md` for the rationale.
+on a package/CLI mismatch and the user decides.
 
 ## Command-first principle
 

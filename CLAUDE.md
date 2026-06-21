@@ -19,7 +19,7 @@ is a **dispatch shim** over a per-version store
 with no usable pin it runs the **optimal** one (the store CLI matching the
 project's installed Unity package, else newest); `setup`/`install-cli` run the
 **newest**. A pinned project never drifts — it changes only when the user re-runs
-`setup`. See `AGENTS.md` and `adr/0001-cli-version-dispatch.md`.
+`setup`. See `AGENTS.md`.
 
 Shared flags: `--project <path>`, `--ip` (default 127.0.0.1), `--port` (default 14500), `--mode editor|runtime`, `--compile-ip` (runtime mode only, default 127.0.0.1), `--compile-port` (runtime mode only, default auto-detect), `--timeout` (default 30), `--json`
 
