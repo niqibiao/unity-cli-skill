@@ -11,6 +11,8 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-25
+
 ### Changed
 
 - **BREAKING — pure-skills distribution.** Installed with
