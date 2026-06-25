@@ -40,9 +40,16 @@ Claude:  完成。10 个 Cube 已在半径 5 处创建，均已添加 Rigidbody 
 
 ### 🚀 快速开始
 
+> ⚠️ **执行 `npx skills add` 之前，务必先 `cd` 进入你的 Unity 项目根目录。**
+> `npx skills add` 会装到**当前目录**的 Agent 文件夹里，所以 skill 必须落在**项目内**（随项目一起提交）。
+> **不要在用户主目录 / 全局目录里执行：** CLI 通过从自身提交位置向上查找来定位 Unity 项目，装到主目录后
+> 永远定位不到项目（只能退而依赖当前 shell 的 cwd，一旦换个目录运行就失效）；一份全局共享拷贝无法与每个
+> 项目各自的 Unity 包保持版本一致；队友也无法通过 `git pull` 拿到它。
+
 ```bash
-# 1. 把 skill 安装进你的 Unity 项目（实体文件，可提交）。在项目根目录运行；
+# 1. 先 cd 进入你的 Unity 项目根目录，再把 skill 装到这里（实体文件，可提交）。
 #    npx 会自动识别你用的 Agent —— Claude Code（.claude/skills/）和 Codex（.agents/ + .codex/skills/）。
+cd path/to/your/UnityProject
 npx skills add niqibiao/unity-cli-skill --copy
 
 # 2. 在 Agent 里运行 setup —— 它会把 Unity C# Console 包写进项目的 Packages/manifest.json，

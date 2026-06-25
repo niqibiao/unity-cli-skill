@@ -40,10 +40,20 @@ CLI commands exposed through the agent's skill system.
 
 ### 🚀 Quick Start
 
+> ⚠️ **`cd` into your Unity project root *before* running `npx skills add`.**
+> `npx skills add` installs into the **current directory's** agent folders, so the skill
+> must land **inside the project** (committed with it). **Do not run it from your home /
+> user directory:** the CLI locates the Unity project by walking up from its own committed
+> location, so a home/global install never resolves a project (it then depends on the
+> shell's cwd alone and breaks the moment you run from elsewhere), a single shared copy
+> can't stay version-locked with each project's Unity package, and teammates won't get it
+> via `git pull`.
+
 ```bash
-# 1. Install the skill into your Unity project (real files, committable).
-#    Run from the project root; npx auto-detects your agent(s) — Claude Code
-#    (.claude/skills/) and Codex (.agents/ + .codex/skills/).
+# 1. cd into your Unity PROJECT ROOT first, then install the skill there (real files,
+#    committable). npx auto-detects your agent(s) — Claude Code (.claude/skills/) and
+#    Codex (.agents/ + .codex/skills/).
+cd path/to/your/UnityProject
 npx skills add niqibiao/unity-cli-skill --copy
 
 # 2. In your agent, run setup — it adds the Unity C# Console package to the project's
