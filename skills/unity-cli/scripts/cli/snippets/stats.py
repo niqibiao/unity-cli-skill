@@ -19,7 +19,11 @@ def audit_path(project_root):
 
 
 def stats_path(project_root):
-    return Path(project_root) / DATA_DIR_NAME / STATS_FILE
+    """Usage stats are machine-local observability — stored in the home cache, not
+    the project tree (nothing to gitignore; multi-project runs don't collide). The
+    audit file (above) stays in the project as committed history."""
+    from cli.paths import state_dir
+    return state_dir(project_root) / STATS_FILE
 
 
 class SnippetDataError(Exception):
@@ -46,8 +50,11 @@ def _load_json(path, default, strict=False):
 
 
 def _save_json(path, data):
+    import os
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
+    os.replace(tmp, path)  # atomic; raises on error to protect committed audit history
 
 
 def load_audit(project_root):
