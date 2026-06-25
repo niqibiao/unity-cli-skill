@@ -11,6 +11,33 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — pure-skills distribution.** Installed with
+  `npx skills add niqibiao/unity-cli-skill --copy`, not as a Claude Code / Codex
+  marketplace plugin. The CLI is bundled under `skills/unity-cli/scripts/cli/` and
+  runs in place — no `~/.unity-cli-plugin` store/shim/copy. The 9 skills are merged
+  into one `SKILL.md` + `references/`. See ADR-0002.
+- **BREAKING — no version management.** Removed per-project CLI version dispatch
+  (store/shim/pin), package-tag auto-pin, `install-cli`, `check-update`, and
+  self-refresh. The committed copy is the version record; a runtime
+  `⚠ version mismatch` warning is the only compatibility check (CLI ↔ package
+  `major.minor`).
+- **BREAKING — `cs setup` no longer installs the Unity package.** It locates the
+  project, caches the package path, and version-checks. Install the package
+  yourself (commit it with the skill, or add it via Unity Package Manager).
+- The CLI auto-detects the Unity project (walk-up from cwd + the CLI's committed
+  location); `--project` is now an optional override, not required.
+- Machine-local state (package-path cache, snippet usage stats) moved out of the
+  project into a per-project home cache (`%LOCALAPPDATA%\unity-cli\<key>\` /
+  `$XDG_CACHE_HOME/unity-cli/<key>/`); the project tree stays clean.
+
+### Migration
+
+- Old `~/.unity-cli-plugin/` (store + shim) and any `<project>/.unity-cli/cli.json`
+  pins are now dead data — safe to delete. Reinstall with
+  `npx skills add niqibiao/unity-cli-skill --copy`.
+
 ## [1.5.3] - 2026-06-23
 
 ### Added

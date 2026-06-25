@@ -1,13 +1,3 @@
----
-name: unity-cli-snippets-audit
-description: >
-  Health audit and anti-rot cleanup for the project's snippet library
-  (.unity-cli/snippets~/). Use when the user asks to check, audit, clean up,
-  or "防腐化" the snippet library, after a Unity version upgrade (API drift),
-  when snippets feel stale or keep failing, or as periodic maintenance.
-  Drives `cs snippets doctor` and triages its findings into cleanup actions.
----
-
 # Unity CLI Snippets Audit
 
 Anti-rot maintenance for the snippet library. The library rots in four ways:
@@ -16,20 +6,15 @@ audit entries diverge via merges / hand edits), **staleness** (cold, never
 reused), and **zombie deprecations** (retired but never removed). This skill
 detects all four and funnels cleanup through the CLI.
 
-> **Running `cs`:** below, `cs` is shorthand for
-> `python "$HOME/.unity-cli-plugin/current/cli/cs.py"` — one stable path, run
-> verbatim without changing directory. If it's not installed yet, run the
-> **unity-cli-setup** skill once first.
-
 ## Workflow
 
 1. **Diagnose (offline, always safe):**
    ```bash
-   python "$HOME/.unity-cli-plugin/current/cli/cs.py" snippets doctor --json --project "$(pwd)"
+   cs snippets doctor --json
    ```
 2. **Revalidate (requires running Unity — this is what catches API drift):**
    ```bash
-   python "$HOME/.unity-cli-plugin/current/cli/cs.py" snippets doctor --revalidate --json --project "$(pwd)"
+   cs snippets doctor --revalidate --json
    ```
    Re-runs the validation gate on every live `read-only` snippet and refreshes
    `verified_at` on passes. Run after every Unity version upgrade. Doctor runs
@@ -64,5 +49,5 @@ detects all four and funnels cleanup through the CLI.
 
 ## When to trigger proactively
 
-- After running the `unity-cli-setup` skill with `--update`, or any Unity version change: run step 2.
+- After running the `cs setup` skill with `--update`, or any Unity version change: run step 2.
 - If two different snippets fail in one session: run step 1 before continuing.

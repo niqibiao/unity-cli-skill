@@ -1,36 +1,22 @@
----
-name: unity-cli-exec-code
-description: >
-  Fallback for raw C# execution in Unity when no framework command covers the task.
-  Check unity-cli-command first. For: custom scripting, AssetDatabase, multi-API queries,
-  reflection, private member access, LINQ scene queries, or uncovered Unity APIs.
-  Triggers on C# snippets or "execute C#"/"run code"/"eval" requests.
----
-
 # Unity CLI Exec Code (Fallback)
 
 Execute raw C# in a running Unity Editor via the Roslyn-based CSharpConsole REPL.
-Always prefer the `unity-cli-command` skill first.
+Always prefer the `cs command` skill first.
 
-Then check the snippet library (`cs snippets search <description>`) before writing ad-hoc code. After solving a non-trivial task that's likely to recur, consider distilling it into a snippet — see the `unity-cli-snippets` skill.
-
-> **Running `cs`:** below, `cs` is shorthand for
-> `python "$HOME/.unity-cli-plugin/current/cli/cs.py"` — one stable path, run
-> verbatim without changing directory. If it's not installed yet, run the
-> **unity-cli-setup** skill once first.
+Then check the snippet library (`cs snippets search <description>`) before writing ad-hoc code. After solving a non-trivial task that's likely to recur, consider distilling it into a snippet — see the `cs snippets` skill.
 
 ## Usage
 
 Inline code:
 
 ```bash
-python "$HOME/.unity-cli-plugin/current/cli/cs.py" exec --json --project "$(pwd)" "<C# code>"
+cs exec --json "<C# code>"
 ```
 
 From a file (avoids shell quoting hazards for long/complex snippets):
 
 ```bash
-python "$HOME/.unity-cli-plugin/current/cli/cs.py" exec --json --project "$(pwd)" --file path/to/snippet.cs
+cs exec --json --file path/to/snippet.cs
 ```
 
 All examples below use the inline form, showing only the C# code portion for brevity.
@@ -109,7 +95,7 @@ foreach(var r in GameObject.FindGameObjectsWithTag("Debug").SelectMany(g => g.Ge
 Reset when variable name collisions or stale state occur:
 
 ```bash
-python "$HOME/.unity-cli-plugin/current/cli/cs.py" command --json --project "$(pwd)" session reset
+cs command --json session reset
 ```
 
 ## Notes

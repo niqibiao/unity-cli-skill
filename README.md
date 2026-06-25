@@ -35,92 +35,41 @@ CLI commands exposed through Claude Code's skill system.
 - **Workflow-aware.** Understands Unity's compile lifecycle, play mode, domain reload.
 - **Automatic custom command discovery.** User-defined C# commands are synced into the skill catalog.
 - **Runtime / IL2CPP support.** Works with HybridCLR for runtime builds.
-- **Self-evolving snippet library** — project-local C# snippets (`.md` files, no compilation) with validation gate, usage tracking, and aging. Discover and grow via `cs snippets` and the `unity-cli-snippets` skill.
+- **Self-evolving snippet library** — project-local C# snippets (`.md` files, no compilation) with validation gate, usage tracking, and aging. Discover and grow via `cs snippets`.
 
 
-### 🚀 Quick Start — Claude Code
-
-**Prerequisites:** [Claude Code](https://claude.ai/code), Unity 2022.3+, Python 3.7+
+### 🚀 Quick Start
 
 ```bash
-# 1. Add the marketplace & install the plugin
-claude plugin marketplace add niqibiao/unity-cli-plugin
-claude plugin install unity-cli-plugin
+# 1. Install the skill into your Unity project (real files, committable).
+#    Run from the project root; npx auto-detects your agent(s) — Claude Code
+#    (.claude/skills/) and Codex (.agents/ + .codex/skills/).
+npx skills add niqibiao/unity-cli-skill --copy
 
-# 2. Install the Unity package (inside your project) — just ask Claude:
-claude
-> set up unity-cli
+# 2. Make sure the Unity C# Console package is in the project — commit it with the
+#    skill, or add it via Unity Package Manager ("Add package from git URL"):
+#      https://github.com/niqibiao/unity-csharpconsole.git
+#    Then, in your agent:
+> set up unity-cli      # locate project + version-check (does NOT install the package)
 
 # 3. Verify
 > check unity-cli status
 ```
 
-### 🤖 Quick Start — Codex CLI
+> Works identically in **Claude Code and Codex** — one skill folder, run in place,
+> no marketplace or plugin. There is no `~/.unity-cli-plugin` and no bootstrap step;
+> the committed skill copy is the CLI.
 
-All functionality ships as skills shared by both agents.
+**Prerequisites:** [Claude Code](https://claude.ai/code) or [Codex CLI](https://github.com/openai/codex) 0.139+, Node.js (for `npx`), Unity 2022.3+, Python 3.7+
 
-**Prerequisites:** [Codex CLI](https://github.com/openai/codex) 0.139+, Unity 2022.3+, Python 3.7+
+### 🔒 Team / version notes
 
-```bash
-# 1. Add the marketplace & install the plugin
-codex plugin marketplace add niqibiao/unity-cli-plugin
-codex plugin add unity-cli-plugin@unity-cli-plugin
-
-# 2. Install the Unity package (inside your project) — just ask Codex:
-codex
-> set up unity-cli
-
-# 3. Verify
-> check unity-cli status
-```
-
-### 🔒 Team Version Management
-
-Pin one version across the whole team and roll everyone forward by editing
-committed files. There are **three version knobs** — keep them at the same
-`major.minor` (patch numbers may differ per repo) to avoid `⚠ version mismatch`.
-
-**1. Claude Code plugin** — commit to `.claude/settings.json`:
-
-```json
-{
-  "extraKnownMarketplaces": {
-    "unity-cli-plugin": {
-      "source": { "source": "github", "repo": "niqibiao/unity-cli-plugin", "ref": "v1.5.1" },
-      "autoUpdate": true
-    }
-  },
-  "enabledPlugins": { "unity-cli-plugin@unity-cli-plugin": true }
-}
-```
-
-`source.ref` (tag/commit) locks the version; `autoUpdate: true` re-syncs each member to the committed `ref` at session start (self-heals drift, no manual `/plugin`). The version goes in `source.ref`, **not** the `enabledPlugins` key — keys are `plugin-id@marketplace-id` with no version syntax.
-
-**2. Codex CLI plugin** — commit to `.agents/plugins/marketplace.json`:
-
-```json
-{
-  "name": "unity-cli-pinned",
-  "plugins": [
-    {
-      "name": "unity-cli-plugin",
-      "source": { "source": "git-subdir", "url": "https://github.com/niqibiao/unity-cli-plugin.git", "path": "plugin", "ref": "v1.5.1" }
-    }
-  ]
-}
-```
-
-The `git-subdir` source's `ref` (tag) or `sha` (commit) pins the version; `path` is the plugin's subdir in the repo. Codex has **no `autoUpdate` equivalent**: after cloning, each member installs + reloads once (`/plugin install`, then `/reload-plugins`, or restart Codex). A later `ref` bump needs `codex plugin marketplace upgrade` + reload.
-
-**3. Unity package** — pinned in `Packages/manifest.json` (managed by `cs setup`):
-
-```json
-{ "dependencies": { "com.zh1zh1.csharpconsole": "https://github.com/niqibiao/unity-csharpconsole.git#v1.5.0" } }
-```
-
-**To roll the team forward:** bump each pin to its repo's new tag (keep the plugin and package at the same `major.minor`), commit, and push. On their next session, Claude members auto-update; Codex members run one `marketplace upgrade` + reload; Unity re-resolves the package when the Editor opens.
-
-> Claude (`autoUpdate`) is fully transparent. Codex pins the source but does **not** auto-install on clone — the first install and each upgrade need a manual reload/restart.
+No version-management machinery (no plugin pinning, no CLI dispatch). Install with
+`npx skills add niqibiao/unity-cli-skill --copy` and **commit the skill folder and
+the Unity package together** — git is the version record, so everyone who pulls gets
+the same, aligned pair. Keep the CLI (`skills/unity-cli/scripts/cli/VERSION`) and the
+Unity package on the same `major.minor`; a `⚠ version mismatch` warning means they
+drifted. See [ADR-0002](adr/0002-pure-skills-no-version-management.md).
 
 ### 💬 Usage
 
@@ -135,36 +84,36 @@ Just tell Claude what you want:
 
 Claude picks the right command or writes C# code as needed.
 
-#### 🧩 Skills
+#### 🧩 One skill, many subcommands
 
-Everything is a skill — Claude triggers them automatically based on what you ask
-(works in both Claude Code and Codex):
+Everything ships in **one skill** (`unity-cli`); its `cs` subcommands cover every
+operation, and the agent triggers it automatically (Claude Code and Codex alike):
 
-| Skill                         | Description                                  |
-| ----------------------------- | -------------------------------------------- |
-| `unity-cli-setup`             | Install the Unity package (cross-agent bootstrap) |
-| `unity-cli-status`            | Check package and service status             |
-| `unity-cli-refresh`           | Trigger asset refresh / recompile            |
-| `unity-cli-refresh-commands`  | Refresh per-project custom command cache     |
-| `unity-cli-sync-catalog`      | Audit built-in tables vs live Editor (maintainer) |
-| `unity-cli-command`           | Structured Unity Editor commands             |
-| `unity-cli-exec-code`         | Run raw C# in the Editor (fallback)          |
-| `unity-cli-snippets`          | Reusable C# snippet library                  |
-| `unity-cli-snippets-audit`    | Snippet library health audit                 |
+| Subcommand | Description |
+| ---------- | ----------- |
+| `cs setup` | Locate project + version-check (does **not** install the package) |
+| `cs status` / `cs health` | Package and service status |
+| `cs command <ns> <action>` | Structured Unity Editor commands |
+| `cs exec` | Run raw C# in the Editor (fallback) |
+| `cs refresh` | Trigger asset refresh / recompile |
+| `cs catalog sync` / `cs list-commands` | Custom-command catalog + maintainer audit |
+| `cs snippets …` | Reusable C# snippet library |
+| `cs snippets doctor` | Snippet library health audit |
 
 
 #### 💻 Direct CLI
 
+`cs` = `python "<SKILL_DIR>/scripts/cli/cs.py"` (the committed skill's CLI). No
+`--project` — the project is auto-detected.
+
 ```bash
-python plugin/cli/cs.py exec --json --project . "Debug.Log(\"Hello\")"
-python plugin/cli/cs.py command --json --project . gameobject create '{"name":"Cube","primitiveType":"Cube"}'
-python plugin/cli/cs.py refresh --json --project . --exit-playmode --wait 60
-python plugin/cli/cs.py batch --json --project . '[{"ns":"gameobject","action":"create","args":{"name":"A"}},{"ns":"gameobject","action":"create","args":{"name":"B"}}]'
-python plugin/cli/cs.py list-commands --json --project . --timeout 10
-python plugin/cli/cs.py catalog sync --json --project .
-python plugin/cli/cs.py catalog list --json --project .
-python plugin/cli/cs.py snippets list --json --project .
-python plugin/cli/cs.py snippets search "physics" --json --project .
+cs exec --json "Debug.Log(\"Hello\")"
+cs command --json gameobject create '{"name":"Cube","primitiveType":"Cube"}'
+cs refresh --json --exit-playmode --wait 60
+cs batch --json '[{"ns":"gameobject","action":"create","args":{"name":"A"}},{"ns":"gameobject","action":"create","args":{"name":"B"}}]'
+cs list-commands --json --timeout 10
+cs catalog sync --json
+cs snippets search "physics" --json
 ```
 
 ### 📦 Commands
@@ -365,10 +314,10 @@ Auto-detects project root and service port. No manual configuration.
 | Problem                | Solution                                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
 | `service: UNREACHABLE` | Make sure Unity Editor is open with the project loaded                                     |
-| `package: NOT FOUND`   | Run the `unity-cli-setup` skill, or check `Packages/manifest.json`                         |
+| `package: NOT FOUND`   | Install `com.zh1zh1.csharpconsole` (commit it or add via UPM), then run `cs setup`        |
 | Port conflict          | Service auto-advances to the next free port. Check `Temp/CSharpConsole/refresh_state.json` |
 | Commands not found     | Ensure the package compiled successfully (no errors in Unity Console)                      |
-| Version mismatch       | Run the `unity-cli-status` skill to check version info. Update the package if protocol differs |
+| Version mismatch       | Run `cs status` to see versions; align the Unity package with the CLI `major.minor`        |
 
 
 ---

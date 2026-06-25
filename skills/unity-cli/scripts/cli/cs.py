@@ -1763,7 +1763,7 @@ def main():
     from cli.core_bridge import find_package_dir
     pkg_dir = find_package_dir(root, agent_root)
     if pkg_dir is None:
-        print("Error: C# Console package not found. Run 'cs setup' (or the unity-cli-setup skill) first.", file=sys.stderr)
+        print("Error: C# Console package not found. Install it into the project, then run 'cs setup'.", file=sys.stderr)
         sys.exit(1)
 
     s = _new_session(root, args, pkg_dir)
