@@ -40,28 +40,22 @@ CLI commands exposed through the agent's skill system.
 
 ### 🚀 Quick Start
 
-> ⚠️ **`cd` into your Unity project root *before* running `npx skills add`.**
-> `npx skills add` installs into the **current directory's** agent folders, so run it from
-> the project and the skill lands **inside that project**. **Do not run it from your home /
-> user directory:** the CLI locates the Unity project by walking up from the skill's own
-> installed location, so a home/global install never resolves a project — it then depends
-> on the shell's cwd alone and breaks the moment you run a command from elsewhere.
+> [!IMPORTANT]
+> **Install scope = the Unity project, not global** — never your home / global skills
+> directory. The bundled CLI locates your Unity project by walking up from its own file
+> location, so detection only works when the skill lives inside the project; a home / global
+> install sits outside every project and never finds one.
+
+**1 · Install the `unity-cli` skill:**
 
 ```bash
-# 1. cd into your Unity PROJECT ROOT first, then install the skill there. npx
-#    auto-detects your skills-compatible agent(s) — e.g. Claude Code (.claude/skills/),
-#    Codex (.agents/ + .codex/skills/).
-cd path/to/your/UnityProject
+cd path/to/your/UnityProject      # from the PROJECT, never your home/global dir
 npx skills add niqibiao/unity-cli-skill --copy
-
-# 2. In your agent, run setup — it adds the Unity C# Console package to the project's
-#    Packages/manifest.json. Then open the Unity Editor so the Package Manager resolves
-#    it and the C# Console service starts.
-> set up unity-cli      # installs com.zh1zh1.csharpconsole (version-checks if present)
-
-# 3. Verify
-> check unity-cli status
 ```
+
+**2 · Initialize:**
+
+In your AI agent, run **`unity-cli setup`**.
 
 **Prerequisites:** a skills-compatible agent (e.g. [Claude Code](https://claude.ai/code) or [Codex CLI](https://github.com/openai/codex) 0.139+), Node.js (for `npx`), Unity 2022.3+, Python 3.7+
 

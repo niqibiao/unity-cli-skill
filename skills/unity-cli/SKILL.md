@@ -72,3 +72,7 @@ cs batch   --json --input req.json    # req.json: {"commands":[ … ],"stopOnErr
 - A `⚠ version mismatch` warning means the installed Unity package and the CLI are on
   different `major.minor` lines — align them (see references/setup.md). It warns; it
   does not block.
+- `--json` and the expanded `python … cs.py …` command line are **agent-internal** —
+  for you to run and parse, never to paste to the user. When a step needs the user to
+  act (e.g. open Unity to resolve the package) and then re-verify, ask them in plain
+  language to **check unity-cli status**; run `cs status` yourself to read the result.

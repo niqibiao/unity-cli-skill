@@ -40,24 +40,21 @@ Claude:  完成。10 个 Cube 已在半径 5 处创建，均已添加 Rigidbody 
 
 ### 🚀 快速开始
 
-> ⚠️ **执行 `npx skills add` 之前，务必先 `cd` 进入你的 Unity 项目根目录。**
-> `npx skills add` 会装到**当前目录**的 Agent 文件夹里 —— 从项目里执行，skill 才会落在**这个项目内**。
-> **不要在用户主目录 / 全局目录里执行：** CLI 通过从 skill 自身的安装位置向上查找来定位 Unity 项目，
-> 装到主目录后永远定位不到项目，只能退而依赖当前 shell 的 cwd（一旦换个目录运行就会失效）。
+> [!IMPORTANT]
+> **安装范围 = 这个 Unity 项目，不是全局**，不要装到用户主目录 / 全局 skills 目录。skill
+> 内置的 CLI 通过从自身文件位置向上查找来定位 Unity 项目，只有装在项目内才能可靠定位；装到主
+> 目录 / 全局目录则处在所有项目之外，永远找不到。
+
+**1 · 安装 `unity-cli` skill：**
 
 ```bash
-# 1. 先 cd 进入你的 Unity 项目根目录，再把 skill 装到这里。
-#    npx 会自动识别你用的兼容 skills 的 Agent —— 如 Claude Code（.claude/skills/）、Codex（.agents/ + .codex/skills/）。
-cd path/to/your/UnityProject
+cd path/to/your/UnityProject      # 在项目里执行，不要在主目录 / 全局目录
 npx skills add niqibiao/unity-cli-skill --copy
-
-# 2. 在 Agent 里运行 setup —— 它会把 Unity C# Console 包写进项目的 Packages/manifest.json，
-#    然后打开 Unity 编辑器，让 Package Manager 解析这个包、启动 C# Console 服务。
-> 安装 unity-cli      # 安装 com.zh1zh1.csharpconsole（已安装则做版本校验）
-
-# 3. 验证
-> 查看 unity-cli 状态
 ```
+
+**2 · 初始化：**
+
+在 AI Agent 里运行 **`unity-cli setup`**。
 
 **前置条件：** 一个兼容 skills 的 Agent（如 [Claude Code](https://claude.ai/code) 或 [Codex CLI](https://github.com/openai/codex) 0.139+）、Node.js（用于 `npx`）、Unity 2022.3+、Python 3.7+
 

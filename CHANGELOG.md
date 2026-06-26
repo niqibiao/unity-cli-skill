@@ -11,6 +11,20 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-06-25
+
+### Changed
+
+- **Quick Start rewritten** (`README.md`, `README_zh.md`) — collapsed the verbose
+  warning block + 3-step bash walkthrough into a single `npx skills add` install, a
+  highlighted callout that the install scope must be the Unity project (not home /
+  global), and a one-line reason (the bundled CLI locates the project by walking up
+  from its own file location).
+- **Agent-facing setup guidance** (`SKILL.md`, `references/setup.md`) — `--json` and
+  the expanded `python … cs.py …` command line are marked agent-internal; the
+  user-facing verify step is plain-language "check unity-cli status", never the raw
+  command.
+
 ## [2.0.0] - 2026-06-25
 
 ### Changed

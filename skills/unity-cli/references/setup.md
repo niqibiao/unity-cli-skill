@@ -23,9 +23,12 @@ convenience, not a gate.
 
 ## After setup: resolve in Unity
 
-setup only writes the manifest entry — **open the Unity Editor for this project** so the
-Package Manager downloads / resolves `com.zh1zh1.csharpconsole` and the C# Console
-service starts. Then run `cs status` to confirm the service is reachable.
+setup only writes the manifest entry — the user must **open the Unity Editor for this
+project** so the Package Manager downloads / resolves `com.zh1zh1.csharpconsole` and the
+C# Console service starts. Hand this off in plain language: tell the user to open Unity,
+wait for it to finish compiling, then **check unity-cli status**. Re-run `cs status`
+yourself to confirm the service is reachable — don't paste the raw command (or `--json`)
+for the user to type; that's agent-internal.
 
 - `package: NOT FOUND` after setup → Unity hasn't resolved it yet; open/focus the Editor,
   wait for compilation, then re-check.
