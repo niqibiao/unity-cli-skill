@@ -41,8 +41,10 @@ CLI commands exposed through the agent's skill system.
 ### 🚀 Quick Start
 
 > [!IMPORTANT]
-> **Install scope = the Unity project, not global.** The skill must live in *this
-> project's* agent folder — never your home / global skills directory.
+> **Install scope = the Unity project, not global** — never your home / global skills
+> directory. The bundled CLI locates your Unity project by walking up from its own file
+> location, so detection only works when the skill lives inside the project; a home / global
+> install sits outside every project and never finds one.
 
 **1 · Install the `unity-cli` skill:**
 
@@ -51,15 +53,9 @@ cd path/to/your/UnityProject      # from the PROJECT, never your home/global dir
 npx skills add niqibiao/unity-cli-skill --copy
 ```
 
-**2 · Install the package:** start your AI agent and enter **`unity-cli setup`** — it adds
-`com.zh1zh1.csharpconsole` to the project's `Packages/manifest.json`. Open the Unity Editor
-so the Package Manager resolves it, then enter **`unity-cli status`** to verify.
+**2 · Initialize:** in your AI agent, run **`unity-cli setup`**.
 
 **Prerequisites:** a skills-compatible agent (e.g. [Claude Code](https://claude.ai/code) or [Codex CLI](https://github.com/openai/codex) 0.139+), Node.js (for `npx`), Unity 2022.3+, Python 3.7+
-
-> **Why inside the project?** The bundled CLI locates your Unity project by walking up from
-> its own file location, so detection only works when the skill lives inside the project — a
-> home / global install sits outside every project and never finds one.
 
 ### 💬 Usage
 
