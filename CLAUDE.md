@@ -71,7 +71,7 @@ Connection errors are automatically retried once (1s delay) to handle transient 
 
 ### Version & machine-local state
 
-- **Version source:** `scripts/cli/VERSION` (a bare semver, read by `version_check.get_plugin_version`). The only version logic is a check — `_warn_version_mismatch` warns when the installed package and the CLI differ at `major.minor`. There is no pinning, dispatch, or remote update check.
+- **Version source:** `scripts/cli/VERSION` (a bare semver, read by `version_check.get_plugin_version`). `version_check` stays check-only — `_warn_version_mismatch` warns when the installed package and the CLI differ at `major.minor`; there is no dispatch or remote update check. Tag pinning lives in `cs.py`: when `cs setup` writes the manifest, `_pin_source_tag` pins a plain git URL to the newest upstream tag on the CLI's `major.minor` line (`file:`/`#fragment` sources and failed tag queries fall back to the unpinned source).
 - **Shared constants** (`scripts/cli/__init__.py`): `PACKAGE_NAME`, `DEFAULT_SOURCE`, ports, and the package-path cache helpers.
 - **Machine-local state** lives in a per-project home cache (`scripts/cli/paths.py`): `%LOCALAPPDATA%\unity-cli\<project-key>\` (Windows) / `$XDG_CACHE_HOME/unity-cli/<project-key>/` (else), keyed by a hash of the project root, written atomically. Holds the resolved package path (`pkg-dir`) and snippet usage stats — never the project tree.
 

@@ -15,7 +15,7 @@ if os.path.dirname(_CLI_DIR) not in sys.path:
     sys.path.insert(0, os.path.dirname(_CLI_DIR))
 
 from cli import PACKAGE_NAME, DEFAULT_SOURCE, DEFAULT_EDITOR_PORT, DEFAULT_RUNTIME_PORT
-from cli.version_check import get_plugin_version, is_aligned
+from cli.version_check import get_plugin_version, is_aligned, parse_semver
 
 
 def _is_unity_root(d):
@@ -199,30 +199,25 @@ def _pin_source_tag(source):
 
     Returns (source, note): the possibly-pinned source, plus a warning note when
     pinning was skipped. file: paths and URLs already carrying a #fragment are
-    returned untouched. On any tag-query failure (offline, flaky network) falls back
-    to the unpinned URL so setup still works — Unity then locks a commit hash in
-    packages-lock.json instead of an explicit tag."""
+    returned untouched; on any tag-query failure the unpinned URL is returned so
+    setup still works."""
     if source.startswith("file:") or "#" in source:
         return source, None
-    from cli.version_check import parse_semver
     ver = parse_semver(get_plugin_version())
     if not ver:
         return source, "cannot read CLI VERSION; wrote unpinned URL"
     try:
         r = subprocess.run(["git", "ls-remote", "--tags", source],
                            capture_output=True, text=True, timeout=30)
-        if r.returncode != 0:
-            raise RuntimeError((r.stderr or "").strip().splitlines()[-1] if r.stderr else "git ls-remote failed")
     except Exception as e:
         return source, f"tag query failed ({e}); wrote unpinned URL"
-    best = None
-    for m in re.finditer(r"refs/tags/(v?(\d+)\.(\d+)\.(\d+))$", r.stdout, re.M):
-        tag, maj, mnr, pat = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
-        if (maj, mnr) == (ver[0], ver[1]) and (best is None or pat > best[1]):
-            best = (tag, pat)
-    if not best:
+    if r.returncode != 0:
+        lines = r.stderr.strip().splitlines()
+        return source, f"tag query failed ({lines[-1] if lines else 'git ls-remote failed'}); wrote unpinned URL"
+    tags = re.findall(rf"refs/tags/(v?{ver[0]}\.{ver[1]}\.(\d+))$", r.stdout, re.M)
+    if not tags:
         return source, f"no v{ver[0]}.{ver[1]}.x tag upstream; wrote unpinned URL"
-    return f"{source}#{best[0]}", None
+    return f"{source}#{max(tags, key=lambda t: int(t[1]))[0]}", None
 
 
 def cmd_setup(root, args):

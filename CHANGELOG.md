@@ -11,6 +11,24 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-07-10
+
+### Added
+
+- **`cs setup` pins the git source to a `major.minor`-matched tag** — a plain git URL
+  (no `#fragment`) is written to `Packages/manifest.json` as `…git#vX.Y.Z`, resolved to
+  the newest upstream tag on the CLI's `major.minor` line, so the manifest records the
+  intended version instead of leaving only a commit hash in `packages-lock.json`. `file:`
+  paths and URLs already carrying a `#fragment` are written as-is; on a failed tag query
+  (offline) setup falls back to the unpinned URL with a warning.
+
+### Changed
+
+- **Consent before writing the manifest** (`SKILL.md`, `references/setup.md`) — `cs setup`
+  and `--update` write the shared, version-controlled `Packages/manifest.json`; the docs
+  now require stating what will be written and getting the user's go-ahead first. The
+  read-only commands (`cs status`, `cs health`) never need consent.
+
 ## [2.0.1] - 2026-06-25
 
 ### Changed
