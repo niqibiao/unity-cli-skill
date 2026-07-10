@@ -32,7 +32,9 @@ No bootstrap/copy step — the CLI runs in place from this skill. First-time use
 **Unity package** in the project: `cs setup` installs it (see `references/setup.md`), and
 `cs status` reports `NOT FOUND` until Unity resolves it. The first command auto-caches the
 resolved package path (machine-local, under your home cache), so an explicit `cs setup` is
-a convenience, not a gate.
+a convenience, not a gate. **`cs setup` writes the project's `Packages/manifest.json` — a
+shared project file. Never run it (or `--update`) unprompted: tell the user what it will
+write and get their go-ahead first.**
 
 ### Passing parameters — `--input` JSON (never inline)
 

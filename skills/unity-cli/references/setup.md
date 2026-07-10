@@ -4,13 +4,22 @@
 project and version-checks it. Setup itself runs on pure stdlib — no Unity package needed
 to run it.
 
+**Ask the user before running setup.** Setup (and `--update`) writes
+`Packages/manifest.json` — a shared, version-controlled project file. Never run it
+unprompted: state what will be written and get the user's go-ahead first. The read-only
+commands (`cs status`, `cs health`) never need consent.
+
 ## What setup does
 
 1. Locates the Unity project (auto-detected; `--project` to override).
 2. If the package is **absent** from `Packages/manifest.json`, adds it — the git URL by
    default, or `--source <url|file:path>` to override. `--update` forces Unity to
-   re-resolve by removing and re-adding the entry. The source is written as-is — no
-   version pin.
+   re-resolve by removing and re-adding the entry. A git URL without a `#fragment` is
+   **pinned to the newest upstream tag on the CLI's `major.minor` line** (e.g. CLI 2.0.1
+   → `…git#v2.0.0`), so the manifest expresses the intended version instead of leaving
+   only a commit hash in `packages-lock.json`. `file:` paths and URLs that already carry
+   a `#fragment` are written as-is; if the tag query fails (offline), setup falls back to
+   the unpinned URL with a warning.
 3. If the package is **already present**, setup is a no-op that warns when the CLI and
    the installed package are on different `major.minor` lines.
 

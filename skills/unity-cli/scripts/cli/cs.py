@@ -194,6 +194,37 @@ def _new_session(root, args, pkg_dir):
                           compile_ip=args.compile_ip, compile_port=args.compile_port)
 
 
+def _pin_source_tag(source):
+    """Pin a git-URL source to the newest upstream tag on the CLI's major.minor line.
+
+    Returns (source, note): the possibly-pinned source, plus a warning note when
+    pinning was skipped. file: paths and URLs already carrying a #fragment are
+    returned untouched. On any tag-query failure (offline, flaky network) falls back
+    to the unpinned URL so setup still works — Unity then locks a commit hash in
+    packages-lock.json instead of an explicit tag."""
+    if source.startswith("file:") or "#" in source:
+        return source, None
+    from cli.version_check import parse_semver
+    ver = parse_semver(get_plugin_version())
+    if not ver:
+        return source, "cannot read CLI VERSION; wrote unpinned URL"
+    try:
+        r = subprocess.run(["git", "ls-remote", "--tags", source],
+                           capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or "").strip().splitlines()[-1] if r.stderr else "git ls-remote failed")
+    except Exception as e:
+        return source, f"tag query failed ({e}); wrote unpinned URL"
+    best = None
+    for m in re.finditer(r"refs/tags/(v?(\d+)\.(\d+)\.(\d+))$", r.stdout, re.M):
+        tag, maj, mnr, pat = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
+        if (maj, mnr) == (ver[0], ver[1]) and (best is None or pat > best[1]):
+            best = (tag, pat)
+    if not best:
+        return source, f"no v{ver[0]}.{ver[1]}.x tag upstream; wrote unpinned URL"
+    return f"{source}#{best[0]}", None
+
+
 def cmd_setup(root, args):
     """Locate the Unity project and install the C# Console package into its manifest.
 
@@ -201,7 +232,8 @@ def cmd_setup(root, args):
     (the git URL / file: path in --source, default DEFAULT_SOURCE) and tells the user to
     open Unity so the Package Manager resolves it. When it's already present, setup is a
     no-op that warns on a CLI/package major.minor mismatch (pass --update to force Unity
-    to re-resolve). The source is written as-is — no version pinning.
+    to re-resolve). Git URLs without a #fragment are pinned to the newest upstream tag
+    on the CLI's major.minor line (fallback: unpinned URL + warning).
     Returns 0 on success, 1 on error."""
     if root is None:
         print("Error: no Unity project found (need Assets/ + ProjectSettings/).",
@@ -236,6 +268,9 @@ def cmd_setup(root, args):
         print(f"Forcing re-resolve of {PACKAGE_NAME} ...")
         del deps[PACKAGE_NAME]
 
+    source, pin_note = _pin_source_tag(source)
+    if pin_note:
+        print(f"⚠ {pin_note}")
     deps[PACKAGE_NAME] = source
     try:
         manifest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", "utf-8")
