@@ -11,6 +11,19 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-07-11
+
+### Fixed
+
+- **`core_bridge` retry survives the urllib core** — the domain-reload retry wrapper
+  (`_make_post_with_retry`) caught only `OSError`, which the old `requests`-based core
+  satisfied (its exceptions subclass `OSError`) but the new stdlib-`urllib` core does
+  not: it converts every transport failure — connection refused, timeout, non-2xx —
+  into `TransportError(Exception)`. The wrapper now also catches the core's
+  `TransportError`, falling back to `OSError`-only against a pre-`TransportError` core,
+  restoring the retry-once behavior when the service briefly refuses connections during
+  a Unity domain reload. The CLI itself has no `requests` usage or HTTP layer to change.
+
 ## [2.0.2] - 2026-07-10
 
 ### Added

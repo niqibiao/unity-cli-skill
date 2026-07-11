@@ -81,15 +81,20 @@ def _ensure_path(core_path):
 
 def _make_post_with_retry(transport_http, state, default_timeout):
     """Create a POST function that retries once when the server is unreachable."""
+    # The urllib-based core raises TransportError for every transport failure
+    # (connection refused, timeout, non-2xx). Older requests-based cores raised
+    # OSError subclasses instead. Catch both so the domain-reload retry survives
+    # whichever core version is resolved; fall back to OSError only against a
+    # core that predates TransportError.
+    transport_error = getattr(transport_http, "TransportError", None)
+    transient = (OSError, transport_error) if transport_error is not None else (OSError,)
 
     def _post(endpoint, payload, timeout=None):
         t = timeout if timeout is not None else default_timeout
         url_base = state.current_server_base_url()
         try:
             return transport_http.post_json(url_base, endpoint, payload, t)
-        except OSError:
-            # OSError covers ConnectionRefusedError and all socket-level
-            # failures, including those raised by third-party HTTP libraries.
+        except transient:
             time.sleep(_RETRY_DELAY_S)
             return transport_http.post_json(url_base, endpoint, payload, t)
 
