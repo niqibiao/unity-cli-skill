@@ -7,8 +7,10 @@ Then check the snippet library (`cs snippets search <description>`) before writi
 
 ## Usage
 
-Write the C# to a `.cs` file — **outside the project's `Assets/`** (scratchpad or
-temp dir; anything under `Assets/` triggers a Unity import) — then:
+Write the C# to a `.cs` file in the scratch dir
+(`<user-temp>/csharpconsole/<session>/` — see SKILL.md "Passing parameters";
+**never under `Assets/`**: a REPL snippet is not a valid standalone `.cs` file, and
+the resulting compile error takes the console service itself down), then:
 
 ```bash
 cs exec --file snippet.cs

@@ -47,8 +47,15 @@ tool, then hand the CLI the path. Two channels:
 - **Structured params → `--input <file>` JSON** (or `-` for stdin) for `command` /
   `batch` (and `complete`, whose `{"code","cursor"}` has no file form).
 
-Write these scratch files **outside the Unity project's `Assets/`** (scratchpad or
-temp dir) — anything under `Assets/` triggers a Unity import.
+**Scratch file location (mandatory):** `<user-temp>/csharpconsole/<session>/` —
+`<user-temp>` is `$env:TEMP` (Windows) / `${TMPDIR:-/tmp}` (POSIX). Create
+`<session>` once per conversation (any unique token, e.g. `20260722-1435-ab12`) and
+reuse it for every scratch file. This overrides harness-default scratch locations
+(session scratchpads etc.) so every agent — Claude Code, Codex, or others — uses the
+same discoverable, cleanable root. **Never write scratch files into the project
+tree**: anything under `Assets/` is imported by Unity, and a REPL snippet is not a
+valid standalone `.cs` file — the resulting compile error takes the C# Console
+service itself down.
 
 ```bash
 cs exec    --file snippet.cs          # raw C# — the way to pass code

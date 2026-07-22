@@ -32,8 +32,13 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 - **C# code goes through `--file`, never JSON-wrapped** — `SKILL.md` and
   `references/exec-code.md` now make a raw `.cs` file the only documented way to pass
   code to `cs exec`; the `--input '{"code": …}'` form (every quote/backslash/newline
-  JSON-escaped) is demoted to a stdin-piping edge case. Added the missing warning that
-  scratch `.cs` / `req.json` files must live outside `Assets/` (Unity imports them).
+  JSON-escaped) is demoted to a stdin-piping edge case. Scratch `.cs` / `req.json`
+  files now have a **mandatory location**: `<user-temp>/csharpconsole/<session>/`
+  (`$env:TEMP` / `${TMPDIR:-/tmp}`; one agent-generated session token per
+  conversation) — a harness-independent convention that works identically for Claude
+  Code, Codex, and others, and keeps scratch files out of the project tree, where a
+  stray REPL snippet under `Assets/` fails compilation and takes the console service
+  down.
 - **First-time setup asks which source shape** (`references/setup.md`) — before writing
   the manifest the agent now offers an explicit choice: pinned git URL (default,
   team-friendly) vs. cloning the package to a user-chosen local path and installing via
