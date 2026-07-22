@@ -420,12 +420,15 @@ def cmd_status(root, args, agent_root=None):
     else:
         print("package: NOT FOUND")
     if not pkg_dir:
-        return 0
+        return 1
 
+    # Exit code mirrors the JSON branch: 0 only when the live service is healthy.
+    rc = 1
     try:
         s = _new_session(root, args, pkg_dir)
         r = s.health()
         if r.get("ok"):
+            rc = 0
             data = r.get("data", {})
             print(f"service: OK (port {args.port}, {args.mode})")
             pkg_ver = data.get("packageVersion")
@@ -442,6 +445,15 @@ def cmd_status(root, args, agent_root=None):
             print("service: UNREACHABLE")
     except Exception as e:
         print(f"service: ERROR ({e})")
+    if rc != 0:
+        # Service down — report the installed package version from disk instead.
+        try:
+            from cli.version_check import get_package_version
+            pkg_ver = get_package_version(pkg_dir)
+            if pkg_ver:
+                print(f"version: {pkg_ver} (package on disk)")
+        except Exception:
+            pass
 
     # Version alignment hint (local only — no network, no latency)
     try:
@@ -456,7 +468,7 @@ def cmd_status(root, args, agent_root=None):
             print(f"\u26a0 plugin {pl} \u2260 package {kl} \u2014 align the package, then re-run `cs setup`")
     except Exception:
         pass  # version check is best-effort, never block status
-    return 0
+    return rc
 
 
 def _filter_commands_by_type(result, type_filter):
