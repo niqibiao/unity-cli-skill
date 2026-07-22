@@ -19,7 +19,7 @@ Decision order for any task: **built-in command → snippet → raw exec**.
 
 `cs` below = `python "<SKILL_DIR>/scripts/cli/cs.py"`, where `<SKILL_DIR>` is THIS
 skill's base directory (shown when the skill loads — an absolute path). Expand `cs`
-to that full command on every call, and always pass `--json`. **Do not pass
+to that full command on every call. **Do not pass
 `--project`** — the CLI auto-detects the Unity project (it walks up from the working
 directory, and from its own committed location). Prefix with
 `PYTHONDONTWRITEBYTECODE=1` so running the CLI leaves no `__pycache__` in the project:
@@ -36,17 +36,23 @@ a convenience, not a gate. **`cs setup` writes the project's `Packages/manifest.
 shared project file. Never run it (or `--update`) unprompted: tell the user what it will
 write and get their go-ahead first.**
 
-### Passing parameters — `--input` JSON (never inline)
+### Passing parameters — C# via `--file`, JSON via `--input` (never inline)
 
-`command`, `exec`, `batch`, and `complete` take their params as a **single JSON object
-written to a file** (or `-` for stdin), never as inline shell arguments. Write the JSON
-with your file tool, then pass `--input <file>` — this removes all shell quoting/escaping
-of C# code and nested JSON:
+Never pass C# code or params as inline shell arguments — write a file with your file
+tool, then hand the CLI the path. Two channels:
+
+- **C# code → `--file <path>.cs`** (raw C#, zero escaping). Always use this for
+  `exec` — never wrap code in a JSON `{"code": …}` payload, where every quote /
+  backslash / newline must be JSON-escaped (a raw `.cs` file needs none).
+- **Structured params → `--input <file>` JSON** (or `-` for stdin) for `command` /
+  `batch` (and `complete`, whose `{"code","cursor"}` has no file form).
+
+Write these scratch files **outside the Unity project's `Assets/`** (scratchpad or
+temp dir) — anything under `Assets/` triggers a Unity import.
 
 ```bash
+cs exec    --file snippet.cs          # raw C# — the way to pass code
 cs command --json --input req.json    # req.json: {"ns":"gameobject","action":"create","args":{"name":"Cube"}}
-cs exec    --json --input req.json    # req.json: {"code":"Debug.Log(\"hi\");"}
-cs exec    --json --file snippet.cs   # exec also accepts raw C# from a .cs file
 cs batch   --json --input req.json    # req.json: {"commands":[ … ],"stopOnError":true}
 ```
 
@@ -65,8 +71,13 @@ cs batch   --json --input req.json    # req.json: {"commands":[ … ],"stopOnErr
 
 ## Conventions (all subcommands)
 
-- Always `--json`; the envelope is `{ "ok", "exitCode", "summary", "data" }` — check
-  `ok` / `exitCode` for success.
+- `--json` only where the payload comes back as structured data: **`command`,
+  `list-commands`, `batch`, `complete`** — envelope
+  `{ "ok", "exitCode", "summary", "data" }`, check `ok` / `exitCode`. Every other
+  subcommand (`exec`, `status`, `refresh`, `health`, `setup`, `catalog`,
+  `snippets`) prints an equivalent, cheaper text form — omit `--json`; success =
+  exit code 0, errors go to stderr. Add `--json` to `exec` only when you need the
+  structured result envelope instead of the REPL's text output.
 - **Never pass `--project`** — the CLI auto-detects the project. Pass `--project <path>`
   only to deliberately target a different project.
 - Prefer `cs command` over `cs exec` when a built-in covers the task; check the snippet

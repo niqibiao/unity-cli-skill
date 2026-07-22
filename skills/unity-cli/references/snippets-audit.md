@@ -10,11 +10,11 @@ detects all four and funnels cleanup through the CLI.
 
 1. **Diagnose (offline, always safe):**
    ```bash
-   cs snippets doctor --json
+   cs snippets doctor
    ```
 2. **Revalidate (requires running Unity — this is what catches API drift):**
    ```bash
-   cs snippets doctor --revalidate --json
+   cs snippets doctor --revalidate
    ```
    Re-runs the validation gate on every live `read-only` snippet and refreshes
    `verified_at` on passes. Run after every Unity version upgrade. Doctor runs

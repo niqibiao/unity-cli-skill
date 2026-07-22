@@ -7,21 +7,23 @@ Then check the snippet library (`cs snippets search <description>`) before writi
 
 ## Usage
 
-Pass the C# code as a single JSON object in a file (or `-` for stdin) — your file tool
-writes it, so quotes / newlines / backslashes need no shell escaping:
+Write the C# to a `.cs` file — **outside the project's `Assets/`** (scratchpad or
+temp dir; anything under `Assets/` triggers a Unity import) — then:
 
 ```bash
-cs exec --json --input req.json     # req.json: {"code":"<C# code>"}
+cs exec --file snippet.cs
 ```
 
-Or pass raw C# straight from a `.cs` file:
+Raw C# in a `.cs` file needs **zero escaping**. Never wrap code in a JSON
+`{"code": …}` payload (`--input` exists for prebuilt requests piped via stdin, but
+every quote / backslash / newline in the code must then be JSON-escaped — an easy
+way to corrupt code).
 
-```bash
-cs exec --json --file path/to/snippet.cs
-```
+Output is text: the REPL prints the last expression's value; errors go to stderr
+with a non-zero exit code. Add `--json` only when you need the structured result
+envelope.
 
-The examples below show only the C# code — put it in `{"code": "..."}` for `--input`,
-or in a `.cs` file for `--file`.
+The examples below show only the C# code — put it in the `.cs` file.
 
 ## REPL Features
 
@@ -102,6 +104,6 @@ cs command --json --input req.json
 
 ## Notes
 
-- Always use `--json` for parseable output
-- Check `result.ok` and `result.exitCode` for success/failure
+- `exec` output is text; the process exit code carries success/failure. Use `--json`
+  only when the structured envelope is needed (then check `ok` / `exitCode`)
 - Port is auto-detected from `Temp/CSharpConsole/refresh_state.json`

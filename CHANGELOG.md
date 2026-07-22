@@ -11,6 +11,35 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`cs status` text mode now exits like the JSON branch** — 0 only when the live
+  service is healthy; no project / package missing / service unreachable all exit 1
+  (previously the text branch returned 0 for everything but a missing project),
+  matching the new "text mode: exit code carries success" convention. When the
+  service is down, text mode now also prints the installed package version read
+  from disk (`version: X.Y.Z (package on disk)`) instead of omitting the version
+  line entirely.
+
+### Changed
+
+- **`--json` is no longer blanket-required** (docs only, CLI unchanged) — the skill now
+  asks for `--json` only on the four commands whose payload is emitted solely as
+  structured JSON (`command`, `list-commands`, `batch`, `complete`). All other
+  subcommands print an equivalent, cheaper text form and run without it; `exec` adds
+  `--json` only when the structured envelope is needed. (`cs setup` never had a JSON
+  branch — its documented `--json` was silently ignored.)
+- **C# code goes through `--file`, never JSON-wrapped** — `SKILL.md` and
+  `references/exec-code.md` now make a raw `.cs` file the only documented way to pass
+  code to `cs exec`; the `--input '{"code": …}'` form (every quote/backslash/newline
+  JSON-escaped) is demoted to a stdin-piping edge case. Added the missing warning that
+  scratch `.cs` / `req.json` files must live outside `Assets/` (Unity imports them).
+- **First-time setup asks which source shape** (`references/setup.md`) — before writing
+  the manifest the agent now offers an explicit choice: pinned git URL (default,
+  team-friendly) vs. cloning the package to a user-chosen local path and installing via
+  `--source file:<dir>` (agent performs the clone; caveat documented that absolute
+  `file:` paths in the committed manifest are machine-specific).
+
 ## [2.0.3] - 2026-07-11
 
 ### Fixed

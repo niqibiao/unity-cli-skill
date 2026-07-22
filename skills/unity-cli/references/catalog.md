@@ -8,18 +8,19 @@ After registering new C# framework commands in Unity (or when `cs catalog list` 
 stale/empty), sync the catalog from the running Editor:
 
 ```bash
-cs catalog sync --json
+cs catalog sync
 ```
 
-Parse the JSON. Report the summary (added/removed/total) and the catalog file path
-from `data.catalogFile`. The catalog lives at `{project}/.unity-cli/catalog.json`
+Report the summary it prints (added/removed/total) and the catalog file path.
+The catalog lives at `{project}/.unity-cli/catalog.json`
 (committed — shared with the team). To read/write a different location for **one call
 only**, pass `--catalog-path /your/path/catalog.json` (not persisted).
 
-List the cached catalog offline:
+List the cached catalog offline (text index: id, arg names, summary — for full arg
+types/descriptions, Read the catalog file directly):
 
 ```bash
-cs catalog list --json
+cs catalog list
 ```
 
 If sync fails, check that the Unity Editor is open and the C# Console package is

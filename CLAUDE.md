@@ -11,8 +11,12 @@ A **pure skill** (`unity-cli`) providing a thin Python CLI for interacting with 
 Skills invoke the CLI by the skill's own base directory:
 
 ```
-python "<SKILL_DIR>/scripts/cli/cs.py" <command> --json [args]
+python "<SKILL_DIR>/scripts/cli/cs.py" <command> [--json] [args]
 ```
+
+`--json` is required only on the four commands whose payload is emitted as structured
+data (`command`, `list-commands`, `batch`, `complete`); everything else prints an
+equivalent text form and should be run without it.
 
 `<SKILL_DIR>` is the absolute base dir the agent provides when the skill loads (Claude Code and Codex both substitute it; both run it without `cd`). **Do not pass `--project`** — `find_project_root()` auto-detects the Unity root by walking up from the working directory and from the CLI's own committed location (`__file__`). `--project <path>` is an optional override only. Prefix with `PYTHONDONTWRITEBYTECODE=1` so running the CLI leaves no `__pycache__` in the project.
 
@@ -27,7 +31,7 @@ Shared flags: `--project <path>` (override), `--ip` (default 127.0.0.1), `--port
 
 ### Command-first principle
 
-When a built-in framework command exists, prefer `cs command` over `cs exec`. Code execution is a fallback, not the default. Use `cs list-commands --json` to discover available commands. Params for `command`/`exec`/`batch`/`complete` go in a JSON file via `--input` (never inline) — see the skill's "Passing parameters" note.
+When a built-in framework command exists, prefer `cs command` over `cs exec`. Code execution is a fallback, not the default. Use `cs list-commands --json` to discover available commands. C# code for `exec` goes in a raw `.cs` file via `--file` (zero escaping); structured params for `command`/`batch`/`complete` go in a JSON file via `--input` (never inline) — see the skill's "Passing parameters" note.
 
 ### Commands
 
@@ -35,7 +39,7 @@ When a built-in framework command exists, prefer `cs command` over `cs exec`. Co
 |---------|-------|-------------|
 | `cs setup` | pre | Install the package into the manifest (version-check if already present) |
 | `cs status` | pre | Package + connection status + version info |
-| `cs exec --input \| --file FILE` | post | Execute C# code (JSON params, or raw .cs file) |
+| `cs exec --file FILE \| --input` | post | Execute C# code (raw .cs file preferred; JSON params for prebuilt requests) |
 | `cs command --input` | post | Run framework command (JSON params) |
 | `cs batch --input [--stop-on-error]` | post | Execute multiple commands in one HTTP roundtrip |
 | `cs health` | post | Service health check |
@@ -89,11 +93,11 @@ skills/unity-cli/scripts/cli/paths.py        Per-project home cache + atomic wri
 
 ### JSON result envelope
 
-All post-setup commands return: `{ "ok": bool, "exitCode": int, "summary": str, "data": {...} }`
+With `--json`, post-setup commands return: `{ "ok": bool, "exitCode": int, "summary": str, "data": {...} }`. Without it, they print a text form (summary / REPL output) and the process exit code carries success.
 
 ## Command Catalog
 
-Built-in commands are statically documented in `skills/unity-cli/references/commands.md`. User-defined custom commands are cached per-project at `{project}/.unity-cli/catalog.json` (committed — shared with the team; pass `--catalog-path` to use a different location for one call). The agent reads this cache via `cs catalog list --json`. Run `cs catalog sync` after registering new C# commands. The maintainer audit (built-in tables vs the live Editor) also lives in `references/catalog.md`.
+Built-in commands are statically documented in `skills/unity-cli/references/commands.md`. User-defined custom commands are cached per-project at `{project}/.unity-cli/catalog.json` (committed — shared with the team; pass `--catalog-path` to use a different location for one call). The agent reads this cache via `cs catalog list` (or Reads catalog.json directly for full arg details). Run `cs catalog sync` after registering new C# commands. The maintainer audit (built-in tables vs the live Editor) also lives in `references/catalog.md`.
 
 ## Snippet Library
 
