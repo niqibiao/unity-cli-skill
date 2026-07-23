@@ -11,6 +11,8 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.0.7] - 2026-07-23
+
 ### Fixed
 
 - **`references/exec-code.md` no longer promises cross-call REPL state** — every CLI
