@@ -30,7 +30,7 @@ The 5 you'll actually use:
 |---------|---------|
 | `cs snippets search <q>` | Top-N lexical hits over id + summary |
 | `cs snippets show <id>` | Full body and metadata for one snippet |
-| `cs snippets use <id> --input vals.json` | Run with typed args (JSON file `{"k":"v"}`); tracks stats |
+| `cs snippets use <id> --input <scratch>/vals.json` | Run with typed args (JSON file `{"k":"v"}` in the scratch dir — see SKILL.md); tracks stats |
 | `cs snippets add <id> --file <md>` | Validate and register a new snippet |
 | `cs snippets deprecate <id> [--supersede <new>]` | Retire a snippet without deletion |
 

@@ -25,7 +25,7 @@ directory, and from its own committed location). Prefix with
 `PYTHONDONTWRITEBYTECODE=1` so running the CLI leaves no `__pycache__` in the project:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python "<SKILL_DIR>/scripts/cli/cs.py" command --json --input req.json
+PYTHONDONTWRITEBYTECODE=1 python "<SKILL_DIR>/scripts/cli/cs.py" command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"
 ```
 
 No bootstrap/copy step — the CLI runs in place from this skill. First-time use needs the
@@ -47,20 +47,28 @@ tool, then hand the CLI the path. Two channels:
 - **Structured params → `--input <file>` JSON** (or `-` for stdin) for `command` /
   `batch` (and `complete`, whose `{"code","cursor"}` has no file form).
 
-**Scratch file location (mandatory):** `<user-temp>/csharpconsole/<session>/` —
-`<user-temp>` is `$env:TEMP` (Windows) / `${TMPDIR:-/tmp}` (POSIX). Create
-`<session>` once per conversation (any unique token, e.g. `20260722-1435-ab12`) and
-reuse it for every scratch file. This overrides harness-default scratch locations
-(session scratchpads etc.) so every agent — Claude Code, Codex, or others — uses the
-same discoverable, cleanable root. **Never write scratch files into the project
-tree**: anything under `Assets/` is imported by Unity, and a REPL snippet is not a
-valid standalone `.cs` file — the resulting compile error takes the C# Console
-service itself down.
+**Scratch file location (mandatory):** the absolute path
+`<project-root>/Temp/CSharpConsole/AgentScratch/` — inside the Unity project's own
+`Temp/` (Unity-managed, never imported, normally git-ignored; the C# Console service
+already keeps its state under `Temp/CSharpConsole/`). Always write the **full
+absolute path** — your file tool resolves relative paths against its own cwd, not
+the project. Name files by semantic task (`inspect-camera.cs`,
+`req-create-cube.json`): overwrite the same file when revising the same task
+serially; add a one-shot random suffix only when another agent is known to work the
+same project concurrently. The directory lives and dies with the Unity Editor
+(closing it may delete `Temp/`) — scratch files are one-shot execution payloads,
+never durable storage; anything worth reusing across conversations goes into the
+snippet library. Clean only `AgentScratch/`; never delete `Temp/CSharpConsole/`
+itself (the service's `refresh_state.json` lives there). **Never write scratch
+files under `Assets/`**: typical REPL snippets are not valid standalone project
+sources — the import very likely fails project compilation, blocking
+refresh/domain-reload workflows, and after an editor restart the console service
+may not start at all.
 
 ```bash
-cs exec    --file snippet.cs          # raw C# — the way to pass code
-cs command --json --input req.json    # req.json: {"ns":"gameobject","action":"create","args":{"name":"Cube"}}
-cs batch   --json --input req.json    # req.json: {"commands":[ … ],"stopOnError":true}
+cs exec    --file  "<project-root>/Temp/CSharpConsole/AgentScratch/inspect-camera.cs"
+cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-create-cube.json"  # {"ns":"gameobject","action":"create","args":{"name":"Cube"}}
+cs batch   --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-batch.json"        # {"commands":[ … ],"stopOnError":true}
 ```
 
 ## Routing — pick the subcommand

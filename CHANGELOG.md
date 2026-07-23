@@ -13,6 +13,15 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ### Fixed
 
+- **`references/exec-code.md` no longer promises cross-call REPL state** — every CLI
+  invocation constructs a fresh session id (`core_bridge.py` `generate_session_id(None)`
+  → `uuid4()`), so variables / `using`s / helpers never survive from one `cs exec`
+  to the next; the "cross-submission state", two-call patterns, and the
+  `session/reset` workflow documented since the beginning were unachievable through
+  the CLI. Docs now say: send complete, self-contained code per call; durable
+  helpers belong in the snippet library. A CLI `--session` passthrough is a
+  possible future feature (server sessions expire after idle and are cleared on
+  refresh, so it would still not make REPL state durable).
 - **`cs status` text mode now exits like the JSON branch** — 0 only when the live
   service is healthy; no project / package missing / service unreachable all exit 1
   (previously the text branch returned 0 for everything but a missing project),
@@ -33,12 +42,19 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   `references/exec-code.md` now make a raw `.cs` file the only documented way to pass
   code to `cs exec`; the `--input '{"code": …}'` form (every quote/backslash/newline
   JSON-escaped) is demoted to a stdin-piping edge case. Scratch `.cs` / `req.json`
-  files now have a **mandatory location**: `<user-temp>/csharpconsole/<session>/`
-  (`$env:TEMP` / `${TMPDIR:-/tmp}`; one agent-generated session token per
-  conversation) — a harness-independent convention that works identically for Claude
-  Code, Codex, and others, and keeps scratch files out of the project tree, where a
-  stray REPL snippet under `Assets/` fails compilation and takes the console service
-  down.
+  files now have a **mandatory location**: the absolute path
+  `<project-root>/Temp/CSharpConsole/AgentScratch/` — inside Unity's own `Temp/`
+  (never imported, auto-cleaned on editor close, write-sandbox-friendly for
+  workspace-bound agents, and colocated with the service's existing
+  `Temp/CSharpConsole/` state). Semantic file names, overwritten per task; one-shot
+  suffix only under known same-project concurrency. Never under `Assets/` (a typical
+  REPL snippet fails project compilation there — blocking refresh workflows and,
+  after an editor restart, potentially preventing the service from starting), and
+  never delete `Temp/CSharpConsole/` itself. Decided in an adversarial CC↔Codex
+  review (see `cc-codex-discussion-history/20260722-213810-scratch-file-conventions.md`),
+  which replaced the earlier `<user-temp>/csharpconsole/<session>/` draft: a
+  user-temp root is not guaranteed writable under workspace-bound agent sandboxes,
+  and the session token was pure bookkeeping.
 - **First-time setup asks which source shape** (`references/setup.md`) — before writing
   the manifest the agent now offers an explicit choice: pinned git URL (default,
   team-friendly) vs. cloning the package to a user-chosen local path and installing via

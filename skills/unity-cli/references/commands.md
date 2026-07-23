@@ -10,10 +10,12 @@ If no built-in or custom command matches the task, **next** check `cs snippets` 
 
 ## Usage
 
-Write the request to a JSON file (your file tool handles all escaping), then:
+Write the request to a JSON file in the scratch dir (absolute path
+`<project-root>/Temp/CSharpConsole/AgentScratch/` — see SKILL.md "Passing
+parameters"), then:
 
 ```bash
-cs command --json --input req.json
+cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"
 ```
 
 `req.json` is a single object — `{"ns": "<namespace>", "action": "<action>", "args": { … }}`
@@ -206,7 +208,8 @@ Most commands are **editor-only** (require the Unity Editor, not a standalone pl
 
 ## Examples
 
-Each block below is the `req.json` content; run it with `cs command --json --input req.json`:
+Each block below is the `req.json` content; run it with
+`cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"`:
 
 ```json
 {"ns":"editor","action":"status"}
