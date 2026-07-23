@@ -19,13 +19,13 @@ Decision order for any task: **built-in command → snippet → raw exec**.
 
 `cs` below = `python "<SKILL_DIR>/scripts/cli/cs.py"`, where `<SKILL_DIR>` is THIS
 skill's base directory (shown when the skill loads — an absolute path). Expand `cs`
-to that full command on every call, and always pass `--json`. **Do not pass
+to that full command on every call. **Do not pass
 `--project`** — the CLI auto-detects the Unity project (it walks up from the working
 directory, and from its own committed location). Prefix with
 `PYTHONDONTWRITEBYTECODE=1` so running the CLI leaves no `__pycache__` in the project:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python "<SKILL_DIR>/scripts/cli/cs.py" command --json --input req.json
+PYTHONDONTWRITEBYTECODE=1 python "<SKILL_DIR>/scripts/cli/cs.py" command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"
 ```
 
 No bootstrap/copy step — the CLI runs in place from this skill. First-time use needs the
@@ -36,18 +36,39 @@ a convenience, not a gate. **`cs setup` writes the project's `Packages/manifest.
 shared project file. Never run it (or `--update`) unprompted: tell the user what it will
 write and get their go-ahead first.**
 
-### Passing parameters — `--input` JSON (never inline)
+### Passing parameters — C# via `--file`, JSON via `--input` (never inline)
 
-`command`, `exec`, `batch`, and `complete` take their params as a **single JSON object
-written to a file** (or `-` for stdin), never as inline shell arguments. Write the JSON
-with your file tool, then pass `--input <file>` — this removes all shell quoting/escaping
-of C# code and nested JSON:
+Never pass C# code or params as inline shell arguments — write a file with your file
+tool, then hand the CLI the path. Two channels:
+
+- **C# code → `--file <path>.cs`** (raw C#, zero escaping). Always use this for
+  `exec` — never wrap code in a JSON `{"code": …}` payload, where every quote /
+  backslash / newline must be JSON-escaped (a raw `.cs` file needs none).
+- **Structured params → `--input <file>` JSON** (or `-` for stdin) for `command` /
+  `batch` (and `complete`, whose `{"code","cursor"}` has no file form).
+
+**Scratch file location (mandatory):** the absolute path
+`<project-root>/Temp/CSharpConsole/AgentScratch/` — inside the Unity project's own
+`Temp/` (Unity-managed, never imported, normally git-ignored; the C# Console service
+already keeps its state under `Temp/CSharpConsole/`). Always write the **full
+absolute path** — your file tool resolves relative paths against its own cwd, not
+the project. Name files by semantic task (`inspect-camera.cs`,
+`req-create-cube.json`): overwrite the same file when revising the same task
+serially; add a one-shot random suffix only when another agent is known to work the
+same project concurrently. The directory lives and dies with the Unity Editor
+(closing it may delete `Temp/`) — scratch files are one-shot execution payloads,
+never durable storage; anything worth reusing across conversations goes into the
+snippet library. Clean only `AgentScratch/`; never delete `Temp/CSharpConsole/`
+itself (the service's `refresh_state.json` lives there). **Never write scratch
+files under `Assets/`**: typical REPL snippets are not valid standalone project
+sources — the import very likely fails project compilation, blocking
+refresh/domain-reload workflows, and after an editor restart the console service
+may not start at all.
 
 ```bash
-cs command --json --input req.json    # req.json: {"ns":"gameobject","action":"create","args":{"name":"Cube"}}
-cs exec    --json --input req.json    # req.json: {"code":"Debug.Log(\"hi\");"}
-cs exec    --json --file snippet.cs   # exec also accepts raw C# from a .cs file
-cs batch   --json --input req.json    # req.json: {"commands":[ … ],"stopOnError":true}
+cs exec    --file  "<project-root>/Temp/CSharpConsole/AgentScratch/inspect-camera.cs"
+cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-create-cube.json"  # {"ns":"gameobject","action":"create","args":{"name":"Cube"}}
+cs batch   --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-batch.json"        # {"commands":[ … ],"stopOnError":true}
 ```
 
 ## Routing — pick the subcommand
@@ -65,8 +86,13 @@ cs batch   --json --input req.json    # req.json: {"commands":[ … ],"stopOnErr
 
 ## Conventions (all subcommands)
 
-- Always `--json`; the envelope is `{ "ok", "exitCode", "summary", "data" }` — check
-  `ok` / `exitCode` for success.
+- `--json` only where the payload comes back as structured data: **`command`,
+  `list-commands`, `batch`, `complete`** — envelope
+  `{ "ok", "exitCode", "summary", "data" }`, check `ok` / `exitCode`. Every other
+  subcommand (`exec`, `status`, `refresh`, `health`, `setup`, `catalog`,
+  `snippets`) prints an equivalent, cheaper text form — omit `--json`; success =
+  exit code 0, errors go to stderr. Add `--json` to `exec` only when you need the
+  structured result envelope instead of the REPL's text output.
 - **Never pass `--project`** — the CLI auto-detects the project. Pass `--project <path>`
   only to deliberately target a different project.
 - Prefer `cs command` over `cs exec` when a built-in covers the task; check the snippet

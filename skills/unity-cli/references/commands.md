@@ -10,10 +10,12 @@ If no built-in or custom command matches the task, **next** check `cs snippets` 
 
 ## Usage
 
-Write the request to a JSON file (your file tool handles all escaping), then:
+Write the request to a JSON file in the scratch dir (absolute path
+`<project-root>/Temp/CSharpConsole/AgentScratch/` — see SKILL.md "Passing
+parameters"), then:
 
 ```bash
-cs command --json --input req.json
+cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"
 ```
 
 `req.json` is a single object — `{"ns": "<namespace>", "action": "<action>", "args": { … }}`
@@ -21,7 +23,7 @@ cs command --json --input req.json
 
 ## Argument & Result Conventions
 
-- Always pass `--json` for parseable output. The envelope is `{ "ok": bool, "exitCode": int, "summary": str, "data": {...} }` — check `ok` / `exitCode` for success.
+- Always pass `--json` on `command` / `list-commands` / `batch` / `complete` — their result payload is only emitted as JSON. The envelope is `{ "ok": bool, "exitCode": int, "summary": str, "data": {...} }` — check `ok` / `exitCode` for success. (Other subcommands print an equivalent text form; leave `--json` off there.)
 - `data` is already structured. For `cs command`, it's the command's own result object; for `cs list-commands`, it's `{ "commands": [...] }`. Do not expect or re-parse a `resultJson` string field — that only appears with `--verbose`.
 - `Vector3` args are JSON objects: `{"x":0,"y":1,"z":3}`. Same for `rotation` and `scale`.
 - Array args (e.g. `instanceIds: int[]`, `assetPaths: string[]`) are JSON arrays.
@@ -32,7 +34,7 @@ cs command --json --input req.json
 After writing `.cs` files or modifying assets on disk, trigger a refresh so Unity recompiles. `cs refresh` wraps the full procedure (play-mode check, exit if needed, refresh, wait). For direct CLI use:
 
 ```bash
-cs refresh --wait --exit-playmode --json
+cs refresh --wait --exit-playmode
 ```
 
 REPL sessions are cleared on domain reload.
@@ -179,12 +181,12 @@ Many commands accept both `path` (hierarchy path like `"Canvas/Button"`) and `in
 Lookup order for custom (user-defined) commands:
 
 1. Check the static built-in catalog in this SKILL.md (the tables above).
-2. Read the per-project catalog cache via `cs catalog list --json`. The CLI knows the cached path for this project (default `{project}/.unity-cli/catalog.json`, remembered after first sync).
+2. Read the per-project catalog cache via `cs catalog list` (text index: id, arg names, summary). For full arg types/descriptions, Read the catalog file directly (default `{project}/.unity-cli/catalog.json`, committed).
 3. If the catalog is empty, missing, or stale, fall back to a live query:
    ```bash
    cs list-commands --type custom --json
    ```
-4. If a catalog refresh is needed, run `cs catalog sync --json`.
+4. If a catalog refresh is needed, run `cs catalog sync`.
 
 ### Catalog commands
 
@@ -206,7 +208,8 @@ Most commands are **editor-only** (require the Unity Editor, not a standalone pl
 
 ## Examples
 
-Each block below is the `req.json` content; run it with `cs command --json --input req.json`:
+Each block below is the `req.json` content; run it with
+`cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"`:
 
 ```json
 {"ns":"editor","action":"status"}
@@ -224,8 +227,8 @@ Discovery / catalog (no payload — plain flags, no `--input`):
 ```bash
 cs list-commands --json
 cs list-commands --type custom --json
-cs catalog sync --json
-cs catalog list --json
+cs catalog sync
+cs catalog list
 ```
 
 ## Workflow
@@ -233,6 +236,6 @@ cs catalog list --json
 1. Match the user's intent to a namespace + action from the catalog above
 2. Run the command with appropriate args
 3. **After writing C# files**, follow the Asset Refresh procedure above (check play mode → exit if needed → refresh)
-4. If no matching command exists in the built-in catalog, run `cs catalog list --json` to check the per-project custom-command cache
+4. If no matching command exists in the built-in catalog, run `cs catalog list` to check the per-project custom-command cache
 5. If the cache is empty or stale, run `cs list-commands --type custom` as a live fallback, then `cs catalog sync`
 6. If no command covers the request at all, fall back to `cs exec`

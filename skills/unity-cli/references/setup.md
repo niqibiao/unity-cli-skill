@@ -9,6 +9,32 @@ to run it.
 unprompted: state what will be written and get the user's go-ahead first. The read-only
 commands (`cs status`, `cs health`) never need consent.
 
+## First-time install: ask which source shape
+
+On a first-time install, don't silently take the default — offer the user an explicit
+choice between the two source shapes setup can write:
+
+1. **Git URL (default)** — the manifest gets the upstream git URL pinned to a version
+   tag; Unity's Package Manager downloads it into its cache. Team-friendly (the same
+   manifest entry works on every machine); the package source is read-only.
+2. **Local clone + `file:`** — for editing/debugging the package source, or offline
+   use. Ask the user **where to clone**, and take the answer as an **absolute path**:
+   `git clone` resolves a relative target against your cwd, while manifest `file:`
+   entries resolve against `<project>/Packages/` — the same relative string would
+   point at two different directories. Do the clone yourself (don't require a
+   pre-existing local copy), and pin the version **explicitly** — `cs setup` writes
+   `file:` sources as-is, with no tag pinning:
+   ```bash
+   git ls-remote --tags https://github.com/niqibiao/unity-csharpconsole.git   # pick the newest vX.Y.* on the CLI's major.minor line (scripts/cli/VERSION)
+   git clone --branch <tag> --depth 1 https://github.com/niqibiao/unity-csharpconsole.git <absolute-dir>
+   cs setup --source "file:<absolute-dir>"
+   ```
+   **Caveat:** the manifest is shared and committed — an absolute `file:` path only
+   works on this machine. If the user wants a shareable entry, pass `--source` the
+   **same directory** expressed relative to `<project>/Packages/` (e.g. cloned to
+   `<project>/../Tools/unity-csharpconsole` → `file:../../Tools/unity-csharpconsole`),
+   and make sure teammates use the same layout.
+
 ## What setup does
 
 1. Locates the Unity project (auto-detected; `--project` to override).
@@ -24,8 +50,10 @@ commands (`cs status`, `cs health`) never need consent.
    the installed package are on different `major.minor` lines.
 
 ```bash
-cs setup --json
+cs setup
 ```
+
+(`setup` output is plain text — no `--json`.)
 
 Every other command also does this locate + cache lazily on first run, so `setup` is a
 convenience, not a gate.

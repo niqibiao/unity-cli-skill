@@ -19,8 +19,11 @@ Every skill calls the CLI at the skill's own base directory — run it **verbati
 without changing directory**:
 
 ```bash
-python "<SKILL_DIR>/scripts/cli/cs.py" <cmd> --json
+python "<SKILL_DIR>/scripts/cli/cs.py" <cmd> [--json]
 ```
+
+`--json` only on `command` / `list-commands` / `batch` / `complete` (their payload is
+emitted solely as JSON); every other subcommand prints an equivalent text form.
 
 `<SKILL_DIR>` is the absolute base directory the agent provides when the skill loads.
 Both Claude Code and Codex substitute it to an absolute path and run it **without
@@ -40,8 +43,9 @@ present, setup just warns on a CLI/package `major.minor` mismatch.
 
 When a built-in framework command exists, prefer `cs command` over `cs exec`. Code
 execution is a fallback. Use `cs list-commands --json` to discover commands; for reusable
-C#, prefer the snippet library (`cs snippets`). Params for `command`/`exec`/`batch`/`complete`
-go in a JSON file via `--input` (never inline) — see SKILL.md's "Passing parameters".
+C#, prefer the snippet library (`cs snippets`). C# code for `exec` goes in a raw `.cs`
+file via `--file`; structured params for `command`/`batch`/`complete` go in a JSON file
+via `--input` (never inline) — see SKILL.md's "Passing parameters".
 
 ## Two-phase lifecycle
 

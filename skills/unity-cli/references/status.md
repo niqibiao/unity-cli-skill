@@ -13,6 +13,12 @@ Reports:
 - **project**: Unity project root path
 - **package**: whether `com.zh1zh1.csharpconsole` is installed and resolvable
 - **service**: whether the Unity HTTP service is reachable at the configured port
+- **version**: package/protocol/Unity versions from the live service, or the
+  on-disk package version when the service is down
+
+Exit code 0 means **fully operational** (service reachable and healthy); any
+degraded state — no project, package missing, service unreachable — exits 1.
+Read the text to see which layer is down.
 
 **Version mismatch handling:** if the output contains `⚠` indicating CLI/package
 version misalignment, do NOT just report the mismatch. Explain that the installed Unity
