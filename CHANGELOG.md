@@ -51,10 +51,12 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   REPL snippet fails project compilation there — blocking refresh workflows and,
   after an editor restart, potentially preventing the service from starting), and
   never delete `Temp/CSharpConsole/` itself. Decided in an adversarial CC↔Codex
-  review (see `cc-codex-discussion-history/20260722-213810-scratch-file-conventions.md`),
-  which replaced the earlier `<user-temp>/csharpconsole/<session>/` draft: a
-  user-temp root is not guaranteed writable under workspace-bound agent sandboxes,
-  and the session token was pure bookkeeping.
+  review (local audit transcript:
+  `cc-codex-discussion-history/20260722-213810-scratch-file-conventions.md`, kept
+  untracked by repo policy), which replaced the earlier
+  `<user-temp>/csharpconsole/<session>/` draft: a user-temp root is not guaranteed
+  writable under workspace-bound agent sandboxes, and the session token was pure
+  bookkeeping.
 - **First-time setup asks which source shape** (`references/setup.md`) — before writing
   the manifest the agent now offers an explicit choice: pinned git URL (default,
   team-friendly) vs. cloning the package to a user-chosen local path and installing via
