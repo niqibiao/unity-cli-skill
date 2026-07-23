@@ -18,16 +18,22 @@ choice between the two source shapes setup can write:
    tag; Unity's Package Manager downloads it into its cache. Team-friendly (the same
    manifest entry works on every machine); the package source is read-only.
 2. **Local clone + `file:`** — for editing/debugging the package source, or offline
-   use. Ask the user **where to clone**, then do the clone yourself — don't require a
-   pre-existing local copy:
+   use. Ask the user **where to clone**, and take the answer as an **absolute path**:
+   `git clone` resolves a relative target against your cwd, while manifest `file:`
+   entries resolve against `<project>/Packages/` — the same relative string would
+   point at two different directories. Do the clone yourself (don't require a
+   pre-existing local copy), and pin the version **explicitly** — `cs setup` writes
+   `file:` sources as-is, with no tag pinning:
    ```bash
-   git clone https://github.com/niqibiao/unity-csharpconsole.git <dir>   # checkout the tag matching the CLI's major.minor
-   cs setup --source "file:<dir>"
+   git ls-remote --tags https://github.com/niqibiao/unity-csharpconsole.git   # pick the newest vX.Y.* on the CLI's major.minor line (scripts/cli/VERSION)
+   git clone --branch <tag> --depth 1 https://github.com/niqibiao/unity-csharpconsole.git <absolute-dir>
+   cs setup --source "file:<absolute-dir>"
    ```
    **Caveat:** the manifest is shared and committed — an absolute `file:` path only
-   works on this machine. Prefer a path relative to the project's `Packages/` folder
-   (e.g. `file:../../Tools/unity-csharpconsole`), or make sure the user understands
-   teammates will need the same layout.
+   works on this machine. If the user wants a shareable entry, pass `--source` the
+   **same directory** expressed relative to `<project>/Packages/` (e.g. cloned to
+   `<project>/../Tools/unity-csharpconsole` → `file:../../Tools/unity-csharpconsole`),
+   and make sure teammates use the same layout.
 
 ## What setup does
 
