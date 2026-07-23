@@ -117,7 +117,7 @@ class ConsoleSession:
 
     def __init__(self, project_root, ip="127.0.0.1", port=DEFAULT_EDITOR_PORT, mode="editor", timeout=30,
                  agent_root=None, pkg_dir=None,
-                 compile_ip=None, compile_port=None):
+                 compile_ip=None, compile_port=None, session_id=None):
         core_path = (pkg_dir / CORE_RELATIVE) if pkg_dir else resolve(project_root, agent_root)
         _ensure_path(core_path)
 
@@ -143,7 +143,7 @@ class ConsoleSession:
             state.compile_port = compile_port or DEFAULT_EDITOR_PORT
         self._state = state
 
-        self._session_id = client_base.generate_session_id(None)
+        self._session_id = client_base.generate_session_id(session_id)
         self._post = _make_post_with_retry(transport_http, state, timeout)
         self._mode_name = lambda: state.current_mode_name()
         # Placeholders required by csharpconsole_core API for persistent

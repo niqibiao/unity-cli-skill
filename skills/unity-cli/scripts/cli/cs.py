@@ -191,7 +191,8 @@ def _new_session(root, args, pkg_dir):
     from cli.core_bridge import ConsoleSession
     return ConsoleSession(root, args.ip, args.port, args.mode, args.timeout,
                           pkg_dir=pkg_dir,
-                          compile_ip=args.compile_ip, compile_port=args.compile_port)
+                          compile_ip=args.compile_ip, compile_port=args.compile_port,
+                          session_id=getattr(args, "session", None))
 
 
 def _pin_source_tag(source):
@@ -1697,6 +1698,8 @@ def main():
     shared.add_argument("--compile-port", dest="compile_port", type=int, default=SUPPRESS,
                         help="Editor/compile server port (runtime mode only, default: auto-detect)")
     shared.add_argument("--timeout", type=int, default=SUPPRESS, help="HTTP timeout in seconds (default: 30)")
+    shared.add_argument("--session", default=SUPPRESS,
+                        help="Reuse a named REPL session (default: fresh session)")
     shared.add_argument("--json", dest="as_json", action="store_true", default=SUPPRESS,
                         help="JSON output (compact by default, use --verbose for full)")
     shared.add_argument("--verbose", action="store_true", default=SUPPRESS,

@@ -170,6 +170,9 @@ Many commands accept both `path` (hierarchy path like `"Canvas/Button"`) and `in
 | inspect | Inspect a session's state | — |
 | reset | Reset a session's compiler and executor | — |
 
+Pass `--session <id>` on `session/inspect` or `session/reset` so the command
+targets the same named context used by the dependent `cs exec` calls.
+
 ### command
 
 | action | summary | args |

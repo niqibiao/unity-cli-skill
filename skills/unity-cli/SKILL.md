@@ -71,6 +71,24 @@ cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-cr
 cs batch   --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-batch.json"        # {"commands":[ … ],"stopOnError":true}
 ```
 
+### REPL context — share only when needed
+
+`cs exec` starts a fresh REPL session by default. Keep that default for self-contained
+one-shot code. When a later submission intentionally depends on variables, `using`s,
+types, or helpers created by an earlier submission, generate one opaque session id
+for that task and pass the exact same `--session <id>` on every dependent call:
+
+```bash
+cs exec --session agent-a1b2c3 --file "<project-root>/Temp/CSharpConsole/AgentScratch/inspect-camera.cs"
+cs exec --session agent-a1b2c3 --file "<project-root>/Temp/CSharpConsole/AgentScratch/use-camera.cs"
+```
+
+Do not attach a shared session to unrelated work. Different agents/tasks must use
+different ids. Named session state is ephemeral: a domain reload clears it, so after
+`cs refresh` either rebuild the context with self-contained code or start a new id.
+Use a new id whenever a clean context is simpler than resetting the old one. See
+`references/exec-code.md` for reset and lifecycle details.
+
 ## Routing — pick the subcommand
 
 | Task | Subcommand | Detail |

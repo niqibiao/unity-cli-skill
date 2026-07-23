@@ -15,15 +15,13 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ### Fixed
 
-- **`references/exec-code.md` no longer promises cross-call REPL state** — every CLI
-  invocation constructs a fresh session id (`core_bridge.py` `generate_session_id(None)`
-  → `uuid4()`), so variables / `using`s / helpers never survive from one `cs exec`
-  to the next; the "cross-submission state", two-call patterns, and the
-  `session/reset` workflow documented since the beginning were unachievable through
-  the CLI. Docs now say: send complete, self-contained code per call; durable
-  helpers belong in the snippet library. A CLI `--session` passthrough is a
-  possible future feature (server sessions expire after idle and are cleared on
-  refresh, so it would still not make REPL state durable).
+- **Cross-call REPL context is now available on demand** — `--session <id>` is
+  forwarded through `cs.py` and `core_bridge.py` to the C# Console request UUID, so
+  dependent `cs exec` calls can intentionally share variables, `using`s, types, and
+  helpers. Omitting the option keeps the previous fresh-session default; unrelated
+  agents/tasks use different ids, and domain reload still clears all session state.
+  The skill now tells agents to opt in only for genuinely dependent calls instead of
+  claiming state is either always shared or never shareable.
 - **`cs status` text mode now exits like the JSON branch** — 0 only when the live
   service is healthy; no project / package missing / service unreachable all exit 1
   (previously the text branch returned 0 for everything but a missing project),

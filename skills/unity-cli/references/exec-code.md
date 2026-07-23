@@ -34,11 +34,11 @@ This is a Roslyn REPL, not a simple eval. Non-obvious capabilities and limits:
 
 - **Top-level syntax** — no `class`/`Main` boilerplate; write statements directly
 - **Expression auto-return** — the last expression value is returned in the result; prefer over `Debug.Log`
-- **No cross-call state** — every CLI invocation is its own REPL session (a fresh
-  session id per run): variables, `using`s, types, and helpers do **not** survive
-  from one `cs exec` to the next. Send complete, self-contained code each call
+- **Opt-in cross-call state** — without `--session`, each CLI invocation gets a
+  fresh session. Reuse the same explicit `--session <id>` only when later calls
+  intentionally depend on variables, `using`s, types, or helpers from earlier calls
 - **Private member access** — compiler bypasses `private`/`protected`/`internal` at compile time
-- **Pre-loaded usings** — `System` and `UnityEngine` are available by default. Add `using System.Linq;` or `using System.Collections.Generic;` explicitly when needed (in every call that uses them)
+- **Pre-loaded usings** — `System` and `UnityEngine` are available by default. Add `using System.Linq;` or `using System.Collections.Generic;` explicitly when needed; a named session retains them until that session is cleared
 
 ## Patterns
 
@@ -50,14 +50,25 @@ DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
 var cam = Camera.main; cam.fieldOfView
 ```
 
-### Multi-step work — one self-contained call
+### Multi-step work — self-contained by default
 
-There is no state between CLI calls, so combine lookup + use in a single submission:
+For a simple operation, combine lookup + use in a single submission:
 
 ```csharp
 var player = GameObject.Find("Player");
 player.transform.position
 ```
+
+When genuine incremental exploration is clearer, split the code into files and reuse
+one task-specific id:
+
+```bash
+cs exec --session agent-a1b2c3 --file "<project-root>/Temp/CSharpConsole/AgentScratch/find-player.cs"
+cs exec --session agent-a1b2c3 --file "<project-root>/Temp/CSharpConsole/AgentScratch/read-player.cs"
+```
+
+The second file may refer to variables or helpers declared by the first. Omit
+`--session` again when the dependency ends; unrelated work should get a fresh context.
 
 ### Private member access (no reflection needed)
 
@@ -80,15 +91,17 @@ using System.Linq; Resources.FindObjectsOfTypeAll<GameObject>().Where(g => !g.ac
 using System.Linq; UnityEditor.AssetDatabase.FindAssets("t:Material").Select(g => UnityEditor.AssetDatabase.GUIDToAssetPath(g)).ToList()
 ```
 
-### Define and use a helper — in the same call
+### Define and use a helper
 
-Helpers do not survive to the next CLI call: define and invoke them in one
-submission. A helper worth keeping belongs in the snippet library, not in REPL state:
+For one-shot work, define and invoke the helper in one submission:
 
 ```csharp
 string Dump(Transform t, int d=0) { var s = new string(' ', d*2) + t.name; foreach(Transform c in t) s += "\n" + Dump(c, d+1); return s; }
 Dump(GameObject.Find("Canvas").transform)
 ```
+
+A named session can retain the helper across dependent calls. It remains ephemeral;
+a helper worth reusing across tasks belongs in the snippet library.
 
 ### Batch modify
 
@@ -98,10 +111,16 @@ foreach(var r in GameObject.FindGameObjectsWithTag("Debug").SelectMany(g => g.Ge
 
 ## Session Reset
 
-Not needed through the CLI: each invocation already starts a fresh REPL session, so
-there is no stale state to reset (and `session/reset` cannot target a previous
-call's session — its id was random and is gone). The reset command only matters for
-long-lived REPL clients holding one session open.
+The simplest reset is to stop passing the old id or choose a new one. To explicitly
+reset a named session, write the normal command request
+`{"ns":"session","action":"reset","args":{}}` to the scratch JSON file and run:
+
+```bash
+cs command --session agent-a1b2c3 --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-reset-session.json"
+```
+
+Domain reload also clears all REPL sessions. Session state is working context, never
+durable storage.
 
 ## Notes
 
