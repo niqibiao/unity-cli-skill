@@ -15,7 +15,16 @@ from pathlib import Path
 
 MANIFEST_PATH = Path(__file__).with_name("command_manifest.json")
 TIERS = ("core", "advanced", "control-plane")
-DOMAINS = ("editor", "scene", "objects", "assets", "prefabs", "capture", "control")
+DOMAINS = (
+    "editor",
+    "scene",
+    "objects",
+    "assets",
+    "prefabs",
+    "capture",
+    "tests",
+    "control",
+)
 
 
 class CommandContractError(ValueError):
@@ -140,6 +149,11 @@ def _is_number(value):
     return (isinstance(value, (int, float)) and not isinstance(value, bool))
 
 
+def _utf16_code_units(value):
+    """Return the length used by C# ``string.Length``."""
+    return len(value.encode("utf-16-le", errors="surrogatepass")) // 2
+
+
 def _present(args, name, arg_specs):
     """Whether an argument carries a meaningful, non-sentinel value."""
     if name not in args:
@@ -217,8 +231,11 @@ def _validate_type(spec, value):
     if not valid:
         raise CommandContractError(f"{name} must be {type_name}")
 
-    if spec.get("nonEmpty") and isinstance(value, str) and not value.strip():
-        raise CommandContractError(f"{name} must not be empty")
+    if spec.get("nonEmpty"):
+        if isinstance(value, str) and not value.strip():
+            raise CommandContractError(f"{name} must not be empty")
+        if isinstance(value, (list, dict)) and not value:
+            raise CommandContractError(f"{name} must not be empty")
     if "enum" in spec:
         choices = spec["enum"]
         if spec.get("caseInsensitive") and isinstance(value, str):
@@ -244,6 +261,26 @@ def _validate_type(spec, value):
     if "max" in spec and measured > spec["max"]:
         unit = " items" if isinstance(value, list) else ""
         raise CommandContractError(f"{name} must have value/length <= {spec['max']}{unit}")
+    if isinstance(value, list):
+        if spec.get("itemNonEmpty"):
+            for index, item in enumerate(value):
+                if isinstance(item, str) and not item.strip():
+                    raise CommandContractError(f"{name}[{index}] must not be empty")
+        if "itemMax" in spec:
+            item_max = spec["itemMax"]
+            for index, item in enumerate(value):
+                measured_item = (
+                    _utf16_code_units(item)
+                    if isinstance(item, str)
+                    else len(item)
+                    if isinstance(item, (list, dict))
+                    else item
+                )
+                if measured_item > item_max:
+                    raise CommandContractError(
+                        f"{name}[{index}] must have value/length <= {item_max} "
+                        "UTF-16 code units"
+                    )
 
 
 def _groups(value):
@@ -354,6 +391,39 @@ def validate_command_request(namespace, action, args=None, *, session_id=None, c
     return normalized
 
 
+def required_command_capabilities(namespace, action, *, contracts=None):
+    """Return runtime capabilities required by one committed built-in contract."""
+    if contracts is None:
+        contracts = command_contracts()
+    contract = contracts.get(f"{namespace}/{action}")
+    if contract is None:
+        return frozenset()
+    required = contract.get("requiresCapabilities", [])
+    if not isinstance(required, list) or any(
+        not isinstance(item, str) or not item
+        for item in required
+    ):
+        raise CommandContractError(
+            f"{namespace}/{action} has invalid requiresCapabilities metadata"
+        )
+    return frozenset(required)
+
+
+def command_allows_batch(namespace, action, *, contracts=None):
+    """Whether one committed built-in contract may be sent through ``batch``."""
+    if contracts is None:
+        contracts = command_contracts()
+    contract = contracts.get(f"{namespace}/{action}")
+    if contract is None:
+        return True
+    allowed = contract.get("allowInBatch", True)
+    if not isinstance(allowed, bool):
+        raise CommandContractError(
+            f"{namespace}/{action} has invalid allowInBatch metadata"
+        )
+    return allowed
+
+
 def validate_batch_items(items, *, session_id=None, contracts=None):
     """Validate all recognized built-ins in a batch request."""
     if contracts is None:
@@ -368,6 +438,15 @@ def validate_batch_items(items, *, session_id=None, contracts=None):
         if not isinstance(namespace, str) or not isinstance(action, str):
             raise CommandContractError(
                 f"batch command {index} needs string ns/namespace and action"
+            )
+        if not command_allows_batch(
+            namespace,
+            action,
+            contracts=contracts,
+        ):
+            raise CommandContractError(
+                f"batch command {index}: {namespace}/{action} cannot run in batch; "
+                "send it with cs command"
             )
         item_session_id = item.get("sessionId")
         if item_session_id is not None and (

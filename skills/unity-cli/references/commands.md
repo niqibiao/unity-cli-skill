@@ -11,9 +11,9 @@ routing. It records each command's domain, visibility tier, availability, argume
 rules, intent boundaries, and verification guidance. The live Unity registry
 remains the execution authority and supplies the installed package's schema.
 
-The manifest retains **60** built-in contracts:
+The manifest retains **62** built-in contracts:
 
-- **58 routable contracts** are returned by default discovery.
+- **60 routable contracts** are returned by default discovery.
 - `editor/menu.open` and `editor/window.open` are retained for compatibility and
   audit, but are blocked because they require noninteractive UI behavior that
   cannot be verified reliably. Discovery hides them unless `--include-blocked` is
@@ -21,6 +21,11 @@ The manifest retains **60** built-in contracts:
 
 Do not copy the full registry into agent context. Narrow discovery by domain and
 tier, then inspect one exact contract when needed.
+
+An offline entry that declares `requiresCapabilities` is a committed candidate,
+not evidence that the installed package implements it. Verify that entry against
+the live registry before execution. The CLI also checks the advertised capability
+before it claims or dispatches the request.
 
 ## Domain boundaries
 
@@ -32,6 +37,7 @@ tier, then inspect one exact contract when needed.
 | `assets` | Asset search/import/CRUD, materials, and material assignment | Scene hierarchy or prefab contents |
 | `prefabs` | Prefab creation, instantiation, unpacking, direct content editing | Generic asset operations unrelated to prefab contents |
 | `capture` | Scene/Game screenshots and Profiler recording | Structured state inspection |
+| `tests` | Start or inspect Unity Test runs in the open Unity 2022 Editor | Python, .NET, or CI tests; general Editor readiness |
 | `control` | REPL sessions and command discovery | Routine Unity authoring |
 
 The agent-facing domain is metadata; it does not rename the wire protocol.
@@ -134,7 +140,7 @@ Recognized built-ins are validated before any HTTP request. Preflight rejects:
 - unknown arguments;
 - missing or empty required arguments;
 - wrong scalar, array, vector, or field-pair types;
-- invalid enum, range, or declared string-pattern values;
+- invalid enum, range, declared string-pattern, array-length, or array-item values;
 - violations of exactly-one, at-most-one, at-least-one, or conditional argument
   rules;
 - session operations that omit an explicit `--session` id.

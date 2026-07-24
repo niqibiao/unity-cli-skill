@@ -13,6 +13,16 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ### Added
 
+- **Durable Unity Test run contracts** — the new core `tests/run` command starts
+  one asynchronous Edit Mode or Play Mode run in the open Unity 2022 Editor,
+  optionally limited to 1–32 exact test names. `tests/status` reads or briefly
+  waits for a retained current or historical run by its 32-character `runId`
+  and returns compact progress, outcome, timing, counts, and bounded failure
+  evidence. Agents poll
+  with `waitSeconds=10`; after a domain reload they wait for readiness and query
+  the same `runId`, never start a replacement run. Execution requires the
+  package-advertised `test_runs_v1` capability instead of inferring support from
+  a matching release line.
 - **Bounded Editor diagnostics** — the new core contract
   `editor/console.get(afterMarkerId="")` reads at most a 16 KiB JSON result from
   the Unity 2022 Editor log. Pair it with `editor/console.mark` for causal

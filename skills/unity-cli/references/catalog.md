@@ -39,7 +39,7 @@ running Editor. This does **not** touch the per-project custom-command catalog.
    cs list-commands --json
    ```
 2. Parse `data.commands` (built-in + custom).
-3. Compare live built-ins with the 60 manifest contracts, including the 58
+3. Compare live built-ins with the 62 manifest contracts, including the 60
    routable contracts and the retained blocked `editor/menu.open` and
    `editor/window.open` entries.
 4. Report differences and suggest manifest updates:

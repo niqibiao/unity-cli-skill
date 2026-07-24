@@ -3,8 +3,8 @@ name: unity-cli
 description: >
   Drive a live Unity Editor or Player with unity-cli. Use when a task must inspect
   or change Unity scenes, GameObjects, components, transforms, prefabs, materials,
-  project assets, play mode, screenshots, profiler recording, or execute C# inside
-  Unity; also use for Unity console maintenance and unity-cli setup, status,
+  project assets, play mode, screenshots, profiler recording, Unity tests, or
+  execute C# inside Unity; also use for Unity console maintenance and unity-cli setup, status,
   readiness diagnosis, uncertain-operation recovery, refresh, snippets, or
   custom commands. Do not use for source-only Unity coding that does not require
   interaction with the live Editor or Player.
@@ -13,7 +13,7 @@ description: >
 # Unity CLI
 
 One CLI (`cs`) drives the Unity Editor/Player. Built-in commands are grouped into
-seven agent-facing domains so only the relevant schema enters context.
+eight agent-facing domains so only the relevant schema enters context.
 
 ## Running `cs`
 
@@ -93,18 +93,20 @@ For a structured Unity operation:
 
 1. Choose one domain from the index below.
 2. Read `references/commands.md`.
-3. Discover only that domain's committed core schema with
+3. If and only if the selected domain is `tests`, also read
+   `references/tests.md` before constructing or recovering a test run.
+4. Discover only that domain's committed core schema with
    `cs list-commands --offline --domain <domain> --tier core --json`. Offline
    discovery needs neither a Unity project nor a running service.
-4. Query `advanced` only when the requested operation is specialized,
+5. Query `advanced` only when the requested operation is specialized,
    destructive, or absent from core. Keep `--offline`; use
    `--id <namespace/action>` when checking one exact contract. Remove
    `--offline` only when verifying what the currently installed package actually
    registers.
-5. Write the selected `ns`, `action`, and `args` to the mandatory scratch JSON
+6. Write the selected `ns`, `action`, and `args` to the mandatory scratch JSON
    file, then run `cs command --json --input <file>`.
 
-Do not load or print the unfiltered 60-command registry during routine work.
+Do not load or print the unfiltered 62-command registry during routine work.
 
 | Domain | Positive intent | Exclude / route elsewhere |
 |---|---|---|
@@ -114,6 +116,7 @@ Do not load or print the unfiltered 60-command registry during routine work.
 | `assets` | Asset search/import/CRUD, materials, and material assignment | Scene hierarchy, prefab contents |
 | `prefabs` | Create/instantiate/unpack or directly edit prefab contents | Generic asset paths unrelated to prefab contents |
 | `capture` | Scene/Game screenshots and Profiler recording | Structured state inspection |
+| `tests` | Start or inspect Unity Test runs in the open Unity 2022 Editor | Python, .NET, CI tests, or general readiness diagnosis |
 | `control` | REPL sessions and command discovery | Normal Unity authoring |
 
 ### Other subcommands
