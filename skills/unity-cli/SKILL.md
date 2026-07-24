@@ -104,7 +104,7 @@ For a structured Unity operation:
 5. Write the selected `ns`, `action`, and `args` to the mandatory scratch JSON
    file, then run `cs command --json --input <file>`.
 
-Do not load or print the unfiltered 59-command registry during routine work.
+Do not load or print the unfiltered 60-command registry during routine work.
 
 | Domain | Positive intent | Exclude / route elsewhere |
 |---|---|---|

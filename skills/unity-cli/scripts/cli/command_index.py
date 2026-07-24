@@ -9,6 +9,7 @@ the service would otherwise accept as silent no-ops.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
@@ -230,6 +231,12 @@ def _validate_type(spec, value):
         if not enum_match:
             rendered = ", ".join(repr(choice) for choice in choices)
             raise CommandContractError(f"{name} must be one of: {rendered}")
+    if "pattern" in spec and isinstance(value, str):
+        if re.fullmatch(spec["pattern"], value) is None:
+            pattern_error = spec.get("patternError")
+            if pattern_error:
+                raise CommandContractError(f"{name} {pattern_error}")
+            raise CommandContractError(f"{name} has an invalid format")
     measured = len(value) if isinstance(value, (str, list, dict)) else value
     if "min" in spec and measured < spec["min"]:
         unit = " items" if isinstance(value, list) else ""

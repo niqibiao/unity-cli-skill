@@ -147,13 +147,32 @@
       "sideEffect": "diagnostic",
       "editorOnly": true,
       "args": [
-        {"name": "label", "type": "string", "required": false, "default": ""}
+        {"name": "label", "type": "string", "required": false, "default": "", "max": 200}
       ],
       "rules": {},
       "resultFields": ["logPath", "id", "label", "timestampUtc", "markerText"],
       "positiveIntents": ["mark the Unity log before an operation", "在操作前为 Unity 日志写入标记"],
       "negativeIntents": ["clear or read existing console messages"],
       "verification": "Require a nonempty id and find markerText containing that id in the returned logPath."
+    },
+    {
+      "id": "editor/console.get",
+      "ns": "editor",
+      "action": "console.get",
+      "domain": "editor",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Read a bounded recent or post-marker Unity Editor log window.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "afterMarkerId", "type": "string", "required": false, "default": "", "max": 32, "pattern": "(?:|[0-9A-Fa-f]{32})", "patternError": "must be empty or a 32-character hexadecimal editor/console.mark id"}
+      ],
+      "rules": {},
+      "resultFields": ["text", "truncated"],
+      "positiveIntents": ["read recent or post-operation Unity Editor diagnostics", "读取最近或某次操作之后的 Unity 编辑器诊断"],
+      "negativeIntents": ["clear or modify the Unity Console", "read arbitrary files or stream the complete Editor log"],
+      "verification": "For causal checks, mark first and pass its id; require marker content to be absent and treat truncated=true as incomplete evidence."
     },
     {
       "id": "gameobject/find",
