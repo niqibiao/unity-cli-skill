@@ -274,6 +274,58 @@ class _ReliablePost:
         self._health = data
         return data
 
+    @staticmethod
+    def _command_capability_requirements(endpoint, payload):
+        """Return ``(command ids, capabilities)`` for a command request."""
+        if endpoint not in {"command", "batch"}:
+            return [], set()
+
+        commands = []
+        if endpoint == "command":
+            invocation = (
+                payload.get("invocation")
+                if isinstance(payload, dict)
+                else None
+            )
+            command = (
+                invocation.get("command")
+                if isinstance(invocation, dict)
+                else None
+            )
+            if isinstance(command, dict):
+                commands.append(command)
+        elif endpoint == "batch" and isinstance(payload, dict):
+            batch_commands = payload.get("commands")
+            if isinstance(batch_commands, list):
+                commands.extend(
+                    command
+                    for command in batch_commands
+                    if isinstance(command, dict)
+                )
+
+        from cli.command_index import (
+            command_contracts,
+            required_command_capabilities,
+        )
+
+        contracts = command_contracts()
+        command_ids = []
+        capabilities = set()
+        for command in commands:
+            namespace = command.get("commandNamespace") or command.get("ns")
+            action = command.get("action")
+            if not isinstance(namespace, str) or not isinstance(action, str):
+                continue
+            required = required_command_capabilities(
+                namespace,
+                action,
+                contracts=contracts,
+            )
+            if required:
+                command_ids.append(f"{namespace}/{action}")
+                capabilities.update(required)
+        return sorted(set(command_ids)), capabilities
+
     def _encode_body(self, payload):
         encoder = getattr(self._transport, "encode_json_body", None)
         if encoder is None:
@@ -389,6 +441,23 @@ class _ReliablePost:
             )
         except Exception as error:
             return _error_envelope("capability_missing", str(error))
+
+        command_ids, required_capabilities = self._command_capability_requirements(
+            endpoint,
+            payload,
+        )
+        missing_command_capabilities = sorted(
+            required_capabilities - set(health.get("capabilities") or [])
+        )
+        if missing_command_capabilities:
+            return _error_envelope(
+                "capability_missing",
+                "Unity package cannot execute "
+                + ", ".join(command_ids)
+                + "; missing command capability: "
+                + ", ".join(missing_command_capabilities)
+                + ". Update the package and verify the live command registry.",
+            )
 
         invocation_id = self._next_invocation_id()
         if not invocation_id:

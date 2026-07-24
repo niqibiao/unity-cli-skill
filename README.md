@@ -9,7 +9,7 @@
 [![Unity](https://img.shields.io/badge/Unity-2022-black.svg?logo=unity)](https://unity.com/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 
-60 built-in command contracts; 58 are routable for scene editing, components, assets, screenshots, profiling, diagnostics, and more.<br/>
+62 built-in command contracts; 60 are routable for scene editing, components, assets, screenshots, profiling, Unity tests, diagnostics, and more.<br/>
 Depends on **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — a Roslyn-powered interactive C# REPL for Unity.
 
 [Quick Start](#-quick-start) · [Usage](#-usage) · [Commands](#-commands) · [Custom Commands](#-custom-commands) · [Architecture](#️-architecture)
@@ -100,7 +100,7 @@ id only for a genuinely new intent.
 
 ### 📦 Commands
 
-60 built-in contracts across 13 wire namespaces. 58 are routable by default;
+62 built-in contracts across 14 wire namespaces. 60 are routable by default;
 `editor/menu.open` and `editor/window.open` are retained but blocked because their
 noninteractive UI effects cannot be verified reliably. Structured command results
 are available through `cs command --json`.
@@ -188,6 +188,22 @@ are available through `cs command --json`.
 | `stop`   | Stop Profiler recording                            |
 | `status` | Get current Profiler state                         |
 | `save`   | Save recorded profiler data to a `.raw` file       |
+
+
+#### tests
+
+
+| Action   | Description                                                   |
+| -------- | ------------------------------------------------------------- |
+| `run`    | Start an asynchronous Edit Mode or Play Mode Unity Test run   |
+| `status` | Read or briefly wait for a retained run by its returned `runId` |
+
+Use `tests/status` with `waitSeconds=10` for normal result polling. If a Unity
+domain reload disconnects the CLI, run `cs wait-ready`, then query the same
+`runId`. Status can also query retained historical runs; package-controlled
+retention is bounded. If acceptance is uncertain, derive `runId` from the
+protected invocation UUID by removing its hyphens. Never repeat `tests/run` to
+recover or poll an existing run.
 
 
 #### editor
@@ -285,9 +301,9 @@ AI Agent                         Unity Editor
 │                  │            │  │  └─ REPL Executor  │  │
 │  Python CLI      │            │  └────────────────────┘  │
 │  ┌────────────┐  │            │                          │
-│  │ cs.py      │  │            │  60 command contracts    │
+│  │ cs.py      │  │            │  62 command contracts    │
 │  │ core_bridge│  │            │  (GameObject, Component, │
-│  └────────────┘  │            │   58 routable by agents) │
+│  └────────────┘  │            │   60 routable by agents) │
 └──────────────────┘            └──────────────────────────┘
 ```
 

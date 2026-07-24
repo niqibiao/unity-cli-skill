@@ -7,6 +7,7 @@
     "assets",
     "prefabs",
     "capture",
+    "tests",
     "control"
   ],
   "commands": [
@@ -1186,6 +1187,49 @@
       "positiveIntents": ["save captured Unity Profiler data", "保存已捕获的 Unity Profiler 数据"],
       "negativeIntents": ["start or stop profiler recording"],
       "verification": "Require saved to be true and the returned file to exist and be nonempty."
+    },
+    {
+      "id": "tests/run",
+      "ns": "tests",
+      "action": "run",
+      "domain": "tests",
+      "tier": "core",
+      "availability": "supported",
+      "allowInBatch": false,
+      "requiresCapabilities": ["test_runs_v1"],
+      "summary": "Start one asynchronous Unity Test run in Edit Mode or Play Mode and return its run id.",
+      "sideEffect": "lifecycle",
+      "editorOnly": true,
+      "args": [
+        {"name": "mode", "type": "string", "required": true, "enum": ["edit", "play"]},
+        {"name": "testNames", "type": "string[]", "required": false, "nonEmpty": true, "min": 1, "max": 32, "itemNonEmpty": true, "itemMax": 512}
+      ],
+      "rules": {},
+      "resultFields": ["runId", "phase", "mode", "accepted"],
+      "positiveIntents": ["start Unity tests in Edit Mode or Play Mode", "启动 Unity 编辑模式或播放模式测试"],
+      "negativeIntents": ["inspect an existing Unity Test run", "run Python, .NET, or CI tests outside the open Unity Editor"],
+      "verification": "Poll tests/status for the returned runId with waitSeconds=10 until terminal. The runId is the protected invocation UUID without hyphens, so derive it from invocation.invocationId if acceptance is outcome_unknown. If a domain reload disconnects the CLI, wait-ready first, then query the same runId; never rerun tests/run as a retry."
+    },
+    {
+      "id": "tests/status",
+      "ns": "tests",
+      "action": "status",
+      "domain": "tests",
+      "tier": "core",
+      "availability": "supported",
+      "requiresCapabilities": ["test_runs_v1"],
+      "summary": "Read or briefly wait for one retained Unity Test run by run id.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "runId", "type": "string", "required": true, "pattern": "[0-9A-Fa-f]{32}", "patternError": "must be a 32-character hexadecimal tests/run id"},
+        {"name": "waitSeconds", "type": "int", "required": false, "default": 0, "min": 0, "max": 20}
+      ],
+      "rules": {},
+      "resultFields": ["runId", "phase", "outcome", "mode", "totalCount", "completedCount", "passedCount", "failedCount", "skippedCount", "inconclusiveCount", "currentTest", "resultState", "durationSeconds", "requestedAtUtc", "startedAtUtc", "finishedAtUtc", "message", "failureDetails", "returnedFailureCount", "failuresTruncated"],
+      "positiveIntents": ["inspect or wait briefly for a retained current or historical Unity Test run", "查看或短暂等待仍保留的当前或历史 Unity 测试运行"],
+      "negativeIntents": ["start or rerun Unity tests", "diagnose general Unity Editor readiness"],
+      "verification": "Use waitSeconds=10 for normal polling and require a terminal phase plus outcome=passed before reporting success. Treat failuresTruncated=true as incomplete failure evidence. After a reload disconnect, run wait-ready and query the same runId; never start a replacement run. A run that is no longer retained must fail as not found."
     },
     {
       "id": "session/list",

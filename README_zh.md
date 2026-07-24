@@ -9,7 +9,7 @@
 [![Unity](https://img.shields.io/badge/Unity-2022-black.svg?logo=unity)](https://unity.com/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 
-内置 60 份命令契约，其中 58 份可供 Agent 路由，覆盖场景编辑、组件、资产、截图、性能分析和诊断等。<br/>
+内置 62 份命令契约，其中 60 份可供 Agent 路由，覆盖场景编辑、组件、资产、截图、性能分析、Unity 测试和诊断等。<br/>
 依赖 **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — 基于 Roslyn 的 Unity 交互式 C# REPL。
 
 [快速开始](#-快速开始) · [使用方式](#-使用方式) · [命令](#-命令) · [自定义命令](#-自定义命令) · [架构](#️-架构)
@@ -98,7 +98,7 @@ id。
 
 ### 📦 命令
 
-13 个协议命名空间、60 份内置命令契约。其中 58 份默认可路由；
+14 个协议命名空间、62 份内置命令契约。其中 60 份默认可路由；
 `editor/menu.open` 与 `editor/window.open` 因非交互式 UI 效果无法可靠验证而保留但禁用。
 结构化命令结果通过 `cs command --json` 返回。
 
@@ -185,6 +185,22 @@ id。
 | `stop`   | 停止 Profiler 录制         |
 | `status` | 获取当前 Profiler 状态       |
 | `save`   | 保存录制数据到 `.raw` 文件      |
+
+
+#### tests
+
+
+| Action   | 说明                                      |
+| -------- | ----------------------------------------- |
+| `run`    | 启动异步的 Edit Mode 或 Play Mode Unity 测试 |
+| `status` | 按返回的 `runId` 读取或短暂等待仍保留的测试运行 |
+
+正常轮询结果时使用 `tests/status(waitSeconds=10)`。如果 Unity 域重载导致
+CLI 断开，先运行 `cs wait-ready`，再查询同一个 `runId`。状态接口也可查询
+仍在保留范围内的历史运行；历史记录只保留有限范围，具体由 package 管理。
+如果 acceptance 结果不确定，可去掉受保护 invocation UUID 中的连字符得到
+`runId`。
+绝不通过重复调用 `tests/run` 来恢复或轮询已有测试运行。
 
 
 #### editor
@@ -282,9 +298,9 @@ AI Agent                         Unity Editor
 │                  │            │  │  └─ REPL 执行器     │  │
 │  Python CLI      │            │  └────────────────────┘  │
 │  ┌────────────┐  │            │                          │
-│  │ cs.py      │  │            │  60 command contracts    │
+│  │ cs.py      │  │            │  62 command contracts    │
 │  │ core_bridge│  │            │  (GameObject, Component, │
-│  └────────────┘  │            │   Agent 可路由 58 份)     │
+│  └────────────┘  │            │   Agent 可路由 60 份)     │
 └──────────────────┘            └──────────────────────────┘
 ```
 
