@@ -81,12 +81,21 @@ operation, and the agent triggers it automatically (in any skills-compatible age
 | ---------- | ----------- |
 | `cs setup` | Install the package into the manifest (version-check if present) |
 | `cs status` / `cs health` | Package and service status |
+| `cs doctor` / `cs wait-ready` | Diagnose or wait for the matching Unity 2022 service |
 | `cs command --input` | Structured Unity Editor commands |
 | `cs exec` | Run raw C# in the Editor (fallback) |
 | `cs refresh` | Trigger asset refresh / recompile |
 | `cs catalog sync` / `cs list-commands` | Custom-command catalog + maintainer audit |
 | `cs snippets …` | Reusable C# snippet library |
 | `cs snippets doctor` | Snippet library health audit |
+
+Protocol-v2 operations are protected by a durable, windowed at-most-once journal.
+A lost response is retried only with the same operation id and exact request
+bytes; Unity replays the original result or blocks a second dispatch within the
+advertised dedupe window. Unknown and in-progress results exit 4 and point to
+`cs doctor --operation <UUID>`. Once the local outbox records that an id was
+sent, later CLI runs diagnose that id instead of dispatching it again; use a new
+id only for a genuinely new intent.
 
 
 ### 📦 Commands
@@ -294,7 +303,7 @@ Auto-detects project root and service port. No manual configuration.
 | ---------------------- | ------------------------------------------------------------------------------------------ |
 | `service: UNREACHABLE` | Make sure Unity Editor is open with the project loaded                                     |
 | `package: NOT FOUND`   | Run `cs setup` to add the package, then open Unity to let it resolve                       |
-| Port conflict          | Service auto-advances to the next free port. Check `Temp/CSharpConsole/refresh_state.json` |
+| Port conflict          | Service auto-advances to the next free port. Check `Library/CSharpConsole/RefreshState/v1/refresh_state.json` |
 | Commands not found     | Ensure the package compiled successfully (no errors in Unity Console)                      |
 | Version mismatch       | Run `cs status` to see versions; align the Unity package with the CLI `major.minor`        |
 

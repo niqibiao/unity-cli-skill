@@ -5,8 +5,9 @@ description: >
   or change Unity scenes, GameObjects, components, transforms, prefabs, materials,
   project assets, play mode, screenshots, profiler recording, or execute C# inside
   Unity; also use for Unity console maintenance and unity-cli setup, status,
-  refresh, snippets, or custom commands. Do not use for source-only Unity coding
-  that does not require interaction with the live Editor or Player.
+  readiness diagnosis, uncertain-operation recovery, refresh, snippets, or
+  custom commands. Do not use for source-only Unity coding that does not require
+  interaction with the live Editor or Player.
 ---
 
 # Unity CLI
@@ -57,7 +58,8 @@ overwrite the same file when revising it serially; use a random suffix only when
 another agent is known to work on the same Unity project concurrently.
 
 Scratch payloads are one-shot. Put reusable C# in the snippet library. Clean only
-`AgentScratch/`; never delete `Temp/CSharpConsole/`, which contains service state.
+`AgentScratch/`; never delete the parent `Temp/CSharpConsole/`, which older package
+versions may still use for compatibility state.
 Never write REPL payloads under `Assets/`: importing them can break project
 compilation and prevent the service from restarting.
 
@@ -123,7 +125,9 @@ Do not load or print the unfiltered 59-command registry during routine work.
 | Snippet audit | `cs snippets doctor` / `stats` | `references/snippets-audit.md` |
 | Refresh and compile | `cs refresh` | `references/refresh.md` |
 | Custom-command catalog | `cs catalog sync` / `list` | `references/catalog.md` |
-| Package / connection state | `cs status` / `cs health` | `references/status.md` |
+| Diagnose readiness / uncertain operation | `cs doctor` / `cs doctor --operation UUID` | `references/status.md` |
+| Wait without Unity/project mutation | `cs wait-ready --timeout N` (bind refresh op/generation when resuming) | `references/status.md` |
+| Package / raw service state | `cs status` / `cs health` | `references/status.md` |
 | Package setup | `cs setup` | `references/setup.md` |
 
 ## Output conventions
@@ -135,6 +139,13 @@ Do not load or print the unfiltered 59-command registry during routine work.
 - A version-mismatch warning means the installed package and CLI use different
   `major.minor` lines. Follow `references/setup.md`; the warning does not itself
   block execution.
+- `outcome_unknown` or `operation_in_progress` (exit 4) means the operation is
+  unresolved and the CLI deliberately did not create a second dispatch. Run
+  `cs doctor --operation <UUID> --json` and verify the affected state; never
+  replace that UUID with a new one while it is unresolved.
+- Once the local outbox records an operation id as sent, later CLI runs diagnose
+  it instead of dispatching it again, even after server retention expires. A new
+  UUID represents a new intent, not a retry.
 - Expanded CLI commands and JSON payloads are agent-internal. When Unity must be
   opened or focused, tell the user what action is needed in plain language, then
   run `cs status` yourself to verify the result.

@@ -80,12 +80,20 @@ Claude 会自动选择合适的命令，或在需要时编写 C# 代码。
 | ----- | ---- |
 | `cs setup` | 安装包到 manifest（已安装则做版本校验） |
 | `cs status` / `cs health` | 包与服务状态 |
+| `cs doctor` / `cs wait-ready` | 诊断或等待属于当前项目的 Unity 2022 服务 |
 | `cs command --input` | 结构化 Unity 编辑器命令 |
 | `cs exec` | 在编辑器中执行原始 C#（兜底） |
 | `cs refresh` | 触发资产刷新 / 重编译 |
 | `cs catalog sync` / `cs list-commands` | 自定义命令目录 + 维护者审计 |
 | `cs snippets …` | 可复用 C# 片段库 |
 | `cs snippets doctor` | 片段库健康审计 |
+
+协议 v2 的操作由持久化、带去重窗口的 at-most-once 日志保护。响应丢失时，
+CLI 只会用同一个 operation id 和完全相同的请求字节重试；在服务声明的窗口内，
+Unity 会重放原结果或阻止二次执行。结果未知或仍在执行时，CLI 以退出码 4
+返回，并提示运行 `cs doctor --operation <UUID>`。本地 outbox 一旦记录某个 id
+已经发送，后续 CLI 进程只会诊断该 id，不会再次派发；只有新的操作意图才使用新
+id。
 
 
 ### 📦 命令
@@ -292,7 +300,7 @@ AI Agent                         Unity Editor
 | ---------------------- | ---------------------------------------------------------- |
 | `service: UNREACHABLE` | 确保 Unity 编辑器已打开并加载了项目                                      |
 | `package: NOT FOUND`   | 运行 `cs setup` 添加包，再打开 Unity 解析它   |
-| 端口冲突                   | 服务会自动切换到下一个可用端口，查看 `Temp/CSharpConsole/refresh_state.json` |
+| 端口冲突                   | 服务会自动切换到下一个可用端口，查看 `Library/CSharpConsole/RefreshState/v1/refresh_state.json` |
 | 找不到命令                  | 确保包编译成功（Unity Console 中无报错）                                |
 | 版本不匹配                  | 运行 `cs status` 查看版本；把 Unity 包对齐到 CLI 的 `major.minor`        |
 

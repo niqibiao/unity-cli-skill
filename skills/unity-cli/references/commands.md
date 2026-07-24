@@ -158,9 +158,13 @@ state was reached.
    screenshot.
 3. After asset or C# file changes that require compilation, follow
    `references/refresh.md`; a domain reload clears REPL sessions.
-4. If transport fails after a mutation may have been accepted, read back before
-   retrying. Never blindly repeat a create, duplicate, destroy, import, or other
-   mutation whose execution state is unknown.
+4. Protocol-v2 operations are durably claimed before dispatch. The CLI may retry
+   once with the same operation id and exact bytes; Unity replays the original
+   response or refuses a second dispatch within the advertised dedupe window. If
+   the result is `outcome_unknown` or `operation_in_progress` (exit 4), run
+   `cs doctor --operation <UUID> --json`, read back the affected state, and never
+   replace the unresolved UUID with a new one. After the outbox records an id as
+   sent, later CLI runs will diagnose rather than dispatch it again.
 5. Report completion only when read-back matches the requested state. Otherwise
    report the observed state and the next recoverable action.
 
