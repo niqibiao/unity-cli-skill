@@ -1625,9 +1625,9 @@ def _resolve_input(parser, args):
     batch) read from a file, or '-' for stdin. The agent writes the JSON with its file
     tool, so embedded quotes / newlines in C# code or command args never transit the
     shell and need no escaping. This is the only way to pass params to exec / command /
-    batch / complete (exec also accepts --file for raw C#). Other commands that take
+    batch (exec also accepts --file for raw C#). Other commands that take
     --input (e.g. snippets use) read it in their own handler."""
-    if args.cmd not in ("exec", "command", "batch", "complete"):
+    if args.cmd not in ("exec", "command", "batch"):
         return
     src = getattr(args, "input", None)
     if src is None:
@@ -1673,15 +1673,6 @@ def _resolve_input(parser, args):
         if not isinstance(items, list):
             parser.error('--input for batch needs a "commands" array (or a bare JSON array)')
         args.commands = json.dumps(items, ensure_ascii=False)
-    elif cmd == "complete":
-        if (not isinstance(payload, dict) or not isinstance(payload.get("code"), str)
-                or not isinstance(payload.get("cursor"), int) or isinstance(payload.get("cursor"), bool)):
-            parser.error('--input for complete must be a JSON object with "code" (string) and "cursor" (int)')
-        args.code = payload["code"]
-        args.cursor = payload["cursor"]
-        _apply_conn_opts(parser, args, payload)
-
-
 def main():
     # Shared flags available on every subcommand.
     # Use SUPPRESS so subparser parses don't overwrite values supplied to the
@@ -1740,10 +1731,6 @@ def main():
     sp_lc = sub.add_parser("list-commands", parents=[shared], help="List available commands")
     sp_lc.add_argument("--type", choices=["builtin", "custom", "all"], default="all",
                         dest="cmd_type", help="Filter by command type (default: all)")
-
-    sp_cmp = sub.add_parser("complete", parents=[shared], help="Get completions")
-    sp_cmp.add_argument("--input", "-i", dest="input", default=None, required=True,
-                        help='JSON params file (or - for stdin): {"code": "...", "cursor": N}; avoids shell-quoting')
 
     sp_batch = sub.add_parser("batch", parents=[shared], help="Execute multiple commands in one request")
     sp_batch.add_argument("--stop-on-error", action="store_true",
@@ -1987,7 +1974,6 @@ def main():
         "health":   lambda: s.health(),
         "refresh":  _refresh,
         "list-commands": lambda: _list_commands_filtered(s, args),
-        "complete": lambda: s.complete(args.code, args.cursor),
         "batch":    lambda: s.batch(args.commands, args.stop_on_error),
     }
 

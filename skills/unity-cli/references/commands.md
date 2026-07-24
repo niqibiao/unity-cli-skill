@@ -23,7 +23,7 @@ cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.js
 
 ## Argument & Result Conventions
 
-- Always pass `--json` on `command` / `list-commands` / `batch` / `complete` — their result payload is only emitted as JSON. The envelope is `{ "ok": bool, "exitCode": int, "summary": str, "data": {...} }` — check `ok` / `exitCode` for success. (Other subcommands print an equivalent text form; leave `--json` off there.)
+- Always pass `--json` on `command` / `list-commands` / `batch` — their result payload is only emitted as JSON. The envelope is `{ "ok": bool, "exitCode": int, "summary": str, "data": {...} }` — check `ok` / `exitCode` for success. (Other subcommands print an equivalent text form; leave `--json` off there.)
 - `data` is already structured. For `cs command`, it's the command's own result object; for `cs list-commands`, it's `{ "commands": [...] }`. Do not expect or re-parse a `resultJson` string field — that only appears with `--verbose`.
 - `Vector3` args are JSON objects: `{"x":0,"y":1,"z":3}`. Same for `rotation` and `scale`.
 - Array args (e.g. `instanceIds: int[]`, `assetPaths: string[]`) are JSON arrays.

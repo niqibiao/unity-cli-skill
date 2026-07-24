@@ -11,6 +11,27 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.0.8] - 2026-07-23
+
+### Removed
+
+- **`cs complete` and the `/completion` bridge** — unity-cli no longer exposes the
+  interactive completion endpoint. Agent automation submits complete C# and had no
+  internal consumer for completion candidates; the Unity package may continue to
+  provide `/completion` for its own interactive clients.
+
+### Changed
+
+- **Cross-agent repository guidance now has one source of truth** — `AGENTS.md`
+  contains the shared CLI, architecture, test, setup-safety, and release rules;
+  `CLAUDE.md` imports it with `@AGENTS.md` instead of maintaining a drifting copy.
+- **REPL behavior documentation synced with the Unity package** —
+  `references/exec-code.md` now explains that only successfully compiled `using`
+  directives persist, that ambiguous internal compatibility types can make one
+  submission fall back to standard C# accessibility, and how to respond to
+  `[REPL NOTICE]` / `[REPL ACTION REQUIRED]`. Those upstream behavior changes did
+  not alter endpoint paths or request/response contracts.
+
 ## [2.0.7] - 2026-07-23
 
 ### Fixed

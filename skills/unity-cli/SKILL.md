@@ -45,7 +45,7 @@ tool, then hand the CLI the path. Two channels:
   `exec` — never wrap code in a JSON `{"code": …}` payload, where every quote /
   backslash / newline must be JSON-escaped (a raw `.cs` file needs none).
 - **Structured params → `--input <file>` JSON** (or `-` for stdin) for `command` /
-  `batch` (and `complete`, whose `{"code","cursor"}` has no file form).
+  `batch`.
 
 **Scratch file location (mandatory):** the absolute path
 `<project-root>/Temp/CSharpConsole/AgentScratch/` — inside the Unity project's own
@@ -105,7 +105,7 @@ Use a new id whenever a clean context is simpler than resetting the old one. See
 ## Conventions (all subcommands)
 
 - `--json` only where the payload comes back as structured data: **`command`,
-  `list-commands`, `batch`, `complete`** — envelope
+  `list-commands`, `batch`** — envelope
   `{ "ok", "exitCode", "summary", "data" }`, check `ok` / `exitCode`. Every other
   subcommand (`exec`, `status`, `refresh`, `health`, `setup`, `catalog`,
   `snippets`) prints an equivalent, cheaper text form — omit `--json`; success =

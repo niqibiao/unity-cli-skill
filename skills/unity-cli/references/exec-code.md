@@ -37,8 +37,14 @@ This is a Roslyn REPL, not a simple eval. Non-obvious capabilities and limits:
 - **Opt-in cross-call state** — without `--session`, each CLI invocation gets a
   fresh session. Reuse the same explicit `--session <id>` only when later calls
   intentionally depend on variables, `using`s, types, or helpers from earlier calls
-- **Private member access** — compiler bypasses `private`/`protected`/`internal` at compile time
-- **Pre-loaded usings** — `System` and `UnityEngine` are available by default. Add `using System.Linq;` or `using System.Collections.Generic;` explicitly when needed; a named session retains them until that session is cleared
+- **Private member access** — the compiler normally bypasses
+  `private`/`protected`/`internal` at compile time. A submission that triggers the
+  visibility fallback described below uses standard C# accessibility instead
+- **Pre-loaded usings** — `System` and `UnityEngine` are available by default. Add
+  `using System.Linq;` or `using System.Collections.Generic;` explicitly when
+  needed; a named session retains successfully compiled usings until that session
+  is cleared. An invalid pure-`using` submission returns a compile error and is not
+  retained; usings from any failed mixed submission are not retained either
 
 ## Patterns
 
@@ -70,11 +76,25 @@ cs exec --session agent-a1b2c3 --file "<project-root>/Temp/CSharpConsole/AgentSc
 The second file may refer to variables or helpers declared by the first. Omit
 `--session` again when the dependency ends; unrelated work should get a fresh context.
 
-### Private member access (no reflection needed)
+### Private member access and visibility fallback
 
 ```csharp
 var go = GameObject.Find("Main Camera"); go.m_InstanceID
 ```
+
+The REPL first compiles with accessibility checks disabled. If internal compatibility
+types with the same name exist in multiple assemblies and produce CS0433, CS0104, or
+CS0229, it automatically retries that submission with standard C# visibility. A
+successful retry is prefixed with `[REPL NOTICE]`; only that submission loses access
+to non-public members, and later submissions still try the normal private-access mode
+first.
+
+If one submission both references an ambiguous type and accesses a non-public member,
+neither visibility mode may compile it. The error then includes
+`[REPL ACTION REQUIRED]` with numbered instructions. Follow those instructions and
+split the work into separate submissions; reuse the same explicit `--session` only
+when the split submissions must share state. A plain ambiguity or unrelated compile
+error does not require this split.
 
 ### LINQ queries over live scene
 

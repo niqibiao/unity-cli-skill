@@ -1,70 +1,146 @@
 # AGENTS.md
 
-Guidance for AI coding agents — primarily the **Codex CLI** and other
-non–Claude-Code agents — working in this repository. Claude Code reads
-`CLAUDE.md`; the two are kept in sync on the essentials. This file adds the
-cross-agent CLI invocation rule.
+Cross-agent guidance for working in this repository. This is the canonical project
+instruction file for Codex and other coding agents; `CLAUDE.md` imports it so shared
+rules are maintained in one place.
 
 ## Project overview
 
-A pure **skill** (`unity-cli`) providing a thin, pure-stdlib Python CLI for driving
-the Unity Editor/Player through the C# Console HTTP service
-(`com.zh1zh1.csharpconsole`). No external dependencies, no build step. Installed with
-`npx skills add niqibiao/unity-cli-skill --copy`; the CLI is bundled in the skill and
-runs in place.
+`unity-cli` is a pure skill containing a thin, pure-stdlib Python CLI for driving the
+Unity Editor/Player through the C# Console HTTP service
+(`com.zh1zh1.csharpconsole`). There are no external dependencies or build step. It is
+installed with `npx skills add niqibiao/unity-cli-skill --copy`; the bundled CLI runs
+in place from `skills/unity-cli/scripts/cli/`.
 
-## Invoking the CLI (read this first)
+## Invoking the CLI
 
-Every skill calls the CLI at the skill's own base directory — run it **verbatim,
-without changing directory**:
+Every skill invokes the CLI at the skill's own base directory. Run this form without
+changing directory:
 
 ```bash
-python "<SKILL_DIR>/scripts/cli/cs.py" <cmd> [--json]
+python "<SKILL_DIR>/scripts/cli/cs.py" <command> [args]
 ```
 
-`--json` only on `command` / `list-commands` / `batch` / `complete` (their payload is
-emitted solely as JSON); every other subcommand prints an equivalent text form.
+`<SKILL_DIR>` is the absolute base directory supplied when the skill loads. Do not
+pass `--project` for normal use: `find_project_root()` walks up from both the current
+working directory and the CLI's committed location (`__file__`) to find an `Assets/`
++ `ProjectSettings/` root. `--project <path>` is only an explicit override.
 
-`<SKILL_DIR>` is the absolute base directory the agent provides when the skill loads.
-Both Claude Code and Codex substitute it to an absolute path and run it **without
-`cd`** (verified on Codex 0.139 under native skills).
+Use `--json` on `command`, `list-commands`, and `batch`, whose useful payload is
+structured data. Other subcommands print an equivalent text form; add `--json` to
+`exec` only when its structured envelope is specifically needed.
 
-**Do not pass `--project`.** `find_project_root()` auto-detects the Unity root by
-walking up from the working directory and from the CLI's own committed location
-(`__file__`), so it resolves the project regardless of the shell's cwd. `--project
-<path>` is an optional override only.
+C# code for `exec` goes in a raw `.cs` file via `--file`. Structured parameters for
+`command` and `batch` go in a JSON file via `--input`; never pass either inline.
+Follow `skills/unity-cli/SKILL.md` for the mandatory scratch-file location and full
+operational rules.
 
-The CLI runs in place from the committed skill. `cs setup` installs the Unity package: if
-it's missing from `Packages/manifest.json`, setup adds the source (git URL by default,
-`--source`/`--update` to override) and you open Unity to resolve it; when it's already
-present, setup just warns on a CLI/package `major.minor` mismatch.
+### Lifecycle and setup
 
-## Command-first principle
+- **Pre-setup:** `setup` and `status` use only the bundled stdlib CLI.
+- **Post-setup:** the full CLI is available after
+  `com.zh1zh1.csharpconsole` is installed and Unity resolves it.
 
-When a built-in framework command exists, prefer `cs command` over `cs exec`. Code
-execution is a fallback. Use `cs list-commands --json` to discover commands; for reusable
-C#, prefer the snippet library (`cs snippets`). C# code for `exec` goes in a raw `.cs`
-file via `--file`; structured params for `command`/`batch`/`complete` go in a JSON file
-via `--input` (never inline) — see SKILL.md's "Passing parameters".
+`cs setup` writes the shared, version-controlled `Packages/manifest.json` when the
+package is missing or `--update` is used. Explain the exact source and obtain user
+approval before running a write-producing setup. When the package is already present,
+setup only checks the CLI/package `major.minor` versions. Other commands locate and
+cache the resolved package lazily, so setup is a convenience rather than a gate.
 
-## Two-phase lifecycle
+### Command-first principle
 
-- **Pre-setup:** `setup` and `status` work with pure stdlib, no Unity package needed.
-- **Post-setup:** the full CLI is available once `com.zh1zh1.csharpconsole` is
-  installed and Unity resolves it.
+Prefer `cs command` whenever a built-in framework command covers the task. Use
+`cs list-commands --json` to discover commands, then check the snippet library
+(`cs snippets`) before falling back to ad-hoc `cs exec`.
 
-## Skills (no slash commands)
+### Command map
 
-Everything ships in one skill, `skills/unity-cli/SKILL.md` (+ `references/*.md`),
-loaded by both Claude Code and Codex — there are no slash commands. The `cs setup`
-subcommand is the cross-agent setup/version-check entry point.
+| Command | Phase | Purpose |
+|---------|-------|---------|
+| `cs setup` | pre | Install/version-check the Unity package |
+| `cs status` | pre | Package, connection, and version status |
+| `cs exec --file FILE` | post | Execute raw C# as a fallback |
+| `cs command --input FILE --json` | post | Run one framework command |
+| `cs batch --input FILE --json` | post | Run multiple commands in one request |
+| `cs health` | post | Check service health |
+| `cs refresh [--wait TIMEOUT] [--exit-playmode]` | post | Refresh assets and compile |
+| `cs list-commands --json` | post | Discover available commands |
+| `cs catalog sync` / `cs catalog list` | post | Maintain the custom-command catalog |
+| `cs snippets …` | post | Browse, run, and maintain reusable snippets |
+
+## Architecture
+
+```text
+Agent harness
+  └─ skills/unity-cli/SKILL.md (routing and operating rules)
+      └─ scripts/cli/cs.py (argparse and handlers)
+          └─ core_bridge.py (dynamic csharpconsole_core import)
+              └─ HTTP service in Unity Editor/Player
+```
+
+The CLI does not bundle `csharpconsole_core`. It resolves it from the installed Unity
+package so client and service versions stay aligned:
+
+1. A `file:` dependency in `Packages/manifest.json`.
+2. `Library/PackageCache/com.zh1zh1.csharpconsole@*/Editor/ExternalTool~/console-client/`.
+
+`ConsoleSession` wires the core client, command protocol, configuration, output,
+response parser, and HTTP transport into the CLI operations. Transport failures are
+retried once after one second to tolerate Unity domain reloads.
+
+### Version and machine-local state
+
+- The version source is `skills/unity-cli/scripts/cli/VERSION`; keep it in lockstep
+  with release tag `vX.Y.Z`.
+- `version_check.py` only checks compatibility. `cs.py` pins a plain git package
+  source to the newest tag on the CLI's `major.minor` line when setup writes the
+  manifest; `file:` sources, explicit fragments, and failed tag queries are left
+  unpinned.
+- Package-path cache and snippet usage statistics live in a per-project user cache
+  (`%LOCALAPPDATA%\unity-cli\<project-key>\` on Windows or
+  `$XDG_CACHE_HOME/unity-cli/<project-key>/` elsewhere), never in the project tree.
+- The committed custom-command catalog and snippet audit remain project state; see
+  the skill references for their exact locations.
+
+## Repository structure
+
+```text
+skills/unity-cli/SKILL.md                 Skill entry and routing
+skills/unity-cli/references/*.md          Topic-specific operating guidance
+skills/unity-cli/scripts/cli/cs.py        CLI dispatcher
+skills/unity-cli/scripts/cli/core_bridge.py
+skills/unity-cli/scripts/cli/paths.py     Per-project cache paths
+skills/unity-cli/scripts/cli/VERSION      Release version
+```
+
+Everything ships in this one skill; there are no slash commands.
+
+## Testing
+
+Run the pure-stdlib unit suite after CLI changes:
+
+```bash
+python -B -m unittest discover -s skills/unity-cli/scripts/cli -p "test_*.py" -v
+```
+
+There is no build or dependency-install step.
+
+## Release process
+
+For a requested `X.Y.Z` release:
+
+1. Rename the pending `CHANGELOG.md` section to
+   `## [X.Y.Z] - YYYY-MM-DD`, then add a fresh `## [Unreleased]` above it.
+2. Set `skills/unity-cli/scripts/cli/VERSION` to bare `X.Y.Z`.
+3. Commit the release changes.
+4. Create local tag `vX.Y.Z`.
+
+`.github/workflows/release.yml` extracts the matching changelog section for release
+notes. Never push commits or tags without explicit user confirmation.
 
 ## Conventions
 
-- Pure stdlib Python; do not add external dependencies or a build step.
-- Project detection walks up from cwd, then from `__file__`, for an `Assets/` +
-  `ProjectSettings/` root; `--project` overrides.
-- Machine-local state lives in a per-project home cache, never the project tree.
-- The version source is `skills/unity-cli/scripts/cli/VERSION`; keep it in lockstep
-  with the git tag on release.
-- Never `git push` without explicit user confirmation.
+- Preserve pure stdlib Python; do not add dependencies or a build step.
+- Prefer focused changes and keep agent-facing instructions concise.
+- Machine-local state must never be written into the project tree.
+- Never use `git push` without explicit user confirmation.

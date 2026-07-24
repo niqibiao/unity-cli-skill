@@ -181,14 +181,6 @@ class ConsoleSession:
             self._post, self._parser.parse_health_http_response, self._mode_name,
         )
 
-    def complete(self, code, cursor):
-        return self._client.request_completion(
-            self._post, self._parser.parse_completion_http_response,
-            self._mode_name, self._define, self._using,
-            self._state.runtime_mode, self._state.runtime_dll_path,
-            code, cursor, self._session_id,
-        )
-
     def refresh(self, exit_playmode=False, changed_files=None):
         payload = {}
         if exit_playmode:
