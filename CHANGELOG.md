@@ -13,6 +13,13 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ### Added
 
+- **Bounded Editor diagnostics** — the new core contract
+  `editor/console.get(afterMarkerId="")` reads at most a 16 KiB JSON result from
+  the Unity 2022 Editor log. Pair it with `editor/console.mark` for causal
+  workflow checks; missing markers fail closed, and `truncated=true` is explicit
+  incomplete evidence rather than a clean result. Marker labels are locally
+  preflighted to 200 characters; the package also rejects multiline labels and
+  the reserved marker prefix.
 - **Unity/project-read-only reliability workflow** — `cs doctor` reports project/package,
   target identity, protocol, journal, compile, and readiness findings;
   `cs wait-ready` follows the matching Unity 2022 service across reload and

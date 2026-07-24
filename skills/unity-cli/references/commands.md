@@ -11,9 +11,9 @@ routing. It records each command's domain, visibility tier, availability, argume
 rules, intent boundaries, and verification guidance. The live Unity registry
 remains the execution authority and supplies the installed package's schema.
 
-The manifest retains **59** built-in contracts:
+The manifest retains **60** built-in contracts:
 
-- **57 routable contracts** are returned by default discovery.
+- **58 routable contracts** are returned by default discovery.
 - `editor/menu.open` and `editor/window.open` are retained for compatibility and
   audit, but are blocked because they require noninteractive UI behavior that
   cannot be verified reliably. Discovery hides them unless `--include-blocked` is
@@ -134,7 +134,7 @@ Recognized built-ins are validated before any HTTP request. Preflight rejects:
 - unknown arguments;
 - missing or empty required arguments;
 - wrong scalar, array, vector, or field-pair types;
-- invalid enum/range values;
+- invalid enum, range, or declared string-pattern values;
 - violations of exactly-one, at-most-one, at-least-one, or conditional argument
   rules;
 - session operations that omit an explicit `--session` id.

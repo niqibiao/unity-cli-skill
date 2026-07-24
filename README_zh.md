@@ -9,7 +9,7 @@
 [![Unity](https://img.shields.io/badge/Unity-2022-black.svg?logo=unity)](https://unity.com/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 
-内置 59 份命令契约，其中 57 份可供 Agent 路由，覆盖场景编辑、组件、资产、截图、性能分析等。<br/>
+内置 60 份命令契约，其中 58 份可供 Agent 路由，覆盖场景编辑、组件、资产、截图、性能分析和诊断等。<br/>
 依赖 **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — 基于 Roslyn 的 Unity 交互式 C# REPL。
 
 [快速开始](#-快速开始) · [使用方式](#-使用方式) · [命令](#-命令) · [自定义命令](#-自定义命令) · [架构](#️-架构)
@@ -98,7 +98,7 @@ id。
 
 ### 📦 命令
 
-13 个协议命名空间、59 份内置命令契约。其中 57 份默认可路由；
+13 个协议命名空间、60 份内置命令契约。其中 58 份默认可路由；
 `editor/menu.open` 与 `editor/window.open` 因非交互式 UI 效果无法可靠验证而保留但禁用。
 结构化命令结果通过 `cs command --json` 返回。
 
@@ -200,6 +200,7 @@ id。
 | `window.open`     | 保留契约；Agent 执行已禁用（非交互式 UI） |
 | `console.clear`   | 清空编辑器控制台              |
 | `console.mark`    | 向编辑器日志写入可搜索标记         |
+| `console.get`     | 读取有界的编辑器日志，可选从标记之后开始 |
 
 
 #### asset
@@ -281,9 +282,9 @@ AI Agent                         Unity Editor
 │                  │            │  │  └─ REPL 执行器     │  │
 │  Python CLI      │            │  └────────────────────┘  │
 │  ┌────────────┐  │            │                          │
-│  │ cs.py      │  │            │  59 command contracts    │
+│  │ cs.py      │  │            │  60 command contracts    │
 │  │ core_bridge│  │            │  (GameObject, Component, │
-│  └────────────┘  │            │   Agent 可路由 57 份)     │
+│  └────────────┘  │            │   Agent 可路由 58 份)     │
 └──────────────────┘            └──────────────────────────┘
 ```
 

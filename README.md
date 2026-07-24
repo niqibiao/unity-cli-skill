@@ -9,7 +9,7 @@
 [![Unity](https://img.shields.io/badge/Unity-2022-black.svg?logo=unity)](https://unity.com/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 
-59 built-in command contracts; 57 are routable for scene editing, components, assets, screenshots, profiling, and more.<br/>
+60 built-in command contracts; 58 are routable for scene editing, components, assets, screenshots, profiling, diagnostics, and more.<br/>
 Depends on **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — a Roslyn-powered interactive C# REPL for Unity.
 
 [Quick Start](#-quick-start) · [Usage](#-usage) · [Commands](#-commands) · [Custom Commands](#-custom-commands) · [Architecture](#️-architecture)
@@ -100,7 +100,7 @@ id only for a genuinely new intent.
 
 ### 📦 Commands
 
-59 built-in contracts across 13 wire namespaces. 57 are routable by default;
+60 built-in contracts across 13 wire namespaces. 58 are routable by default;
 `editor/menu.open` and `editor/window.open` are retained but blocked because their
 noninteractive UI effects cannot be verified reliably. Structured command results
 are available through `cs command --json`.
@@ -203,6 +203,7 @@ are available through `cs command --json`.
 | `window.open`     | Retained contract; blocked for agent execution (noninteractive UI) |
 | `console.clear`   | Clear the editor console            |
 | `console.mark`    | Write a searchable marker to the editor log |
+| `console.get`     | Read bounded Editor log output, optionally after a marker |
 
 
 #### asset
@@ -284,9 +285,9 @@ AI Agent                         Unity Editor
 │                  │            │  │  └─ REPL Executor  │  │
 │  Python CLI      │            │  └────────────────────┘  │
 │  ┌────────────┐  │            │                          │
-│  │ cs.py      │  │            │  59 command contracts    │
+│  │ cs.py      │  │            │  60 command contracts    │
 │  │ core_bridge│  │            │  (GameObject, Component, │
-│  └────────────┘  │            │   57 routable by agents) │
+│  └────────────┘  │            │   58 routable by agents) │
 └──────────────────┘            └──────────────────────────┘
 ```
 
