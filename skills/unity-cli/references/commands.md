@@ -1,13 +1,15 @@
 # Unity CLI Commands
 
-Use the framework command protocol for bounded Unity operations. `SKILL.md`
-defines routing order; this reference covers discovery, contracts, and verification.
+Use the framework command protocol for bounded, structured Unity operations. The
+canonical routing order is defined once in `SKILL.md`; this reference covers
+domain discovery, request contracts, and result verification.
 
 ## Static contract and live schema
 
-`scripts/cli/command_manifest.json` supplies built-in routing metadata, argument
-rules, intent boundaries, and verification. The live registry remains the
-execution authority and supplies the installed package schema.
+`scripts/cli/command_manifest.json` is the canonical static contract for built-in
+routing. It records each command's domain, visibility tier, availability, argument
+rules, intent boundaries, and verification guidance. The live Unity registry
+remains the execution authority and supplies the installed package's schema.
 
 The manifest retains **62** built-in contracts:
 
@@ -20,8 +22,10 @@ The manifest retains **62** built-in contracts:
 Do not copy the full registry into agent context. Narrow discovery by domain and
 tier, then inspect one exact contract when needed.
 
-`requiresCapabilities` marks an offline candidate, not installed support. Verify
-the live registry; the CLI also checks capabilities before claim or dispatch.
+An offline entry that declares `requiresCapabilities` is a committed candidate,
+not evidence that the installed package implements it. Verify that entry against
+the live registry before execution. The CLI also checks the advertised capability
+before it claims or dispatches the request.
 
 ## Domain boundaries
 
