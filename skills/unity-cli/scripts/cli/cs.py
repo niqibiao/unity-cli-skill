@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 # Ensure the cli package is importable when run as a standalone script
@@ -77,15 +78,32 @@ def find_project_root(hint=None):
 
 
 def detect_port(project_root):
-    """Read the effective port from Temp/CSharpConsole/refresh_state.json."""
-    try:
-        state_file = Path(project_root) / "Temp" / "CSharpConsole" / "refresh_state.json"
-        data = json.loads(state_file.read_text("utf-8"))
-        port = data.get("effectivePort")
-        if port:
-            return int(port)
-    except (OSError, json.JSONDecodeError, ValueError):
-        pass
+    """Read the effective Editor port from current or legacy refresh state."""
+    state_files = (
+        Path(project_root)
+        / "Library"
+        / "CSharpConsole"
+        / "RefreshState"
+        / "v1"
+        / "refresh_state.json",
+        # Compatibility with package versions that stored discovery state in
+        # Unity's rebuildable Temp directory.
+        Path(project_root)
+        / "Temp"
+        / "CSharpConsole"
+        / "refresh_state.json",
+    )
+    for state_file in state_files:
+        try:
+            data = json.loads(state_file.read_text("utf-8"))
+            port = data.get("effectivePort")
+            if isinstance(port, bool):
+                continue
+            port = int(port)
+            if 1 <= port <= 65535:
+                return port
+        except (OSError, AttributeError, json.JSONDecodeError, TypeError, ValueError):
+            continue
     return None
 
 
@@ -121,8 +139,55 @@ def _read_input_json(src):
 
 _SLIM_DROP = {"stage", "type", "exitCode", "sessionId", "runId", "mode", "durationMs"}
 _HEALTH_DROP = {"ok", "initialized", "isEditor", "port", "refreshing", "editorState",
-                "packageVersion", "protocolVersion", "unityVersion", "operation",
-                "accepted", "sessionsCleared", "exitPlayModeRequested", "message"}
+                 "packageVersion", "protocolVersion", "unityVersion", "operation",
+                 "accepted", "sessionsCleared", "exitPlayModeRequested", "message",
+                 "targetId", "serviceEpoch", "capabilities", "journalWritable",
+                 "dedupeWindowSeconds", "isUpdating", "isPlaying",
+                 "mainThreadHeartbeatAgeMs"}
+
+
+def _compact_diagnostic_data(source_data, *, include_operation=False):
+    source_data = source_data if isinstance(source_data, dict) else {}
+    compact = {
+        "ready": bool(source_data.get("ready")),
+        "unity": source_data.get("unity") or "Unity 2022",
+        "port": source_data.get("port"),
+    }
+    findings = [
+        item
+        for item in source_data.get("findings") or []
+        if item.get("severity") != "info"
+    ]
+    if findings:
+        compact["findings"] = findings
+    if source_data.get("waitedSeconds") is not None:
+        compact["waitedSeconds"] = source_data["waitedSeconds"]
+    if source_data.get("timedOut"):
+        compact["timedOut"] = True
+    for key in ("expectedRefreshOperationId", "expectedGeneration"):
+        if source_data.get(key) is not None:
+            compact[key] = source_data[key]
+
+    operation = source_data.get("operation")
+    if include_operation and isinstance(operation, dict):
+        local = operation.get("local") or {}
+        server = operation.get("server") or {}
+        receipt = local.get("receipt") or {}
+        compact_operation = {
+            "id": operation.get("id"),
+            "localState": local.get("state"),
+            "serverState": server.get("state"),
+        }
+        if receipt.get("replayed") is not None:
+            compact_operation["replayed"] = bool(receipt.get("replayed"))
+        if operation.get("serverError"):
+            compact_operation["serverError"] = operation["serverError"]
+        compact["operation"] = {
+            key: value
+            for key, value in compact_operation.items()
+            if value is not None
+        }
+    return compact
 
 
 def _slim_result(result):
@@ -144,6 +209,10 @@ def _slim_result(result):
         # command echo removal
         elif "command" in data and len(data) == 1:
             out.pop("data", None)
+        # doctor/wait-ready/refresh --wait: keep only actionable findings in
+        # compact mode. Full evidence remains available with --verbose.
+        elif "ready" in data and "findings" in data:
+            out["data"] = _compact_diagnostic_data(data)
         # health/refresh: strip diagnostic fields
         elif "initialized" in data or "accepted" in data:
             trimmed = {k: v for k, v in data.items() if k not in _HEALTH_DROP}
@@ -153,6 +222,22 @@ def _slim_result(result):
         out.pop("summary", None)
     if not out.get("data"):
         out.pop("data", None)
+    # Successful receipts are verbose-only diagnostics. For non-success
+    # results retain only the operation id/state needed for safe recovery.
+    invocation = out.get("invocation")
+    if isinstance(invocation, dict):
+        if out.get("ok"):
+            out.pop("invocation", None)
+        else:
+            compact_invocation = {
+                key: invocation.get(key)
+                for key in ("invocationId", "id", "state")
+                if invocation.get(key) is not None
+            }
+            if compact_invocation:
+                out["invocation"] = compact_invocation
+            else:
+                out.pop("invocation", None)
     return out
 
 
@@ -193,7 +278,80 @@ def _new_session(root, args, pkg_dir):
     return ConsoleSession(root, args.ip, args.port, args.mode, args.timeout,
                           pkg_dir=pkg_dir,
                           compile_ip=args.compile_ip, compile_port=args.compile_port,
-                          session_id=getattr(args, "session", None))
+                          session_id=getattr(args, "session", None),
+                          operation_id=getattr(args, "operation_id", None))
+
+
+def _new_reliability_coordinator(root, args):
+    from cli.reliability import ReliabilityCoordinator
+    return ReliabilityCoordinator(
+        root,
+        ip=args.ip,
+        port=args.port,
+        mode=args.mode,
+        compile_ip=args.compile_ip,
+        compile_port=args.compile_port,
+    )
+
+
+def _emit_diagnostic_result(result, args):
+    if args.as_json:
+        rendered = result
+        if not args.verbose:
+            rendered = dict(result)
+            source_data = result.get("data") or {}
+            rendered["data"] = _compact_diagnostic_data(
+                source_data,
+                include_operation=True,
+            )
+        if args.verbose:
+            json.dump(rendered, sys.stdout, ensure_ascii=False, indent=2)
+        else:
+            json.dump(
+                rendered,
+                sys.stdout,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        print()
+        return
+    print(result.get("summary") or ("OK" if result.get("ok") else "Not ready"))
+    findings = (result.get("data") or {}).get("findings") or []
+    for finding in findings:
+        if finding.get("severity") == "info" and not args.verbose:
+            continue
+        marker = {
+            "error": "ERROR",
+            "warning": "WARN",
+            "info": "OK",
+        }.get(finding.get("severity"), "INFO")
+        print(f"[{marker}] {finding.get('code')}: {finding.get('summary')}")
+        remediation = finding.get("remediation")
+        if remediation:
+            print(f"  Next: {remediation}")
+
+
+def cmd_doctor(root, args):
+    coordinator = _new_reliability_coordinator(root, args)
+    result = coordinator.doctor(
+        operation_id=getattr(args, "doctor_operation", None),
+        verbose=args.verbose,
+        timeout=args.timeout,
+    )
+    _emit_diagnostic_result(result, args)
+    return result.get("exitCode", 3)
+
+
+def cmd_wait_ready(root, args):
+    coordinator = _new_reliability_coordinator(root, args)
+    result = coordinator.wait_ready(
+        args.timeout,
+        expected_operation_id=getattr(args, "refresh_operation", None),
+        minimum_generation=getattr(args, "refresh_generation", None),
+        verbose=args.verbose,
+    )
+    _emit_diagnostic_result(result, args)
+    return result.get("exitCode", 3)
 
 
 def _pin_source_tag(source):
@@ -339,14 +497,26 @@ def _cmd_status_json(root, args, agent_root=None):
                     "compileFailed": hdata.get("compileFailed", False),
                 }
                 # Build summary from live data
-                unity_ver = hdata.get("unityVersion", "")
+                unity_ver = hdata.get("unityVersion")
                 editor_state = hdata.get("editorState", "")
-                if unity_ver:
-                    result["summary"] = f"Connected to Unity {unity_ver} ({editor_state})" if editor_state else f"Connected to Unity {unity_ver}"
+                unity_supported = (
+                    isinstance(unity_ver, str)
+                    and unity_ver.startswith("2022.")
+                )
+                if unity_supported:
+                    result["summary"] = (
+                        f"Connected to Unity 2022 ({editor_state})"
+                        if editor_state
+                        else "Connected to Unity 2022"
+                    )
+                    result["ok"] = True
+                    result["exitCode"] = 0
                 else:
-                    result["summary"] = f"Connected ({editor_state})" if editor_state else "Connected"
-                result["ok"] = True
-                result["exitCode"] = 0
+                    result["summary"] = "Connected Editor is not Unity 2022"
+                if args.verbose:
+                    data["runtimeEvidence"] = {
+                        "unityVersion": unity_ver,
+                    }
             else:
                 data["service"] = {"reachable": False, "port": args.port, "mode": args.mode}
                 data["editor"] = None
@@ -430,19 +600,28 @@ def cmd_status(root, args, agent_root=None):
         s = _new_session(root, args, pkg_dir)
         r = s.health()
         if r.get("ok"):
-            rc = 0
             data = r.get("data", {})
-            print(f"service: OK (port {args.port}, {args.mode})")
+            unity_ver = data.get("unityVersion")
+            unity_supported = (
+                isinstance(unity_ver, str)
+                and unity_ver.startswith("2022.")
+            )
+            if unity_supported:
+                rc = 0
+                print(f"service: OK (port {args.port}, {args.mode})")
+            else:
+                print("service: ERROR (connected Editor is not Unity 2022)")
             pkg_ver = data.get("packageVersion")
             proto_ver = data.get("protocolVersion")
-            unity_ver = data.get("unityVersion")
             if pkg_ver:
                 ver_parts = [pkg_ver]
                 if proto_ver is not None:
                     ver_parts.append(f"protocol v{proto_ver}")
-                if unity_ver:
-                    ver_parts.append(f"Unity {unity_ver}")
+                if unity_supported:
+                    ver_parts.append("Unity 2022")
                 print(f"version: {', '.join(ver_parts)}")
+            if args.verbose and unity_ver:
+                print(f"runtime_evidence: unityVersion={unity_ver}")
         else:
             print("service: UNREACHABLE")
     except Exception as e:
@@ -1664,9 +1843,10 @@ def _apply_conn_opts(parser, args, payload):
     so an explicit flag always wins over the JSON. A value that can't be cast fails the
     command (like an invalid CLI flag would) instead of silently falling back."""
     for key, attr, cast in (("ip", "ip", str), ("port", "port", int),
-                            ("mode", "mode", str), ("timeout", "timeout", int),
-                            ("compileIp", "compile_ip", str),
-                            ("compilePort", "compile_port", int)):
+                             ("mode", "mode", str), ("timeout", "timeout", int),
+                             ("compileIp", "compile_ip", str),
+                             ("compilePort", "compile_port", int),
+                             ("operationId", "operation_id", str)):
         if key in payload and not hasattr(args, attr):
             try:
                 setattr(args, attr, cast(payload[key]))
@@ -1761,6 +1941,12 @@ def main():
     shared.add_argument("--timeout", type=int, default=SUPPRESS, help="HTTP timeout in seconds (default: 30)")
     shared.add_argument("--session", default=SUPPRESS,
                         help="Reuse a named REPL session (default: fresh session)")
+    shared.add_argument(
+        "--operation-id",
+        dest="operation_id",
+        default=SUPPRESS,
+        help=argparse.SUPPRESS,
+    )
     shared.add_argument("--json", dest="as_json", action="store_true", default=SUPPRESS,
                         help="JSON output (compact by default, use --verbose for full)")
     shared.add_argument("--verbose", action="store_true", default=SUPPRESS,
@@ -1777,6 +1963,40 @@ def main():
                           help="Force Unity to re-resolve the package (delete + re-add the manifest entry)")
 
     sub.add_parser("status", parents=[shared], help="Package + connection status")
+
+    sp_doctor = sub.add_parser(
+        "doctor",
+        parents=[shared],
+        help="Read-only project, package, readiness, and operation diagnosis",
+    )
+    sp_doctor.add_argument(
+        "--operation",
+        dest="doctor_operation",
+        default=None,
+        metavar="UUID",
+        help="Inspect one uncertain operation without re-running it",
+    )
+
+    sp_wait_ready = sub.add_parser(
+        "wait-ready",
+        parents=[shared],
+        help="Wait without mutation until the matching Unity 2022 service is ready",
+    )
+    sp_wait_ready.add_argument(
+        "--refresh-operation",
+        dest="refresh_operation",
+        default=None,
+        metavar="OP_ID",
+        help="Resume waiting for one refresh operation id",
+    )
+    sp_wait_ready.add_argument(
+        "--generation",
+        dest="refresh_generation",
+        default=None,
+        type=int,
+        metavar="N",
+        help="Minimum generation paired with --refresh-operation",
+    )
 
     sp_exec = sub.add_parser("exec", parents=[shared], help="Execute C# code")
     sp_exec.add_argument("--file", "-f", dest="file",
@@ -1929,9 +2149,27 @@ def main():
     # overwrites of values given at the top level.
     for k, v in (("project", None), ("ip", "127.0.0.1"), ("port", None),
                  ("mode", "editor"), ("compile_ip", None), ("compile_port", None),
-                 ("timeout", 30), ("as_json", False), ("verbose", False)):
+                 ("timeout", 30), ("as_json", False), ("verbose", False),
+                 ("operation_id", None)):
         if not hasattr(args, k):
             setattr(args, k, v)
+
+    if args.cmd == "wait-ready":
+        refresh_operation = getattr(args, "refresh_operation", None)
+        refresh_generation = getattr(args, "refresh_generation", None)
+        if (refresh_operation is None) != (refresh_generation is None):
+            p.error(
+                "--refresh-operation and --generation must be supplied together"
+            )
+        if refresh_operation is not None:
+            try:
+                args.refresh_operation = uuid.UUID(
+                    str(refresh_operation)
+                ).hex
+            except (ValueError, AttributeError, TypeError):
+                p.error("--refresh-operation must be a UUID")
+            if refresh_generation <= 0:
+                p.error("--generation must be positive")
 
     # Resolve C# for exec: --file (raw code) or --input (JSON {"code":..}) — exactly one.
     if args.cmd == "exec":
@@ -1956,7 +2194,7 @@ def main():
     # resolved project root (never raw cwd) so it stays stable across agents/cwd.
     agent_root = str(root) if root else (args.project or str(Path.cwd()))
 
-    # Auto-detect editor port from refresh_state.json when needed for
+    # Auto-detect the Editor port from durable refresh state when needed for
     # --port (editor mode) or --compile-port fallback (runtime mode).
     detected_editor_port = None
     needs_detect = args.port is None or (args.mode == "runtime" and args.compile_port is None)
@@ -1989,6 +2227,10 @@ def main():
         sys.exit(cmd_setup(root, args))
     if args.cmd == "status":
         sys.exit(cmd_status(root, args, agent_root))
+    if args.cmd == "doctor":
+        sys.exit(cmd_doctor(root, args))
+    if args.cmd == "wait-ready":
+        sys.exit(cmd_wait_ready(root, args))
     if args.cmd == "catalog":
         if root is None:
             print("Error: no Unity project found.", file=sys.stderr)
@@ -2055,13 +2297,56 @@ def main():
     s = _new_session(root, args, pkg_dir)
 
     def _refresh():
-        r = s.refresh(
+        refresh_result = s.refresh(
             exit_playmode=getattr(args, "exit_playmode", False),
             changed_files=getattr(args, "files", None),
         )
+        r = refresh_result
         if args.wait is not None:
             if r.get("ok"):
-                r = s.wait_ready(timeout=args.wait)
+                data = r.get("data") or {}
+                operation = data.get("operation") or {}
+                expected_operation_id = operation.get("opId")
+                expected_generation = data.get("generation")
+                if (
+                    not isinstance(expected_operation_id, str)
+                    or not expected_operation_id
+                    or not isinstance(expected_generation, int)
+                    or isinstance(expected_generation, bool)
+                    or expected_generation <= 0
+                ):
+                    r = dict(refresh_result)
+                    r.update({
+                        "ok": False,
+                        "type": "outcome_unknown",
+                        "exitCode": 4,
+                        "summary": (
+                            "Refresh was accepted without a valid operation id "
+                            "and generation; inspect its invocation before "
+                            "starting another refresh."
+                        ),
+                    })
+                else:
+                    coordinator = _new_reliability_coordinator(root, args)
+                    wait_result = coordinator.wait_ready(
+                        args.wait,
+                        expected_operation_id=expected_operation_id,
+                        minimum_generation=expected_generation,
+                        verbose=args.verbose,
+                    )
+                    if not wait_result.get("ok"):
+                        wait_result = dict(wait_result)
+                        wait_data = dict(wait_result.get("data") or {})
+                        wait_data.update({
+                            "expectedRefreshOperationId": expected_operation_id,
+                            "expectedGeneration": expected_generation,
+                        })
+                        wait_result["data"] = wait_data
+                        if isinstance(refresh_result.get("invocation"), dict):
+                            wait_result["invocation"] = dict(
+                                refresh_result["invocation"]
+                            )
+                    r = wait_result
             else:
                 print("Warning: refresh returned ok=false; --wait skipped", file=sys.stderr)
         return r
@@ -2087,6 +2372,7 @@ def main():
     }
 
     result = dispatch[args.cmd]()
+    exit_code = result.get("exitCode", 0)
 
     if args.as_json:
         if not args.verbose:
@@ -2096,7 +2382,7 @@ def main():
     else:
         s.emit(result)
 
-    sys.exit(result.get("exitCode", 0))
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

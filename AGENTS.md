@@ -37,7 +37,8 @@ operational rules.
 
 ### Lifecycle and setup
 
-- **Pre-setup:** `setup` and `status` use only the bundled stdlib CLI.
+- **Pre-setup:** `setup`, `status`, `doctor`, and `wait-ready` use only the
+  bundled stdlib CLI.
 - **Post-setup:** the full CLI is available after
   `com.zh1zh1.csharpconsole` is installed and Unity resolves it.
 
@@ -68,6 +69,8 @@ through because their contracts are project-specific.
 |---------|-------|---------|
 | `cs setup` | pre | Install/version-check the Unity package |
 | `cs status` | pre | Package, connection, and version status |
+| `cs doctor [--operation UUID]` | pre | Unity/project-read-only diagnosis; probes the machine-local outbox |
+| `cs wait-ready [--timeout TIMEOUT]` | pre | Wait without Unity/project mutation; optionally bind a refresh op/generation |
 | `cs exec --file FILE` | post | Execute raw C# as a fallback |
 | `cs command --input FILE --json` | post | Run one framework command |
 | `cs batch --input FILE --json` | post | Run multiple commands in one request |
@@ -95,10 +98,16 @@ package so client and service versions stay aligned:
 2. `Library/PackageCache/com.zh1zh1.csharpconsole@*/Editor/ExternalTool~/console-client/`.
 
 `ConsoleSession` wires the core client, command protocol, configuration, output,
-response parser, and HTTP transport into the CLI operations. Clearly refused
-connections are retried once after one second to tolerate Unity domain reloads.
-Timeouts, HTTP errors, and connection resets are not retried because a mutation may
-already have executed.
+response parser, and HTTP transport into the CLI operations. `reliability.py`
+owns project identity, readiness reduction, diagnostics, and the machine-local
+invocation outbox. Protocol-v2 operations use a stable invocation id and exact
+request bytes for one bounded retry; the Unity-side durable journal either
+replays the original response or prevents a second dispatch within its advertised
+dedupe window. `outcome_unknown` and `operation_in_progress` exit 4 and must be
+inspected with `cs doctor --operation UUID`; never replace that UUID with a new
+one while the outcome is unresolved. Once the outbox records an id as sent, a
+later CLI run never dispatches it again, including after the server window
+expires; use a new id only for a new intent.
 
 ### Version and machine-local state
 
@@ -108,7 +117,7 @@ already have executed.
   source to the newest tag on the CLI's `major.minor` line when setup writes the
   manifest; `file:` sources, explicit fragments, and failed tag queries are left
   unpinned.
-- Package-path cache and snippet usage statistics live in a per-project user cache
+- Package-path cache, invocation audit records, and snippet usage statistics live in a per-project user cache
   (`%LOCALAPPDATA%\unity-cli\<project-key>\` on Windows or
   `$XDG_CACHE_HOME/unity-cli/<project-key>/` elsewhere), never in the project tree.
 - The committed custom-command catalog and snippet audit remain project state; see
@@ -123,6 +132,7 @@ skills/unity-cli/scripts/cli/cs.py        CLI dispatcher
 skills/unity-cli/scripts/cli/command_index.py
 skills/unity-cli/scripts/cli/command_manifest.json
 skills/unity-cli/scripts/cli/core_bridge.py
+skills/unity-cli/scripts/cli/reliability.py
 skills/unity-cli/scripts/cli/paths.py     Per-project cache paths
 skills/unity-cli/scripts/cli/VERSION      Release version
 ```

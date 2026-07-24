@@ -11,6 +11,26 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **Unity/project-read-only reliability workflow** — `cs doctor` reports project/package,
+  target identity, protocol, journal, compile, and readiness findings;
+  `cs wait-ready` follows the matching Unity 2022 service across reload and
+  local port changes without triggering a mutation, and can resume a specific
+  refresh by operation id and generation. `cs doctor --operation <UUID>`
+  reconciles an uncertain HTTP invocation with local and server receipts. These
+  diagnostics may create and delete a probe in the machine-local outbox cache.
+
+### Changed
+
+- **Protocol-v2 operations are at-most-once** — command, batch, exec, compile,
+  and refresh requests are bound to a durable invocation id and exact bytes.
+  One bounded retry reuses both; within the advertised dedupe window Unity
+  replays a persisted result or blocks a second dispatch. Unresolved or
+  in-progress work exits 4 instead of being blindly repeated. Once the outbox
+  records an id as sent, later CLI runs diagnose it rather than redispatching it,
+  including after the server retention window expires.
+
 ## [2.0.8] - 2026-07-23
 
 ### Removed
@@ -65,13 +85,13 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   JSON-escaped) is demoted to a stdin-piping edge case. Scratch `.cs` / `req.json`
   files now have a **mandatory location**: the absolute path
   `<project-root>/Temp/CSharpConsole/AgentScratch/` — inside Unity's own `Temp/`
-  (never imported, auto-cleaned on editor close, write-sandbox-friendly for
-  workspace-bound agents, and colocated with the service's existing
-  `Temp/CSharpConsole/` state). Semantic file names, overwritten per task; one-shot
+  (never imported, auto-cleaned on editor close, and write-sandbox-friendly for
+  workspace-bound agents). Semantic file names, overwritten per task; one-shot
   suffix only under known same-project concurrency. Never under `Assets/` (a typical
   REPL snippet fails project compilation there — blocking refresh workflows and,
   after an editor restart, potentially preventing the service from starting), and
-  never delete `Temp/CSharpConsole/` itself. Decided in an adversarial CC↔Codex
+  never delete `Temp/CSharpConsole/` itself because older package versions may
+  retain compatibility state there. Decided in an adversarial CC↔Codex
   review (local audit transcript:
   `cc-codex-discussion-history/20260722-213810-scratch-file-conventions.md`, kept
   untracked by repo policy), which replaced the earlier

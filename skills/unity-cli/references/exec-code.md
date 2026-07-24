@@ -149,4 +149,6 @@ durable storage.
 
 - `exec` output is text; the process exit code carries success/failure. Use `--json`
   only when the structured envelope is needed (then check `ok` / `exitCode`)
-- Port is auto-detected from `Temp/CSharpConsole/refresh_state.json`
+- Port is auto-detected from
+  `Library/CSharpConsole/RefreshState/v1/refresh_state.json`, with the old
+  `Temp/CSharpConsole/refresh_state.json` retained as a compatibility fallback.
