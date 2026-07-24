@@ -50,8 +50,17 @@ cache the resolved package lazily, so setup is a convenience rather than a gate.
 ### Command-first principle
 
 Prefer `cs command` whenever a built-in framework command covers the task. Use
-`cs list-commands --json` to discover commands, then check the snippet library
-(`cs snippets`) before falling back to ad-hoc `cs exec`.
+`cs list-commands --offline --domain <domain> --tier core --json` to discover a
+small committed contract set without connecting to Unity. Query the matching
+advanced tier only when needed; remove `--offline` to verify the installed
+package's live registry. Then check the snippet library (`cs snippets`) before
+falling back to ad-hoc `cs exec`.
+
+Recognized built-in requests are preflighted from the committed manifest before
+HTTP dispatch. Unknown arguments, missing requirements, invalid types/ranges,
+ambiguous selectors, empty mutations, blocked actions, and missing explicit
+session ids fail without executing Unity. Project-defined custom commands pass
+through because their contracts are project-specific.
 
 ### Command map
 
@@ -64,7 +73,8 @@ Prefer `cs command` whenever a built-in framework command covers the task. Use
 | `cs batch --input FILE --json` | post | Run multiple commands in one request |
 | `cs health` | post | Check service health |
 | `cs refresh [--wait TIMEOUT] [--exit-playmode]` | post | Refresh assets and compile |
-| `cs list-commands --json` | post | Discover available commands |
+| `cs list-commands --offline … --json` | pre/post | Discover committed contracts by domain/tier/id |
+| `cs list-commands … --json` | post | Inspect the installed package's live registry |
 | `cs catalog sync` / `cs catalog list` | post | Maintain the custom-command catalog |
 | `cs snippets …` | post | Browse, run, and maintain reusable snippets |
 
@@ -85,8 +95,10 @@ package so client and service versions stay aligned:
 2. `Library/PackageCache/com.zh1zh1.csharpconsole@*/Editor/ExternalTool~/console-client/`.
 
 `ConsoleSession` wires the core client, command protocol, configuration, output,
-response parser, and HTTP transport into the CLI operations. Transport failures are
-retried once after one second to tolerate Unity domain reloads.
+response parser, and HTTP transport into the CLI operations. Clearly refused
+connections are retried once after one second to tolerate Unity domain reloads.
+Timeouts, HTTP errors, and connection resets are not retried because a mutation may
+already have executed.
 
 ### Version and machine-local state
 
@@ -108,6 +120,8 @@ retried once after one second to tolerate Unity domain reloads.
 skills/unity-cli/SKILL.md                 Skill entry and routing
 skills/unity-cli/references/*.md          Topic-specific operating guidance
 skills/unity-cli/scripts/cli/cs.py        CLI dispatcher
+skills/unity-cli/scripts/cli/command_index.py
+skills/unity-cli/scripts/cli/command_manifest.json
 skills/unity-cli/scripts/cli/core_bridge.py
 skills/unity-cli/scripts/cli/paths.py     Per-project cache paths
 skills/unity-cli/scripts/cli/VERSION      Release version

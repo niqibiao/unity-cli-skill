@@ -6,10 +6,10 @@
 **基于 [unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Unity](https://img.shields.io/badge/Unity-2022.3%2B-black.svg?logo=unity)](https://unity.com/)
+[![Unity](https://img.shields.io/badge/Unity-2022-black.svg?logo=unity)](https://unity.com/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 
-40+ 命令覆盖场景编辑、组件、资产、截图、性能分析等。<br/>
+内置 59 份命令契约，其中 57 份可供 Agent 路由，覆盖场景编辑、组件、资产、截图、性能分析等。<br/>
 依赖 **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — 基于 Roslyn 的 Unity 交互式 C# REPL。
 
 [快速开始](#-快速开始) · [使用方式](#-使用方式) · [命令](#-命令) · [自定义命令](#-自定义命令) · [架构](#️-架构)
@@ -56,7 +56,7 @@ npx skills add niqibiao/unity-cli-skill --copy
 
 在 AI Agent 里运行 **`unity-cli setup`**。
 
-**前置条件：** 一个兼容 skills 的 Agent（如 [Claude Code](https://claude.ai/code) 或 [Codex CLI](https://github.com/openai/codex) 0.139+）、Node.js（用于 `npx`）、Unity 2022.3+、Python 3.7+
+**前置条件：** 一个兼容 skills 的 Agent（如 [Claude Code](https://claude.ai/code) 或 [Codex CLI](https://github.com/openai/codex) 0.139+）、Node.js（用于 `npx`）、Unity 2022、Python 3.7+
 
 ### 💬 使用方式
 
@@ -90,7 +90,9 @@ Claude 会自动选择合适的命令，或在需要时编写 C# 代码。
 
 ### 📦 命令
 
-13 个命名空间、50 个内置命令。所有命令支持 `--json` 输出。
+13 个协议命名空间、59 份内置命令契约。其中 57 份默认可路由；
+`editor/menu.open` 与 `editor/window.open` 因非交互式 UI 效果无法可靠验证而保留但禁用。
+结构化命令结果通过 `cs command --json` 返回。
 
 #### gameobject
 
@@ -142,6 +144,9 @@ Claude 会自动选择合适的命令，或在需要时编写 C# 代码。
 | `create`      | 从场景中的 GameObject 创建 Prefab 资产 |
 | `instantiate` | 将 Prefab 实例化到当前场景             |
 | `unpack`      | 解包 Prefab 实例                  |
+| `asset_get` / `asset_hierarchy` | 检查 Prefab 资产内的 GameObject 与层级 |
+| `asset_add_component` / `asset_get_component` / `asset_modify_component` / `asset_remove_component` | 直接读取和编辑 Prefab 资产中的组件 |
+| `asset_add_gameobject` / `asset_modify_gameobject` / `asset_remove_gameobject` | 直接添加、编辑或移除 Prefab 资产中的 GameObject |
 
 
 #### material
@@ -183,8 +188,8 @@ Claude 会自动选择合适的命令，或在需要时编写 C# 代码。
 | `playmode.status` | 获取当前 Play Mode 状态     |
 | `playmode.enter`  | 进入 Play Mode          |
 | `playmode.exit`   | 退出 Play Mode          |
-| `menu.open`       | 按路径执行菜单项              |
-| `window.open`     | 按类型名打开编辑器窗口           |
+| `menu.open`       | 保留契约；Agent 执行已禁用（非交互式 UI） |
+| `window.open`     | 保留契约；Agent 执行已禁用（非交互式 UI） |
 | `console.clear`   | 清空编辑器控制台              |
 | `console.mark`    | 向编辑器日志写入可搜索标记         |
 
@@ -268,9 +273,9 @@ AI Agent                         Unity Editor
 │                  │            │  │  └─ REPL 执行器     │  │
 │  Python CLI      │            │  └────────────────────┘  │
 │  ┌────────────┐  │            │                          │
-│  │ cs.py      │  │            │  40+ CommandActions      │
+│  │ cs.py      │  │            │  59 command contracts    │
 │  │ core_bridge│  │            │  (GameObject, Component, │
-│  └────────────┘  │            │   Prefab, Material, ...) │
+│  └────────────┘  │            │   Agent 可路由 57 份)     │
 └──────────────────┘            └──────────────────────────┘
 ```
 

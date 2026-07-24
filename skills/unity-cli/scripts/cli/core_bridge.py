@@ -1,5 +1,6 @@
 """Dynamic bridge to csharpconsole_core from an installed Unity package."""
 
+import errno
 import json
 import os
 import sys
@@ -10,6 +11,39 @@ from cli import PACKAGE_NAME, DEFAULT_EDITOR_PORT, load_pkg_path, save_pkg_path
 
 CORE_RELATIVE = Path("Editor/ExternalTool~/console-client")
 _RETRY_DELAY_S = 1
+
+
+def _is_connection_refused(error):
+    """Return True only when a request clearly failed before connecting.
+
+    A timeout or a reset can happen after Unity has already executed a
+    mutating command. Retrying those failures would risk applying the mutation
+    twice, so the automatic domain-reload retry is intentionally limited to a
+    refused connection.
+    """
+    pending = [error]
+    seen = set()
+    refused_codes = {errno.ECONNREFUSED, 10061}  # POSIX and Winsock
+
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+
+        if isinstance(current, ConnectionRefusedError):
+            return True
+        if getattr(current, "errno", None) in refused_codes:
+            return True
+        if getattr(current, "winerror", None) in refused_codes:
+            return True
+
+        for attribute in ("reason", "__cause__", "__context__"):
+            nested = getattr(current, attribute, None)
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+
+    return False
 
 
 def _find_pkg_dir(project_root):
@@ -80,7 +114,7 @@ def _ensure_path(core_path):
 
 
 def _make_post_with_retry(transport_http, state, default_timeout):
-    """Create a POST function that retries once when the server is unreachable."""
+    """Create a POST function that retries one refused connection."""
     # The urllib-based core raises TransportError for every transport failure
     # (connection refused, timeout, non-2xx). Older requests-based cores raised
     # OSError subclasses instead. Catch both so the domain-reload retry survives
@@ -94,7 +128,9 @@ def _make_post_with_retry(transport_http, state, default_timeout):
         url_base = state.current_server_base_url()
         try:
             return transport_http.post_json(url_base, endpoint, payload, t)
-        except transient:
+        except transient as error:
+            if not _is_connection_refused(error):
+                raise
             time.sleep(_RETRY_DELAY_S)
             return transport_http.post_json(url_base, endpoint, payload, t)
 
@@ -144,6 +180,7 @@ class ConsoleSession:
         self._state = state
 
         self._session_id = client_base.generate_session_id(session_id)
+        self._timeout = timeout
         self._post = _make_post_with_retry(transport_http, state, timeout)
         self._mode_name = lambda: state.current_mode_name()
         # Placeholders required by csharpconsole_core API for persistent
@@ -174,6 +211,7 @@ class ConsoleSession:
         return self._cmd.request_command(
             self._post, self._parser.parse_command_http_response,
             self._mode_name, namespace, action, self._session_id, args,
+            timeout_seconds=self._timeout,
         )
 
     def health(self):

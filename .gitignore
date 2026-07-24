@@ -4,6 +4,7 @@ __pycache__/
 .pkg-cache.json
 .catalog-cache.json
 skills/unity-cli-command/dynamic-commands.md
+skills/*-workspace/
 docs
 tests/
 cc-codex-discussion-history/

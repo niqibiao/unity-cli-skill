@@ -6,10 +6,10 @@
 **Powered by [unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Unity](https://img.shields.io/badge/Unity-2022.3%2B-black.svg?logo=unity)](https://unity.com/)
+[![Unity](https://img.shields.io/badge/Unity-2022-black.svg?logo=unity)](https://unity.com/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 
-40+ commands for scene editing, components, assets, screenshots, profiling, and more.<br/>
+59 built-in command contracts; 57 are routable for scene editing, components, assets, screenshots, profiling, and more.<br/>
 Depends on **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — a Roslyn-powered interactive C# REPL for Unity.
 
 [Quick Start](#-quick-start) · [Usage](#-usage) · [Commands](#-commands) · [Custom Commands](#-custom-commands) · [Architecture](#️-architecture)
@@ -57,7 +57,7 @@ npx skills add niqibiao/unity-cli-skill --copy
 
 In your AI agent, run **`unity-cli setup`**.
 
-**Prerequisites:** a skills-compatible agent (e.g. [Claude Code](https://claude.ai/code) or [Codex CLI](https://github.com/openai/codex) 0.139+), Node.js (for `npx`), Unity 2022.3+, Python 3.7+
+**Prerequisites:** a skills-compatible agent (e.g. [Claude Code](https://claude.ai/code) or [Codex CLI](https://github.com/openai/codex) 0.139+), Node.js (for `npx`), Unity 2022, Python 3.7+
 
 ### 💬 Usage
 
@@ -91,7 +91,10 @@ operation, and the agent triggers it automatically (in any skills-compatible age
 
 ### 📦 Commands
 
-50 built-in commands across 13 namespaces. All commands support `--json` output.
+59 built-in contracts across 13 wire namespaces. 57 are routable by default;
+`editor/menu.open` and `editor/window.open` are retained but blocked because their
+noninteractive UI effects cannot be verified reliably. Structured command results
+are available through `cs command --json`.
 
 #### gameobject
 
@@ -143,6 +146,9 @@ operation, and the agent triggers it automatically (in any skills-compatible age
 | `create`      | Create a prefab asset from a scene GameObject |
 | `instantiate` | Instantiate a prefab into the active scene    |
 | `unpack`      | Unpack a prefab instance                      |
+| `asset_get` / `asset_hierarchy` | Inspect GameObjects and hierarchy inside a prefab asset |
+| `asset_add_component` / `asset_get_component` / `asset_modify_component` / `asset_remove_component` | Read and edit components directly in a prefab asset |
+| `asset_add_gameobject` / `asset_modify_gameobject` / `asset_remove_gameobject` | Add, edit, or remove GameObjects directly in a prefab asset |
 
 
 #### material
@@ -184,8 +190,8 @@ operation, and the agent triggers it automatically (in any skills-compatible age
 | `playmode.status` | Get current play mode state         |
 | `playmode.enter`  | Enter play mode                     |
 | `playmode.exit`   | Exit play mode                      |
-| `menu.open`       | Execute a menu item by path         |
-| `window.open`     | Open an editor window by type name  |
+| `menu.open`       | Retained contract; blocked for agent execution (noninteractive UI) |
+| `window.open`     | Retained contract; blocked for agent execution (noninteractive UI) |
 | `console.clear`   | Clear the editor console            |
 | `console.mark`    | Write a searchable marker to the editor log |
 
@@ -269,9 +275,9 @@ AI Agent                         Unity Editor
 │                  │            │  │  └─ REPL Executor  │  │
 │  Python CLI      │            │  └────────────────────┘  │
 │  ┌────────────┐  │            │                          │
-│  │ cs.py      │  │            │  40+ CommandActions      │
+│  │ cs.py      │  │            │  59 command contracts    │
 │  │ core_bridge│  │            │  (GameObject, Component, │
-│  └────────────┘  │            │   Prefab, Material, ...) │
+│  └────────────┘  │            │   57 routable by agents) │
 └──────────────────┘            └──────────────────────────┘
 ```
 

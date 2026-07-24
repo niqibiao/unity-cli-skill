@@ -1,6 +1,8 @@
 # Unity CLI Catalog
 
-Two operations over the custom-command catalog, both via `cs`.
+Two operations over the custom-command catalog, both via `cs`. The catalog is
+custom-command state only. Consult it at the custom-command stage defined in
+`SKILL.md`; built-in discovery belongs to `references/commands.md`.
 
 ## Sync the per-project custom command catalog
 
@@ -26,22 +28,23 @@ cs catalog list
 If sync fails, check that the Unity Editor is open and the C# Console package is
 installed.
 
-## Maintainer audit: built-in tables vs the live Editor
+## Maintainer audit: static contracts vs the live Editor
 
-**Audience: skill maintainers.** Check whether the static built-in command tables in
-`references/commands.md` have drifted from the commands registered in the running
-Editor (new actions added upstream, removed actions, changed signatures). This does
-**not** touch the per-project custom-command catalog.
+**Audience: skill maintainers.** Check whether the canonical static contracts in
+`scripts/cli/command_manifest.json` have drifted from commands registered in the
+running Editor. This does **not** touch the per-project custom-command catalog.
 
 1. Fetch the live command list:
    ```bash
    cs list-commands --json
    ```
 2. Parse `data.commands` (built-in + custom).
-3. Compare with the static tables in `references/commands.md`. Built-in namespaces:
-   editor, gameobject, component, transform, material, prefab, project, scene,
-   screenshot, profiler, session, command.
-4. Report differences and suggest edits to `references/commands.md`:
-   - **New** commands not in the tables → add them
-   - **Removed** commands in the tables but not live → remove them
-   - **Changed signatures** (different args) → update them
+3. Compare live built-ins with the 59 manifest contracts, including the 57
+   routable contracts and the retained blocked `editor/menu.open` and
+   `editor/window.open` entries.
+4. Report differences and suggest manifest updates:
+   - **New** live commands missing from the manifest;
+   - **Removed** live commands still present in the manifest;
+   - **Changed signatures** whose live args differ from the static contract;
+   - **Unclassified** contracts missing domain, tier, intent boundary, or
+     verification metadata.

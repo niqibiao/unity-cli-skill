@@ -1,244 +1,183 @@
-# Unity CLI Command
+# Unity CLI Commands
 
-Run framework commands in the Unity Editor via the C# Console command protocol.
+Use the framework command protocol for bounded, structured Unity operations. The
+canonical routing order is defined once in `SKILL.md`; this reference covers
+domain discovery, request contracts, and result verification.
 
-## Command-First Principle
+## Static contract and live schema
 
-Always prefer `cs command` over `cs exec` when a built-in framework command exists. Only fall back to `cs exec` for ad-hoc C# that no existing command covers.
+`scripts/cli/command_manifest.json` is the canonical static contract for built-in
+routing. It records each command's domain, visibility tier, availability, argument
+rules, intent boundaries, and verification guidance. The live Unity registry
+remains the execution authority and supplies the installed package's schema.
 
-If no built-in or custom command matches the task, **next** check `cs snippets` (run `cs snippets search <description>`) before falling back to ad-hoc `cs exec` via `cs exec`. The decision order is: command → snippet → ad-hoc.
+The manifest retains **59** built-in contracts:
 
-## Usage
+- **57 routable contracts** are returned by default discovery.
+- `editor/menu.open` and `editor/window.open` are retained for compatibility and
+  audit, but are blocked because they require noninteractive UI behavior that
+  cannot be verified reliably. Discovery hides them unless `--include-blocked` is
+  requested; command preflight rejects their execution.
 
-Write the request to a JSON file in the scratch dir (absolute path
-`<project-root>/Temp/CSharpConsole/AgentScratch/` — see SKILL.md "Passing
-parameters"), then:
+Do not copy the full registry into agent context. Narrow discovery by domain and
+tier, then inspect one exact contract when needed.
+
+## Domain boundaries
+
+| Domain | Use for | Do not use for |
+|---|---|---|
+| `editor` | Editor state, play mode, console maintenance | Scene contents, object selection, or project asset files |
+| `scene` | Scene listing/open/save and hierarchy | GameObject properties or prefab-file contents |
+| `objects` | GameObjects, object selection, components, transforms | Asset movement or direct prefab-file editing |
+| `assets` | Asset search/import/CRUD, materials, and material assignment | Scene hierarchy or prefab contents |
+| `prefabs` | Prefab creation, instantiation, unpacking, direct content editing | Generic asset operations unrelated to prefab contents |
+| `capture` | Scene/Game screenshots and Profiler recording | Structured state inspection |
+| `control` | REPL sessions and command discovery | Routine Unity authoring |
+
+The agent-facing domain is metadata; it does not rename the wire protocol.
+For example, scene and asset operations may still use the `project` namespace.
+Always send the exact `ns` and `action` returned by discovery.
+
+## Visibility tiers
+
+- **`core`** — common, bounded, unambiguous operations. Search this tier first.
+- **`advanced`** — specialized, destructive, schema-heavy, or lower-frequency
+  operations. Search it only after the chosen domain has no core match or the
+  user's intent explicitly requires it.
+- **`control-plane`** — sessions and command discovery. Do not mix these with
+  normal Unity authoring candidates.
+
+Tier changes discovery visibility, not protocol availability. Existing wire ids
+remain compatible.
+
+## Progressive discovery
+
+Start with one domain's core commands:
 
 ```bash
-cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"
+cs list-commands --offline --domain objects --tier core --json
 ```
 
-`req.json` is a single object — `{"ns": "<namespace>", "action": "<action>", "args": { … }}`
-(`args` omitted for no-arg commands). `--input -` reads the JSON from stdin instead.
-
-## Argument & Result Conventions
-
-- Always pass `--json` on `command` / `list-commands` / `batch` — their result payload is only emitted as JSON. The envelope is `{ "ok": bool, "exitCode": int, "summary": str, "data": {...} }` — check `ok` / `exitCode` for success. (Other subcommands print an equivalent text form; leave `--json` off there.)
-- `data` is already structured. For `cs command`, it's the command's own result object; for `cs list-commands`, it's `{ "commands": [...] }`. Do not expect or re-parse a `resultJson` string field — that only appears with `--verbose`.
-- `Vector3` args are JSON objects: `{"x":0,"y":1,"z":3}`. Same for `rotation` and `scale`.
-- Array args (e.g. `instanceIds: int[]`, `assetPaths: string[]`) are JSON arrays.
-- `bool` args accept `true` / `false`; some legacy fields (`active`, `isStatic`) take `int` (0/1) — see the per-action signature.
-
-## Asset Refresh
-
-After writing `.cs` files or modifying assets on disk, trigger a refresh so Unity recompiles. `cs refresh` wraps the full procedure (play-mode check, exit if needed, refresh, wait). For direct CLI use:
+If the requested operation is specialized or absent from core, query only that
+domain's advanced commands:
 
 ```bash
-cs refresh --wait --exit-playmode
+cs list-commands --offline --domain prefabs --tier advanced --json
 ```
 
-REPL sessions are cleared on domain reload.
+Inspect one exact canonical id before constructing its request:
 
-## Identifier Convention
+```bash
+cs list-commands --offline --id prefab/asset_modify_component --json
+```
 
-Many commands accept both `path` (hierarchy path like `"Canvas/Button"`) and `instanceId` (int). Use whichever is available — `path` for human-readable references, `instanceId` when you have it from a prior command result. You never need both.
+Canonical ids use `<namespace>/<action>`. The returned entry includes the actual
+wire namespace, action, committed argument schema, domain, tier, and availability.
+Do not guess arguments from an action name.
 
-## Built-in Command Catalog
+Useful discovery filters:
 
-### editor
+```bash
+cs list-commands --offline --type builtin --domain scene --tier core --json
+cs list-commands --offline --include-blocked --json
+cs list-commands --type custom --json
+```
 
-| action | summary | args |
-|--------|---------|------|
-| status | Get editor state and play mode info | — |
-| playmode.status | Get current play mode state | — |
-| playmode.enter | Enter play mode | — |
-| playmode.exit | Exit play mode | — |
-| menu.open | Open a menu item by path | menuPath: string |
-| window.open | Open an editor window by type name | typeName: string, utility: bool |
-| console.clear | Clear the editor console | — |
-| console.mark | Write a searchable marker into the editor log and return the log file path | label: string |
+`--offline` reads the committed manifest and needs neither a Unity project nor a
+running service. Remove it only when checking the current package's live registry
+or discovering project-defined custom commands. Use unfiltered,
+live, or `--include-blocked` discovery only for maintainer audits. Routine tasks
+should expose one domain and tier at a time.
 
-### gameobject
+## Request protocol
 
-| action | summary | args |
-|--------|---------|------|
-| find | Find GameObjects by name, tag, or component type | name: string, tag: string, componentType: string |
-| create | Create a new GameObject (empty or primitive) | name: string, primitiveType: string, parentPath: string |
-| destroy | Destroy a GameObject | path: string, instanceId: int |
-| get | Get detailed info about a GameObject | path: string, instanceId: int |
-| modify | Modify a GameObject's basic properties | path: string, instanceId: int, name: string, tag: string, layer: int, active: int, isStatic: int |
-| set_parent | Change a GameObject's parent | path: string, instanceId: int, parentPath: string, parentInstanceId: int, worldPositionStays: bool |
-| duplicate | Duplicate a GameObject | path: string, instanceId: int, newName: string |
-
-### component
-
-| action | summary | args |
-|--------|---------|------|
-| add | Add a component to a GameObject | typeName: string, gameObjectPath: string, gameObjectInstanceId: int |
-| remove | Remove a component from a GameObject | typeName: string, gameObjectPath: string, gameObjectInstanceId: int, index: int |
-| get | Get serialized field data of a component | typeName: string, gameObjectPath: string, gameObjectInstanceId: int, index: int |
-| modify | Modify serialized fields of a component | fields: FieldPair[], typeName: string, gameObjectPath: string, gameObjectInstanceId: int, index: int |
-
-### transform
-
-| action | summary | args |
-|--------|---------|------|
-| get | Get a GameObject's transform values | path: string, instanceId: int |
-| set | Set a GameObject's transform values | path: string, instanceId: int, position: Vector3, rotation: Vector3, scale: Vector3, local: bool |
-
-### material
-
-| action | summary | args |
-|--------|---------|------|
-| create | Create a new material asset | savePath: string, shaderName: string |
-| get | Get material properties | assetPath: string, gameObjectPath: string |
-| assign | Assign a material to a Renderer component | materialPath: string, gameObjectPath: string, gameObjectInstanceId: int, index: int |
-
-### prefab
-
-**Scene instance operations:**
-
-| action | summary | args |
-|--------|---------|------|
-| create | Create a prefab asset from a scene GameObject | savePath: string, gameObjectPath: string, gameObjectInstanceId: int |
-| instantiate | Instantiate a prefab into the active scene | assetPath: string, parentPath: string, position: Vector3 |
-| unpack | Unpack a prefab instance | gameObjectPath: string, gameObjectInstanceId: int, full: bool |
-
-**Direct asset editing** (edit the `.prefab` file without instantiating — `assetPath` is the asset path, `gameObjectPath` is the relative path within the prefab hierarchy):
-
-| action | summary | args |
-|--------|---------|------|
-| asset_get | Get detailed info about a GameObject in a prefab asset | assetPath: string, gameObjectPath: string |
-| asset_hierarchy | Get the hierarchy tree of a prefab asset | assetPath: string, depth: int, includeComponents: bool |
-| asset_add_component | Add a component to a GameObject in a prefab asset | assetPath: string, typeName: string, gameObjectPath: string |
-| asset_get_component | Get serialized properties of a component in a prefab asset | assetPath: string, typeName: string, gameObjectPath: string, index: int |
-| asset_modify_component | Modify serialized fields of a component in a prefab asset | fields: AssetFieldPair[], assetPath: string, typeName: string, gameObjectPath: string, index: int |
-| asset_remove_component | Remove a component from a GameObject in a prefab asset | assetPath: string, typeName: string, gameObjectPath: string, index: int |
-| asset_add_gameobject | Add a child GameObject to a prefab asset | assetPath: string, parentPath: string, name: string |
-| asset_modify_gameobject | Modify a GameObject's properties in a prefab asset | assetPath: string, gameObjectPath: string, name: string, tag: string, layer: int, active: int, isStatic: int |
-| asset_remove_gameobject | Remove a child GameObject from a prefab asset | assetPath: string, gameObjectPath: string |
-
-### project
-
-| action | summary | args |
-|--------|---------|------|
-| scene.list | List all scenes in the project | — |
-| scene.open | Open a scene by path | scenePath: string, mode: string |
-| scene.save | Save the current scene | scenePath: string, saveAsCopy: bool |
-| selection.get | Get the current editor selection | — |
-| selection.set | Set the editor selection by name or path | instanceIds: int[], assetPaths: string[] |
-| asset.list | List assets by type filter | filter: string, folders: string[] |
-| asset.import | Import an asset by path | assetPath: string, forceSynchronousImport: bool |
-| asset.reimport | Reimport an asset by path | assetPath: string, forceSynchronousImport: bool |
-
-### asset
-
-| action | summary | args |
-|--------|---------|------|
-| move | Move or rename an asset | sourcePath: string, destinationPath: string |
-| copy | Copy an asset to a new path | sourcePath: string, destinationPath: string |
-| delete | Delete one or more assets | assetPath: string, assetPaths: string[] |
-| create_folder | Create a folder in the Asset Database | folderPath: string |
-
-### scene
-
-| action | summary | args |
-|--------|---------|------|
-| hierarchy | Get the full scene hierarchy tree | depth: int, includeComponents: bool |
-
-### screenshot
-
-| action | summary | args |
-|--------|---------|------|
-| scene_view | Capture the current Scene View | savePath: string, width: int, height: int |
-| game_view | Capture the Game View | savePath: string, width: int, height: int, superSize: int |
-
-### profiler
-
-| action | summary | args |
-|--------|---------|------|
-| start | Start Profiler recording | deep: bool, logFile: string |
-| stop | Stop Profiler recording | — |
-| status | Get current Profiler state | — |
-| save | Save recorded profiler data to a .raw file | savePath: string |
-
-### session
-
-| action | summary | args |
-|--------|---------|------|
-| list | List active REPL sessions | — |
-| inspect | Inspect a session's state | — |
-| reset | Reset a session's compiler and executor | — |
-
-Pass `--session <id>` on `session/inspect` or `session/reset` so the command
-targets the same named context used by the dependent `cs exec` calls.
-
-### command
-
-| action | summary | args |
-|--------|---------|------|
-| list | List registered commands | — |
-
-## Custom Commands
-
-Lookup order for custom (user-defined) commands:
-
-1. Check the static built-in catalog in this SKILL.md (the tables above).
-2. Read the per-project catalog cache via `cs catalog list` (text index: id, arg names, summary). For full arg types/descriptions, Read the catalog file directly (default `{project}/.unity-cli/catalog.json`, committed).
-3. If the catalog is empty, missing, or stale, fall back to a live query:
-   ```bash
-   cs list-commands --type custom --json
-   ```
-4. If a catalog refresh is needed, run `cs catalog sync`.
-
-### Catalog commands
-
-| command | description |
-|---------|-------------|
-| `cs catalog sync` | Pull the current custom command list from Unity and write/update the per-project catalog JSON |
-| `cs catalog list` | Display the contents of the per-project catalog JSON |
-
-### `list-commands` `--type` flag
-
-Pass `--type` to filter results:
-- `--type builtin` — built-in framework commands only
-- `--type custom` — user-registered custom commands only
-- *(omit `--type`)* — all commands
-
-## Runtime Mode
-
-Most commands are **editor-only** (require the Unity Editor, not a standalone player). The `session/*` and `command/list` commands work in both editor and runtime modes. Pass `--mode runtime --port 15500` for player builds.
-
-## Examples
-
-Each block below is the `req.json` content; run it with
-`cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"`:
+Write a single JSON object to the mandatory scratch directory documented in
+`SKILL.md`:
 
 ```json
-{"ns":"editor","action":"status"}
 {"ns":"gameobject","action":"create","args":{"name":"Wall","primitiveType":"Cube"}}
-{"ns":"transform","action":"set","args":{"path":"Wall","position":{"x":0,"y":1,"z":3}}}
-{"ns":"component","action":"get","args":{"gameObjectPath":"Main Camera","typeName":"Camera"}}
-{"ns":"screenshot","action":"scene_view","args":{"savePath":"Assets/screenshot.png"}}
-{"ns":"scene","action":"hierarchy","args":{"depth":3,"includeComponents":true}}
-{"ns":"prefab","action":"asset_hierarchy","args":{"assetPath":"Assets/Prefabs/Player.prefab","depth":2,"includeComponents":true}}
-{"ns":"prefab","action":"asset_add_component","args":{"assetPath":"Assets/Prefabs/Player.prefab","typeName":"BoxCollider","gameObjectPath":"Body"}}
 ```
 
-Discovery / catalog (no payload — plain flags, no `--input`):
+Then run:
 
 ```bash
-cs list-commands --json
-cs list-commands --type custom --json
-cs catalog sync
-cs catalog list
+cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-create-wall.json"
 ```
 
-## Workflow
+Omit `args` only for a command whose discovered contract has no arguments. Never
+pass structured parameters inline or infer omitted required fields.
 
-1. Match the user's intent to a namespace + action from the catalog above
-2. Run the command with appropriate args
-3. **After writing C# files**, follow the Asset Refresh procedure above (check play mode → exit if needed → refresh)
-4. If no matching command exists in the built-in catalog, run `cs catalog list` to check the per-project custom-command cache
-5. If the cache is empty or stale, run `cs list-commands --type custom` as a live fallback, then `cs catalog sync`
-6. If no command covers the request at all, fall back to `cs exec`
+The response envelope is:
+
+```json
+{"ok":true,"exitCode":0,"summary":"...","data":{}}
+```
+
+Check both `ok` and `exitCode`. `data` is already structured; do not reparse a
+`resultJson` string unless `--verbose` explicitly returned one.
+
+Common shapes:
+
+- `Vector3`: `{"x":0,"y":1,"z":3}` with all three numeric axes.
+- Arrays: JSON arrays of the discovered element type.
+- Booleans: JSON `true` / `false`.
+- Legacy `active` and `isStatic`: integer `0` / `1` when the discovered schema
+  says `int`.
+- Object identifiers: provide the meaningful `path` or `instanceId` form required
+  by the exact contract; do not send both unless discovery explicitly permits it.
+
+## Local preflight
+
+Recognized built-ins are validated before any HTTP request. Preflight rejects:
+
+- blocked commands;
+- unknown arguments;
+- missing or empty required arguments;
+- wrong scalar, array, vector, or field-pair types;
+- invalid enum/range values;
+- violations of exactly-one, at-most-one, at-least-one, or conditional argument
+  rules;
+- session operations that omit an explicit `--session` id.
+
+`batch` preflights every recognized built-in item before sending the batch. A
+preflight failure means the rejected command was **not executed**. Fix the request;
+do not retry it unchanged.
+
+Project-defined custom commands pass through because their contracts are
+project-specific. Use their live or cached schema instead of assuming built-in
+validation applies.
+
+## Verification and retry policy
+
+A successful transport response is not by itself proof that the intended Unity
+state was reached.
+
+1. For reads, verify that the returned scope and identifiers match the request.
+2. After mutation, use the manifest's verification hint and perform the smallest
+   independent read-back: `get`, `hierarchy`, `list`, `status`, or a relevant
+   screenshot.
+3. After asset or C# file changes that require compilation, follow
+   `references/refresh.md`; a domain reload clears REPL sessions.
+4. If transport fails after a mutation may have been accepted, read back before
+   retrying. Never blindly repeat a create, duplicate, destroy, import, or other
+   mutation whose execution state is unknown.
+5. Report completion only when read-back matches the requested state. Otherwise
+   report the observed state and the next recoverable action.
+
+## Custom command fallback
+
+When no built-in contract matches:
+
+1. Run `cs catalog list` to inspect the committed per-project custom-command cache.
+2. If it is missing or stale, run `cs list-commands --type custom --json`.
+3. Run `cs catalog sync` only when the cache needs to be refreshed.
+4. Return to the fallback order in `SKILL.md` if no custom command matches.
+
+See `references/catalog.md` for catalog maintenance. Do not read or edit the
+catalog as a substitute for its CLI workflow.
+
+## Runtime mode
+
+Most built-ins are Editor-only. Session operations and command discovery also work
+against a supported Player service. Use `--mode runtime --port 15500` only when
+deliberately targeting a Player build.

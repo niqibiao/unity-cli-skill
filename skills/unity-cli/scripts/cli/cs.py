@@ -15,6 +15,7 @@ if os.path.dirname(_CLI_DIR) not in sys.path:
     sys.path.insert(0, os.path.dirname(_CLI_DIR))
 
 from cli import PACKAGE_NAME, DEFAULT_SOURCE, DEFAULT_EDITOR_PORT, DEFAULT_RUNTIME_PORT
+from cli.command_index import DOMAINS, TIERS
 from cli.version_check import get_plugin_version, is_aligned, parse_semver
 
 
@@ -472,8 +473,15 @@ def cmd_status(root, args, agent_root=None):
     return rc
 
 
-def _filter_commands_by_type(result, type_filter):
-    """Filter list-commands result by commandType field.
+def _filter_commands(
+    result,
+    type_filter="all",
+    domain=None,
+    tier=None,
+    command_id=None,
+    include_blocked=False,
+):
+    """Annotate and filter a list-commands result using the static manifest.
 
     Handles three response shapes:
       - data.resultJson as a JSON string (canonical post-2024 wire format)
@@ -482,8 +490,8 @@ def _filter_commands_by_type(result, type_filter):
     In all three cases we update *both* resultJson and data.commands so
     downstream callers (notably _slim_result) see consistent filtered data.
     """
-    if type_filter == "all":
-        return result
+    from cli.command_index import filter_live_commands
+
     data = result.get("data", {})
     raw_rj = data.get("resultJson")
     if isinstance(raw_rj, str):
@@ -496,7 +504,14 @@ def _filter_commands_by_type(result, type_filter):
     else:
         rj = data
     commands = rj.get("commands", [])
-    filtered = [c for c in commands if c.get("commandType", "builtin") == type_filter]
+    filtered = filter_live_commands(
+        commands,
+        type_filter=type_filter,
+        domain=domain,
+        tier=tier,
+        command_id=command_id,
+        include_blocked=include_blocked,
+    )
     rj = dict(rj)
     rj["commands"] = filtered
     data = dict(data)
@@ -507,7 +522,46 @@ def _filter_commands_by_type(result, type_filter):
         data["resultJson"] = rj
     result = dict(result)
     result["data"] = data
+    if result.get("ok"):
+        result["summary"] = f"Listed {len(filtered)} command(s)"
     return result
+
+
+def cmd_list_commands_offline(args):
+    """List committed routing contracts without a Unity project or service."""
+    from cli.command_index import command_contracts, contract_descriptors, filter_live_commands
+
+    contracts = command_contracts()
+    commands = filter_live_commands(
+        contract_descriptors(contracts),
+        type_filter=args.cmd_type,
+        domain=args.domain,
+        tier=args.tier,
+        command_id=args.command_id,
+        include_blocked=args.include_blocked,
+        contracts=contracts,
+    )
+    result = {
+        "ok": True,
+        "exitCode": 0,
+        "summary": f"Listed {len(commands)} committed command contract(s)",
+        "data": {"commands": commands},
+    }
+    if args.as_json:
+        json.dump(
+            result if args.verbose else _slim_result(result),
+            sys.stdout,
+            ensure_ascii=False,
+            indent=2,
+        )
+        print()
+    else:
+        for command in commands:
+            print(
+                f"{command['canonicalId']}\t{command['tier']}\t"
+                f"{command.get('summary', '')}"
+            )
+    return 0
 
 
 # ── Catalog commands ───────────────────────────────────────────────────
@@ -1655,10 +1709,21 @@ def _resolve_input(parser, args):
         args.namespace = ns
         args.action = action
         cmd_args = payload.get("args")
-        if cmd_args is None or isinstance(cmd_args, str):
-            args.args = cmd_args
-        else:
-            args.args = json.dumps(cmd_args, ensure_ascii=False)
+        from cli.command_index import CommandContractError, validate_command_request
+        try:
+            cmd_args = validate_command_request(
+                ns,
+                action,
+                cmd_args,
+                session_id=getattr(args, "session", None),
+            )
+        except CommandContractError as e:
+            parser.error(f"--input: {e}")
+        args.args = (
+            cmd_args
+            if cmd_args is None or isinstance(cmd_args, str)
+            else json.dumps(cmd_args, ensure_ascii=False)
+        )
         _apply_conn_opts(parser, args, payload)
     elif cmd == "batch":
         if isinstance(payload, list):
@@ -1672,6 +1737,11 @@ def _resolve_input(parser, args):
             parser.error("--input for batch must be a JSON array or object")
         if not isinstance(items, list):
             parser.error('--input for batch needs a "commands" array (or a bare JSON array)')
+        from cli.command_index import CommandContractError, validate_batch_items
+        try:
+            validate_batch_items(items, session_id=getattr(args, "session", None))
+        except CommandContractError as e:
+            parser.error(f"--input: {e}")
         args.commands = json.dumps(items, ensure_ascii=False)
 def main():
     # Shared flags available on every subcommand.
@@ -1731,6 +1801,35 @@ def main():
     sp_lc = sub.add_parser("list-commands", parents=[shared], help="List available commands")
     sp_lc.add_argument("--type", choices=["builtin", "custom", "all"], default="all",
                         dest="cmd_type", help="Filter by command type (default: all)")
+    sp_lc.add_argument(
+        "--domain",
+        choices=DOMAINS + ("custom",),
+        default=None,
+        help="Show one agent-facing domain instead of the full registry",
+    )
+    sp_lc.add_argument(
+        "--tier",
+        choices=TIERS,
+        default=None,
+        help="Filter by visibility tier",
+    )
+    sp_lc.add_argument(
+        "--id",
+        dest="command_id",
+        default=None,
+        metavar="NAMESPACE/ACTION",
+        help="Show one exact canonical command id",
+    )
+    sp_lc.add_argument(
+        "--include-blocked",
+        action="store_true",
+        help="Include retained commands that are known not to execute successfully",
+    )
+    sp_lc.add_argument(
+        "--offline",
+        action="store_true",
+        help="Read committed routing contracts without connecting to Unity",
+    )
 
     sp_batch = sub.add_parser("batch", parents=[shared], help="Execute multiple commands in one request")
     sp_batch.add_argument("--stop-on-error", action="store_true",
@@ -1849,6 +1948,9 @@ def main():
         elif getattr(args, "code", None) is None:
             p.error('exec requires --input <file> (JSON {"code":..}) or --file <path>')
 
+    if args.cmd == "list-commands" and args.offline:
+        sys.exit(cmd_list_commands_offline(args))
+
     root = find_project_root(args.project)
     # agent_root keys the per-project package-path cache; derive it from the
     # resolved project root (never raw cwd) so it stays stable across agents/cwd.
@@ -1966,7 +2068,14 @@ def main():
 
     def _list_commands_filtered(session, a):
         r = session.list_commands()
-        return _filter_commands_by_type(r, a.cmd_type)
+        return _filter_commands(
+            r,
+            type_filter=a.cmd_type,
+            domain=a.domain,
+            tier=a.tier,
+            command_id=a.command_id,
+            include_blocked=a.include_blocked,
+        )
 
     dispatch = {
         "exec":     lambda: s.exec(args.code),

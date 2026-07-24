@@ -1,0 +1,1244 @@
+{
+  "schemaVersion": 1,
+  "domains": [
+    "editor",
+    "scene",
+    "objects",
+    "assets",
+    "prefabs",
+    "capture",
+    "control"
+  ],
+  "commands": [
+    {
+      "id": "editor/status",
+      "ns": "editor",
+      "action": "status",
+      "domain": "editor",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Read C# Console service state and Unity Editor/play-mode state.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": ["initialized", "port", "refreshing", "generation", "editorState", "isPlaying", "isPaused", "isCompiling", "isUpdating"],
+      "positiveIntents": ["check whether the Unity Editor is ready", "检查 Unity 编辑器是否就绪"],
+      "negativeIntents": ["inspect only the play-mode transition state"],
+      "verification": "Require all result fields and cross-check play-mode fields with editor/playmode.status."
+    },
+    {
+      "id": "editor/playmode.status",
+      "ns": "editor",
+      "action": "playmode.status",
+      "domain": "editor",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Read Unity play-mode and play-mode transition state only.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": ["isPlaying", "isPaused", "isPlayingOrWillChangePlaymode", "isCompiling"],
+      "positiveIntents": ["check whether Unity is entering or leaving play mode", "检查 Unity 是否正在切换播放模式"],
+      "negativeIntents": ["check general Editor or service readiness"],
+      "verification": "Require a coherent play-mode state and compare shared fields with editor/status."
+    },
+    {
+      "id": "editor/playmode.enter",
+      "ns": "editor",
+      "action": "playmode.enter",
+      "domain": "editor",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Request entry into play mode; completion is asynchronous.",
+      "sideEffect": "lifecycle",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": [],
+      "positiveIntents": ["enter Unity play mode", "进入 Unity 播放模式"],
+      "negativeIntents": ["check whether Unity is already in play mode"],
+      "verification": "Poll editor/playmode.status until isPlaying is true and isCompiling is false."
+    },
+    {
+      "id": "editor/playmode.exit",
+      "ns": "editor",
+      "action": "playmode.exit",
+      "domain": "editor",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Request exit from play mode; completion is asynchronous.",
+      "sideEffect": "lifecycle",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": [],
+      "positiveIntents": ["exit Unity play mode", "退出 Unity 播放模式"],
+      "negativeIntents": ["check current play-mode state"],
+      "verification": "Poll editor/playmode.status until isPlaying and isPlayingOrWillChangePlaymode are false."
+    },
+    {
+      "id": "editor/menu.open",
+      "ns": "editor",
+      "action": "menu.open",
+      "domain": "editor",
+      "tier": "advanced",
+      "availability": "blocked",
+      "blockedReason": "non-interactive menu execution can open modal dialogs and is intentionally disabled",
+      "summary": "Blocked in non-interactive mode because opening menu items can display modal dialogs.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "menuPath", "type": "string", "required": true}
+      ],
+      "rules": {},
+      "resultFields": [],
+      "positiveIntents": ["attempt to invoke a Unity menu item", "尝试调用 Unity 菜单项"],
+      "negativeIntents": ["run a supported non-interactive editor command"],
+      "verification": "Require a validation error that states the command is blocked."
+    },
+    {
+      "id": "editor/window.open",
+      "ns": "editor",
+      "action": "window.open",
+      "domain": "editor",
+      "tier": "advanced",
+      "availability": "blocked",
+      "blockedReason": "non-interactive Editor window creation can open modal dialogs and is intentionally disabled",
+      "summary": "Blocked in non-interactive mode because opening Editor windows can display modal dialogs.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "utility", "type": "bool", "required": false, "default": false}
+      ],
+      "rules": {},
+      "resultFields": [],
+      "positiveIntents": ["attempt to open a Unity Editor window", "尝试打开 Unity 编辑器窗口"],
+      "negativeIntents": ["inspect an existing scene or GameObject"],
+      "verification": "Require a validation error that states the command is blocked."
+    },
+    {
+      "id": "editor/console.clear",
+      "ns": "editor",
+      "action": "console.clear",
+      "domain": "editor",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Clear entries from the Unity Editor Console when the Unity version exposes that operation.",
+      "sideEffect": "destructive",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": [],
+      "positiveIntents": ["clear the Unity Editor Console", "清空 Unity 编辑器控制台"],
+      "negativeIntents": ["read or filter Unity console messages"],
+      "verification": "Require success only when Console clearing is available; otherwise require a validation error."
+    },
+    {
+      "id": "editor/console.mark",
+      "ns": "editor",
+      "action": "console.mark",
+      "domain": "editor",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Write a unique searchable marker to the Editor log and return its log location.",
+      "sideEffect": "diagnostic",
+      "editorOnly": true,
+      "args": [
+        {"name": "label", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {},
+      "resultFields": ["logPath", "id", "label", "timestampUtc", "markerText"],
+      "positiveIntents": ["mark the Unity log before an operation", "在操作前为 Unity 日志写入标记"],
+      "negativeIntents": ["clear or read existing console messages"],
+      "verification": "Require a nonempty id and find markerText containing that id in the returned logPath."
+    },
+    {
+      "id": "gameobject/find",
+      "ns": "gameobject",
+      "action": "find",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Find up to 500 GameObjects in loaded scenes and DontDestroyOnLoad by name, tag, and/or component type.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "name", "type": "string", "required": false, "default": ""},
+        {"name": "tag", "type": "string", "required": false, "default": ""},
+        {"name": "componentType", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {},
+      "resultFields": ["gameObjects", "gameObjects[].instanceId", "gameObjects[].name", "gameObjects[].path", "gameObjects[].tag", "gameObjects[].layer", "gameObjects[].activeSelf"],
+      "positiveIntents": ["find GameObjects with a given name, tag, or component", "按名称、标签或组件查找游戏对象"],
+      "negativeIntents": ["return the complete active-scene hierarchy tree"],
+      "verification": "Require every returned object to satisfy all supplied filters and never return more than 500 entries."
+    },
+    {
+      "id": "gameobject/create",
+      "ns": "gameobject",
+      "action": "create",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Create an empty GameObject or Unity primitive, optionally under a hierarchy parent.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "name", "type": "string", "required": false, "default": ""},
+        {"name": "primitiveType", "type": "string", "required": false, "default": "", "enum": ["", "Cube", "Sphere", "Capsule", "Cylinder", "Plane", "Quad"], "caseInsensitive": true},
+        {"name": "parentPath", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {},
+      "resultFields": ["instanceId", "name", "path"],
+      "positiveIntents": ["create an empty GameObject or primitive", "创建空游戏对象或基础几何体"],
+      "negativeIntents": ["instantiate an existing prefab asset"],
+      "verification": "Read back gameobject/get by result instanceId and require matching name and path."
+    },
+    {
+      "id": "gameobject/destroy",
+      "ns": "gameobject",
+      "action": "destroy",
+      "domain": "objects",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Destroy one scene GameObject selected by hierarchy path or instance ID.",
+      "sideEffect": "destructive",
+      "editorOnly": true,
+      "args": [
+        {"name": "path", "type": "string", "required": false, "default": ""},
+        {"name": "instanceId", "type": "int", "required": false, "default": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["path", "instanceId"]]
+      },
+      "resultFields": ["instanceId", "name", "destroyed"],
+      "positiveIntents": ["delete a GameObject from a loaded scene", "从已加载场景删除游戏对象"],
+      "negativeIntents": ["delete an asset or a child inside a prefab asset"],
+      "verification": "Require destroyed to be true and require gameobject/get for the result instanceId to report not found."
+    },
+    {
+      "id": "gameobject/get",
+      "ns": "gameobject",
+      "action": "get",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Read one scene GameObject's identity, state, transform summary, and component summary.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "path", "type": "string", "required": false, "default": ""},
+        {"name": "instanceId", "type": "int", "required": false, "default": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["path", "instanceId"]]
+      },
+      "resultFields": ["instanceId", "name", "path", "tag", "layer", "activeSelf", "activeInHierarchy", "transform", "components"],
+      "positiveIntents": ["inspect one GameObject and its components", "查看单个游戏对象及其组件摘要"],
+      "negativeIntents": ["read serialized fields of one specific component"],
+      "verification": "Require the returned selector to identify the requested object and compare transform fields with transform/get."
+    },
+    {
+      "id": "gameobject/modify",
+      "ns": "gameobject",
+      "action": "modify",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Change one scene GameObject's name, tag, layer, active state, and/or static flag.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "path", "type": "string", "required": false, "default": ""},
+        {"name": "instanceId", "type": "int", "required": false, "default": 0},
+        {"name": "name", "type": "string", "required": false, "default": ""},
+        {"name": "tag", "type": "string", "required": false, "default": ""},
+        {"name": "layer", "type": "int", "required": false, "default": -1, "min": -1, "max": 31},
+        {"name": "active", "type": "int", "required": false, "default": -1, "enum": [-1, 0, 1]},
+        {"name": "isStatic", "type": "int", "required": false, "default": -1, "enum": [-1, 0, 1]}
+      ],
+      "rules": {
+        "exactlyOneOf": [["path", "instanceId"]],
+        "atLeastOneMutation": ["name", "tag", "layer", "active", "isStatic"]
+      },
+      "resultFields": ["instanceId", "name", "path"],
+      "positiveIntents": ["rename or change basic properties of a GameObject", "修改游戏对象名称、标签、层或激活状态"],
+      "negativeIntents": ["change transform values or serialized component fields"],
+      "verification": "Read back gameobject/get and require each requested property to match."
+    },
+    {
+      "id": "gameobject/set_parent",
+      "ns": "gameobject",
+      "action": "set_parent",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Reparent one scene GameObject or move it to a scene root.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "path", "type": "string", "required": false, "default": ""},
+        {"name": "instanceId", "type": "int", "required": false, "default": 0},
+        {"name": "parentPath", "type": "string", "required": false, "default": ""},
+        {"name": "parentInstanceId", "type": "int", "required": false, "default": 0},
+        {"name": "worldPositionStays", "type": "bool", "required": false, "default": true}
+      ],
+      "rules": {
+        "exactlyOneOf": [["path", "instanceId"]],
+        "atMostOneOf": [["parentPath", "parentInstanceId"]]
+      },
+      "resultFields": ["instanceId", "name", "newPath"],
+      "positiveIntents": ["reparent a GameObject or move it to the scene root", "重新设置游戏对象父级或移到场景根节点"],
+      "negativeIntents": ["set a parent inside a prefab asset"],
+      "verification": "Read back gameobject/get and require its path and preserved/local transform policy to match."
+    },
+    {
+      "id": "gameobject/duplicate",
+      "ns": "gameobject",
+      "action": "duplicate",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Duplicate one scene GameObject under the same parent.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "path", "type": "string", "required": false, "default": ""},
+        {"name": "instanceId", "type": "int", "required": false, "default": 0},
+        {"name": "newName", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {
+        "exactlyOneOf": [["path", "instanceId"]]
+      },
+      "resultFields": ["instanceId", "name", "path"],
+      "positiveIntents": ["duplicate a GameObject in the current scene", "复制当前场景中的游戏对象"],
+      "negativeIntents": ["copy an asset file or instantiate a prefab"],
+      "verification": "Require a new instanceId and read back an object with the expected name, parent, transform, and components."
+    },
+    {
+      "id": "component/add",
+      "ns": "component",
+      "action": "add",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Add one resolved Component type to a scene GameObject.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "gameObjectInstanceId", "type": "int", "required": false, "default": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["gameObjectPath", "gameObjectInstanceId"]]
+      },
+      "resultFields": ["gameObjectInstanceId", "typeName", "componentInstanceId"],
+      "positiveIntents": ["add a component to a scene GameObject", "给场景游戏对象添加组件"],
+      "negativeIntents": ["add a component directly inside a prefab asset"],
+      "verification": "Read back component/get and require the returned componentInstanceId and type."
+    },
+    {
+      "id": "component/remove",
+      "ns": "component",
+      "action": "remove",
+      "domain": "objects",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Remove one indexed Component type from a scene GameObject.",
+      "sideEffect": "destructive",
+      "editorOnly": true,
+      "args": [
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "gameObjectInstanceId", "type": "int", "required": false, "default": 0},
+        {"name": "index", "type": "int", "required": false, "default": 0, "min": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["gameObjectPath", "gameObjectInstanceId"]]
+      },
+      "resultFields": ["gameObjectInstanceId", "typeName", "removed"],
+      "positiveIntents": ["remove a component from a scene GameObject", "从场景游戏对象移除组件"],
+      "negativeIntents": ["remove a component directly from a prefab asset"],
+      "verification": "Require removed to be true and read back one fewer component of the requested type."
+    },
+    {
+      "id": "component/get",
+      "ns": "component",
+      "action": "get",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Read up to 200 visible serialized properties from one indexed Component on a scene GameObject.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "gameObjectInstanceId", "type": "int", "required": false, "default": 0},
+        {"name": "index", "type": "int", "required": false, "default": 0, "min": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["gameObjectPath", "gameObjectInstanceId"]]
+      },
+      "resultFields": ["gameObjectInstanceId", "typeName", "componentInstanceId", "properties", "properties[].name", "properties[].type", "properties[].value"],
+      "positiveIntents": ["inspect serialized fields of one component", "查看单个组件的序列化字段"],
+      "negativeIntents": ["list only the component types attached to a GameObject"],
+      "verification": "Require matching type and component index and no more than 200 property entries."
+    },
+    {
+      "id": "component/modify",
+      "ns": "component",
+      "action": "modify",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Set supported visible serialized properties on one indexed Component of a scene GameObject.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "fields", "type": "FieldPair[]", "required": true, "min": 1, "itemSchema": {"name": "string", "value": "string"}},
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "gameObjectInstanceId", "type": "int", "required": false, "default": 0},
+        {"name": "index", "type": "int", "required": false, "default": 0, "min": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["gameObjectPath", "gameObjectInstanceId"]]
+      },
+      "resultFields": ["gameObjectInstanceId", "typeName", "modifiedFields"],
+      "positiveIntents": ["change serialized fields on a component", "修改组件的序列化字段"],
+      "negativeIntents": ["change GameObject identity or transform properties"],
+      "verification": "Require modifiedFields to equal requested field names and read back each value with component/get."
+    },
+    {
+      "id": "transform/get",
+      "ns": "transform",
+      "action": "get",
+      "domain": "objects",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Read local and world transform values for one scene GameObject.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "path", "type": "string", "required": false, "default": ""},
+        {"name": "instanceId", "type": "int", "required": false, "default": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["path", "instanceId"]]
+      },
+      "resultFields": ["instanceId", "path", "localPosition", "localEulerAngles", "localScale", "position", "eulerAngles"],
+      "positiveIntents": ["read exact local and world transform values", "读取精确的本地与世界变换值"],
+      "negativeIntents": ["inspect general GameObject state and component summaries"],
+      "verification": "Compare equivalent transform fields with gameobject/get for the same instanceId."
+    },
+    {
+      "id": "transform/set",
+      "ns": "transform",
+      "action": "set",
+      "domain": "objects",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Set position and Euler rotation in local or world space and/or set local scale.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "path", "type": "string", "required": false, "default": ""},
+        {"name": "instanceId", "type": "int", "required": false, "default": 0},
+        {"name": "position", "type": "Vector3", "required": false, "default": null},
+        {"name": "rotation", "type": "Vector3", "required": false, "default": null},
+        {"name": "scale", "type": "Vector3", "required": false, "default": null},
+        {"name": "local", "type": "bool", "required": false, "default": true}
+      ],
+      "rules": {
+        "exactlyOneOf": [["path", "instanceId"]],
+        "atLeastOneMutation": ["position", "rotation", "scale"]
+      },
+      "resultFields": ["instanceId", "path", "localPosition", "localEulerAngles", "localScale"],
+      "positiveIntents": ["move, rotate, or scale a scene GameObject", "移动、旋转或缩放场景游戏对象"],
+      "negativeIntents": ["change RectTransform or another component serialized field"],
+      "verification": "Read back transform/get and compare requested vectors with floating-point tolerance in the requested space."
+    },
+    {
+      "id": "material/create",
+      "ns": "material",
+      "action": "create",
+      "domain": "assets",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Create a Material asset under Assets using a named shader, with Standard-to-URP-Lit fallback.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "savePath", "type": "string", "required": true},
+        {"name": "shaderName", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "shaderName"],
+      "positiveIntents": ["create a new material asset", "创建新的材质资源"],
+      "negativeIntents": ["assign an existing material to a Renderer"],
+      "verification": "Read back material/get by result assetPath and require the resolved shaderName."
+    },
+    {
+      "id": "material/get",
+      "ns": "material",
+      "action": "get",
+      "domain": "assets",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Read one Material asset or the first shared Material on a GameObject's Renderer.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": false, "default": ""},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {
+        "exactlyOneOf": [["assetPath", "gameObjectPath"]]
+      },
+      "resultFields": ["assetPath", "shaderName", "properties", "properties[].name", "properties[].type", "properties[].value"],
+      "positiveIntents": ["inspect a material shader and its properties", "查看材质着色器及其属性"],
+      "negativeIntents": ["inspect all serialized fields of a Renderer component"],
+      "verification": "Require a nonempty shaderName and unique property names from the selected Material."
+    },
+    {
+      "id": "material/assign",
+      "ns": "material",
+      "action": "assign",
+      "domain": "assets",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Assign a Material asset to one shared-material slot on a Renderer attached directly to a scene GameObject.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "materialPath", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "gameObjectInstanceId", "type": "int", "required": false, "default": 0},
+        {"name": "index", "type": "int", "required": false, "default": 0, "min": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["gameObjectPath", "gameObjectInstanceId"]]
+      },
+      "resultFields": ["gameObjectPath", "materialPath", "index"],
+      "positiveIntents": ["assign a material to a Renderer slot", "把材质分配给渲染器槽位"],
+      "negativeIntents": ["create or edit the material asset itself"],
+      "verification": "Read back the target Renderer shared-material slot and require the requested materialPath."
+    },
+    {
+      "id": "prefab/create",
+      "ns": "prefab",
+      "action": "create",
+      "domain": "prefabs",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Save one scene GameObject as a Prefab asset under Assets.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "savePath", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "gameObjectInstanceId", "type": "int", "required": false, "default": 0}
+      ],
+      "rules": {
+        "exactlyOneOf": [["gameObjectPath", "gameObjectInstanceId"]]
+      },
+      "resultFields": ["assetPath", "instanceId", "name"],
+      "positiveIntents": ["create a prefab asset from a scene GameObject", "从场景游戏对象创建预制体资源"],
+      "negativeIntents": ["instantiate an existing prefab into a scene"],
+      "verification": "Read back prefab/asset_get at the result assetPath and require the expected root name."
+    },
+    {
+      "id": "prefab/instantiate",
+      "ns": "prefab",
+      "action": "instantiate",
+      "domain": "prefabs",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Instantiate one Prefab asset into the active scene, optionally under a parent and at a world position.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "parentPath", "type": "string", "required": false, "default": ""},
+        {"name": "position", "type": "Vector3", "required": false, "default": null}
+      ],
+      "rules": {},
+      "resultFields": ["instanceId", "name", "path"],
+      "positiveIntents": ["instantiate a prefab in the active scene", "在活动场景实例化预制体"],
+      "negativeIntents": ["create a new prefab asset from a scene object"],
+      "verification": "Read back gameobject/get by result instanceId and require the requested parent and world position."
+    },
+    {
+      "id": "prefab/unpack",
+      "ns": "prefab",
+      "action": "unpack",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Unpack the outermost or complete Prefab relationship for one scene Prefab instance.",
+      "sideEffect": "destructive",
+      "editorOnly": true,
+      "args": [
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "gameObjectInstanceId", "type": "int", "required": false, "default": 0},
+        {"name": "full", "type": "bool", "required": false, "default": false}
+      ],
+      "rules": {
+        "exactlyOneOf": [["gameObjectPath", "gameObjectInstanceId"]]
+      },
+      "resultFields": ["instanceId", "name", "unpacked"],
+      "positiveIntents": ["unpack a prefab instance in the scene", "解包场景中的预制体实例"],
+      "negativeIntents": ["delete or edit the prefab asset file"],
+      "verification": "Require unpacked to be true and verify that the scene object no longer has the requested Prefab relationship."
+    },
+    {
+      "id": "prefab/asset_hierarchy",
+      "ns": "prefab",
+      "action": "asset_hierarchy",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Read up to 5000 hierarchy nodes from one Prefab asset.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "depth", "type": "int", "required": false, "default": -1, "min": -1},
+        {"name": "includeComponents", "type": "bool", "required": false, "default": false}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "rootName", "root", "root.instanceId", "root.name", "root.activeSelf", "root.childCount", "root.components", "root.children"],
+      "positiveIntents": ["inspect the hierarchy stored inside a prefab asset", "查看预制体资源内部层级"],
+      "negativeIntents": ["inspect the active scene hierarchy"],
+      "verification": "Require the returned root to match asset_get for the same asset and respect the requested depth."
+    },
+    {
+      "id": "prefab/asset_get",
+      "ns": "prefab",
+      "action": "asset_get",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Read one GameObject stored inside a Prefab asset, using an empty relative path for its root.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "gameObjectPath", "instanceId", "name", "tag", "layer", "activeSelf", "transform", "components"],
+      "positiveIntents": ["inspect one object stored inside a prefab asset", "查看预制体资源中的单个对象"],
+      "negativeIntents": ["inspect a prefab instance in a loaded scene"],
+      "verification": "Require assetPath and canonical relative gameObjectPath to round-trip through prefab/asset_hierarchy."
+    },
+    {
+      "id": "prefab/asset_get_component",
+      "ns": "prefab",
+      "action": "asset_get_component",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Read up to 200 visible serialized properties from one indexed Component stored in a Prefab asset.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "index", "type": "int", "required": false, "default": 0, "min": 0}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "gameObjectPath", "typeName", "componentInstanceId", "properties", "properties[].name", "properties[].type", "properties[].value"],
+      "positiveIntents": ["inspect component fields inside a prefab asset", "查看预制体资源内组件字段"],
+      "negativeIntents": ["inspect a component on a loaded scene object"],
+      "verification": "Require the selected type and index and no more than 200 property entries."
+    },
+    {
+      "id": "prefab/asset_modify_component",
+      "ns": "prefab",
+      "action": "asset_modify_component",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Set supported visible serialized properties on one indexed Component stored in a Prefab asset.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "fields", "type": "FieldPair[]", "required": true, "min": 1, "itemSchema": {"name": "string", "value": "string"}},
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "index", "type": "int", "required": false, "default": 0, "min": 0}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "gameObjectPath", "typeName", "modifiedFields"],
+      "positiveIntents": ["modify serialized component fields directly in a prefab asset", "直接修改预制体资源中的组件字段"],
+      "negativeIntents": ["modify a component on a loaded scene object"],
+      "verification": "Require modifiedFields to equal requested field names and read back each value after reloading the Prefab asset."
+    },
+    {
+      "id": "prefab/asset_add_component",
+      "ns": "prefab",
+      "action": "asset_add_component",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Add one resolved Component type directly to a GameObject stored in a Prefab asset.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "gameObjectPath", "typeName", "componentInstanceId"],
+      "positiveIntents": ["add a component directly to a prefab asset", "直接给预制体资源添加组件"],
+      "negativeIntents": ["add a component to a loaded scene instance"],
+      "verification": "Reload the Prefab asset and require a component of the returned type at gameObjectPath."
+    },
+    {
+      "id": "prefab/asset_remove_component",
+      "ns": "prefab",
+      "action": "asset_remove_component",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Remove one indexed Component directly from a GameObject stored in a Prefab asset.",
+      "sideEffect": "destructive",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "typeName", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "index", "type": "int", "required": false, "default": 0, "min": 0}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "gameObjectPath", "typeName", "removed"],
+      "positiveIntents": ["remove a component directly from a prefab asset", "直接从预制体资源移除组件"],
+      "negativeIntents": ["remove a component from a loaded scene instance"],
+      "verification": "Require removed to be true and read back one fewer matching component after reloading the Prefab asset."
+    },
+    {
+      "id": "prefab/asset_modify_gameobject",
+      "ns": "prefab",
+      "action": "asset_modify_gameobject",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Change basic properties of one GameObject stored directly in a Prefab asset.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": false, "default": ""},
+        {"name": "name", "type": "string", "required": false, "default": ""},
+        {"name": "tag", "type": "string", "required": false, "default": ""},
+        {"name": "layer", "type": "int", "required": false, "default": -1, "min": -1, "max": 31},
+        {"name": "active", "type": "int", "required": false, "default": -1, "enum": [-1, 0, 1]},
+        {"name": "isStatic", "type": "int", "required": false, "default": -1, "enum": [-1, 0, 1]}
+      ],
+      "rules": {
+        "atLeastOneMutation": ["name", "tag", "layer", "active", "isStatic"]
+      },
+      "resultFields": ["assetPath", "gameObjectPath", "name"],
+      "positiveIntents": ["rename or change basic properties inside a prefab asset", "修改预制体资源内对象的基础属性"],
+      "negativeIntents": ["modify a prefab instance in a loaded scene"],
+      "verification": "Reload prefab/asset_get and require every requested property to match."
+    },
+    {
+      "id": "prefab/asset_add_gameobject",
+      "ns": "prefab",
+      "action": "asset_add_gameobject",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Add an empty child GameObject directly under a parent stored in a Prefab asset.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "parentPath", "type": "string", "required": false, "default": ""},
+        {"name": "name", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "gameObjectPath", "name"],
+      "positiveIntents": ["add a child object directly inside a prefab asset", "直接在预制体资源中添加子对象"],
+      "negativeIntents": ["add a child to a loaded scene object"],
+      "verification": "Reload prefab/asset_get at result gameObjectPath and require the returned name."
+    },
+    {
+      "id": "prefab/asset_remove_gameobject",
+      "ns": "prefab",
+      "action": "asset_remove_gameobject",
+      "domain": "prefabs",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Remove a non-root child GameObject directly from a Prefab asset.",
+      "sideEffect": "destructive",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "gameObjectPath", "type": "string", "required": true}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "gameObjectPath", "removed"],
+      "positiveIntents": ["remove a child object directly from a prefab asset", "直接从预制体资源删除子对象"],
+      "negativeIntents": ["destroy a loaded scene GameObject or remove the prefab root"],
+      "verification": "Require removed to be true and require prefab/asset_get at the removed path to report not found after reload."
+    },
+    {
+      "id": "project/scene.list",
+      "ns": "project",
+      "action": "scene.list",
+      "domain": "scene",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "List all Scene assets in the project and report the active Scene path.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": ["activeScenePath", "scenes"],
+      "positiveIntents": ["list scene assets available in the Unity project", "列出 Unity 项目中的场景资源"],
+      "negativeIntents": ["list only currently loaded scenes or inspect scene contents"],
+      "verification": "Require sorted unique Scene asset paths and a valid or empty activeScenePath."
+    },
+    {
+      "id": "project/scene.open",
+      "ns": "project",
+      "action": "scene.open",
+      "domain": "scene",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Open one Scene asset in single or additive mode; single mode refuses unsaved loaded Scenes.",
+      "sideEffect": "lifecycle",
+      "editorOnly": true,
+      "args": [
+        {"name": "scenePath", "type": "string", "required": true},
+        {"name": "mode", "type": "string", "required": false, "default": "single", "enum": ["single", "additive"], "caseInsensitive": true}
+      ],
+      "rules": {},
+      "resultFields": ["scenePath", "openedPath", "additive"],
+      "positiveIntents": ["open a Unity scene asset", "打开 Unity 场景资源"],
+      "negativeIntents": ["inspect the hierarchy of the already active scene"],
+      "verification": "Require openedPath to match scenePath and the loaded-scene set to reflect the requested mode."
+    },
+    {
+      "id": "project/scene.save",
+      "ns": "project",
+      "action": "scene.save",
+      "domain": "scene",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Save the active Scene in place or to a destination path, optionally as a copy.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "scenePath", "type": "string", "required": false, "default": ""},
+        {"name": "saveAsCopy", "type": "bool", "required": false, "default": false}
+      ],
+      "rules": {
+        "requiresWhen": [
+          {"arg": "saveAsCopy", "equals": true, "requires": ["scenePath"]}
+        ]
+      },
+      "resultFields": ["saved", "scenePath", "saveAsCopy"],
+      "positiveIntents": ["save the active Unity scene", "保存当前活动 Unity 场景"],
+      "negativeIntents": ["save a different loaded scene selected by path"],
+      "verification": "Require saved to be true, the destination Scene asset to exist, and the active Scene to be clean unless saved as a copy."
+    },
+    {
+      "id": "project/selection.get",
+      "ns": "project",
+      "action": "selection.get",
+      "domain": "objects",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Read the current Unity Editor selection and its active object.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": ["activeInstanceId", "objects", "objects[].instanceId", "objects[].name", "objects[].typeName", "objects[].assetPath", "objects[].hierarchyPath"],
+      "positiveIntents": ["inspect the current Unity Editor selection", "查看 Unity 编辑器当前选择"],
+      "negativeIntents": ["find objects by name, tag, or component"],
+      "verification": "Require activeInstanceId to be zero or a member of the returned object IDs."
+    },
+    {
+      "id": "project/selection.set",
+      "ns": "project",
+      "action": "selection.set",
+      "domain": "objects",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Set or clear the Unity Editor selection from object instance IDs and asset paths; invalid entries are ignored.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "instanceIds", "type": "int[]", "required": false, "default": null, "itemSchema": "int"},
+        {"name": "assetPaths", "type": "string[]", "required": false, "default": null, "itemSchema": "string"}
+      ],
+      "rules": {},
+      "resultFields": ["count", "activeInstanceId", "instanceIds"],
+      "positiveIntents": ["select objects or assets in the Unity Editor", "在 Unity 编辑器中选择对象或资源"],
+      "negativeIntents": ["find an object by hierarchy path or name"],
+      "verification": "Read back project/selection.get and require the accepted distinct instance IDs to match."
+    },
+    {
+      "id": "project/asset.list",
+      "ns": "project",
+      "action": "asset.list",
+      "domain": "assets",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "List sorted project asset paths matching a Unity AssetDatabase filter and optional search folders.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "filter", "type": "string", "required": false, "default": ""},
+        {"name": "folders", "type": "string[]", "required": false, "default": null, "itemSchema": "string"}
+      ],
+      "rules": {},
+      "resultFields": ["filter", "folders", "assetPaths"],
+      "positiveIntents": ["find project assets by Unity type or name filter", "按 Unity 类型或名称筛选项目资源"],
+      "negativeIntents": ["move, copy, import, or delete an asset"],
+      "verification": "Require sorted unique paths whose AssetDatabase search matches the supplied filter and folders."
+    },
+    {
+      "id": "project/asset.import",
+      "ns": "project",
+      "action": "asset.import",
+      "domain": "assets",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Import one asset path, optionally synchronously, while guarding loaded Scenes and script-triggered domain reloads.",
+      "sideEffect": "lifecycle",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "forceSynchronousImport", "type": "bool", "required": false, "default": false}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "imported", "exists"],
+      "positiveIntents": ["import a newly written asset into Unity", "把新写入的资源导入 Unity"],
+      "negativeIntents": ["force-update an already imported asset"],
+      "verification": "Require imported and exists to be true and read back the path with project/asset.list."
+    },
+    {
+      "id": "project/asset.reimport",
+      "ns": "project",
+      "action": "asset.reimport",
+      "domain": "assets",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Force-update one imported asset path, optionally synchronously, with Scene and domain-reload guards.",
+      "sideEffect": "lifecycle",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": true},
+        {"name": "forceSynchronousImport", "type": "bool", "required": false, "default": false}
+      ],
+      "rules": {},
+      "resultFields": ["assetPath", "imported", "exists"],
+      "positiveIntents": ["force Unity to reimport an existing asset", "强制 Unity 重新导入已有资源"],
+      "negativeIntents": ["import a new asset for the first time"],
+      "verification": "Require imported and exists to be true and require the target path to remain resolvable."
+    },
+    {
+      "id": "asset/move",
+      "ns": "asset",
+      "action": "move",
+      "domain": "assets",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Move or rename one Unity asset or folder, creating missing destination parent folders.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "sourcePath", "type": "string", "required": true},
+        {"name": "destinationPath", "type": "string", "required": true}
+      ],
+      "rules": {},
+      "resultFields": ["oldPath", "newPath"],
+      "positiveIntents": ["move or rename a Unity asset", "移动或重命名 Unity 资源"],
+      "negativeIntents": ["copy an asset while retaining the source"],
+      "verification": "Require the old path to be absent and the new path to resolve after the operation."
+    },
+    {
+      "id": "asset/copy",
+      "ns": "asset",
+      "action": "copy",
+      "domain": "assets",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Copy one Unity asset or folder to a new path, creating missing destination parent folders.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "sourcePath", "type": "string", "required": true},
+        {"name": "destinationPath", "type": "string", "required": true}
+      ],
+      "rules": {},
+      "resultFields": ["sourcePath", "destinationPath"],
+      "positiveIntents": ["copy a Unity asset to another path", "复制 Unity 资源到新路径"],
+      "negativeIntents": ["move or rename an asset"],
+      "verification": "Require both paths to resolve and their asset GUIDs to differ."
+    },
+    {
+      "id": "asset/delete",
+      "ns": "asset",
+      "action": "delete",
+      "domain": "assets",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Delete one or more Unity assets or folders and report partial failures.",
+      "sideEffect": "destructive",
+      "editorOnly": true,
+      "args": [
+        {"name": "assetPath", "type": "string", "required": false, "default": ""},
+        {"name": "assetPaths", "type": "string[]", "required": false, "default": null, "itemSchema": "string"}
+      ],
+      "rules": {
+        "atLeastOne": [["assetPath", "assetPaths"]]
+      },
+      "resultFields": ["deletedPaths", "failedPaths"],
+      "positiveIntents": ["delete Unity assets or folders", "删除 Unity 资源或文件夹"],
+      "negativeIntents": ["destroy a GameObject in a loaded scene"],
+      "verification": "Count completion only when failedPaths is empty and every deletedPath no longer resolves."
+    },
+    {
+      "id": "asset/create_folder",
+      "ns": "asset",
+      "action": "create_folder",
+      "domain": "assets",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Create a Unity AssetDatabase folder recursively, or return the existing folder's GUID.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "folderPath", "type": "string", "required": true}
+      ],
+      "rules": {},
+      "resultFields": ["folderPath", "guid"],
+      "positiveIntents": ["create a folder in the Unity Assets tree", "在 Unity Assets 中创建文件夹"],
+      "negativeIntents": ["create an operating-system folder outside the Unity project"],
+      "verification": "Require a nonempty guid and require the returned folderPath to be a valid AssetDatabase folder."
+    },
+    {
+      "id": "scene/hierarchy",
+      "ns": "scene",
+      "action": "hierarchy",
+      "domain": "scene",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Read up to 5000 hierarchy nodes from the active Scene plus DontDestroyOnLoad roots.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [
+        {"name": "depth", "type": "int", "required": false, "default": -1, "min": -1},
+        {"name": "includeComponents", "type": "bool", "required": false, "default": false}
+      ],
+      "rules": {},
+      "resultFields": ["sceneName", "scenePath", "roots", "dontDestroyOnLoadRoots"],
+      "positiveIntents": ["inspect the active scene hierarchy", "查看活动场景层级"],
+      "negativeIntents": ["list Scene assets in the project or inspect a prefab asset"],
+      "verification": "Require scenePath to match the active Scene and every returned branch to respect the requested depth."
+    },
+    {
+      "id": "screenshot/scene_view",
+      "ns": "screenshot",
+      "action": "scene_view",
+      "domain": "capture",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Render the last active Scene View camera to a PNG file.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "savePath", "type": "string", "required": true},
+        {"name": "width", "type": "int", "required": false, "default": 0, "min": 0},
+        {"name": "height", "type": "int", "required": false, "default": 0, "min": 0}
+      ],
+      "rules": {},
+      "resultFields": ["savePath", "width", "height"],
+      "positiveIntents": ["capture the current Unity Scene View", "截取当前 Unity 场景视图"],
+      "negativeIntents": ["capture the Game View or a runtime frame"],
+      "verification": "Require the PNG file to exist before completion and require its dimensions to match the result."
+    },
+    {
+      "id": "screenshot/game_view",
+      "ns": "screenshot",
+      "action": "game_view",
+      "domain": "capture",
+      "tier": "core",
+      "availability": "supported",
+      "summary": "Render a scene camera in edit mode or schedule a Game View screenshot for end-of-frame in play mode.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "savePath", "type": "string", "required": true},
+        {"name": "width", "type": "int", "required": false, "default": 0, "min": 0},
+        {"name": "height", "type": "int", "required": false, "default": 0, "min": 0},
+        {"name": "superSize", "type": "int", "required": false, "default": 1, "min": 1}
+      ],
+      "rules": {},
+      "resultFields": ["savePath", "width", "height"],
+      "positiveIntents": ["capture the Unity Game View or gameplay frame", "截取 Unity 游戏视图或运行画面"],
+      "negativeIntents": ["capture the Scene View editor camera"],
+      "verification": "Wait for the PNG file to exist, then require its dimensions to match the result."
+    },
+    {
+      "id": "profiler/start",
+      "ns": "profiler",
+      "action": "start",
+      "domain": "capture",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Start Unity Profiler recording, optionally enabling deep profiling and binary logging.",
+      "sideEffect": "lifecycle",
+      "editorOnly": true,
+      "args": [
+        {"name": "deep", "type": "bool", "required": false, "default": false},
+        {"name": "logFile", "type": "string", "required": false, "default": ""}
+      ],
+      "rules": {},
+      "resultFields": ["started", "deepProfiling", "logFile"],
+      "positiveIntents": ["start recording Unity Profiler data", "开始记录 Unity Profiler 数据"],
+      "negativeIntents": ["inspect current profiler state without changing it"],
+      "verification": "Read profiler/status and require enabled, deepProfiling, and logFile to match the request."
+    },
+    {
+      "id": "profiler/stop",
+      "ns": "profiler",
+      "action": "stop",
+      "domain": "capture",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Stop Unity Profiler recording and disable binary logging.",
+      "sideEffect": "lifecycle",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": ["stopped"],
+      "positiveIntents": ["stop recording Unity Profiler data", "停止记录 Unity Profiler 数据"],
+      "negativeIntents": ["save already recorded profiler data to a file"],
+      "verification": "Require stopped to be true and profiler/status enabled to be false."
+    },
+    {
+      "id": "profiler/status",
+      "ns": "profiler",
+      "action": "status",
+      "domain": "capture",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Read Unity Profiler enabled, deep-profiling, log-file, and frame-count state.",
+      "sideEffect": "read",
+      "editorOnly": true,
+      "args": [],
+      "rules": {},
+      "resultFields": ["enabled", "deepProfiling", "logFile", "frameCount"],
+      "positiveIntents": ["check whether the Unity Profiler is recording", "检查 Unity Profiler 是否正在记录"],
+      "negativeIntents": ["check general Unity Editor readiness"],
+      "verification": "Require frameCount to be nonnegative and state to round-trip with profiler/start and profiler/stop."
+    },
+    {
+      "id": "profiler/save",
+      "ns": "profiler",
+      "action": "save",
+      "domain": "capture",
+      "tier": "advanced",
+      "availability": "supported",
+      "summary": "Save recorded Unity Profiler data to a raw profile file when the Unity version supports it.",
+      "sideEffect": "write",
+      "editorOnly": true,
+      "args": [
+        {"name": "savePath", "type": "string", "required": true}
+      ],
+      "rules": {},
+      "resultFields": ["savePath", "saved"],
+      "positiveIntents": ["save captured Unity Profiler data", "保存已捕获的 Unity Profiler 数据"],
+      "negativeIntents": ["start or stop profiler recording"],
+      "verification": "Require saved to be true and the returned file to exist and be nonempty."
+    },
+    {
+      "id": "session/list",
+      "ns": "session",
+      "action": "list",
+      "domain": "control",
+      "tier": "control-plane",
+      "availability": "supported",
+      "summary": "List active named REPL sessions and whether each owns a compiler or executor.",
+      "sideEffect": "read",
+      "editorOnly": false,
+      "args": [],
+      "rules": {},
+      "resultFields": ["sessions", "sessions[].sessionId", "sessions[].hasCompiler", "sessions[].hasExecutor"],
+      "positiveIntents": ["list active unity-cli REPL sessions", "列出活动的 unity-cli REPL 会话"],
+      "negativeIntents": ["list Unity scenes or GameObjects"],
+      "verification": "Require unique nonempty session IDs and cross-check each entry with session/inspect."
+    },
+    {
+      "id": "session/inspect",
+      "ns": "session",
+      "action": "inspect",
+      "domain": "control",
+      "tier": "control-plane",
+      "availability": "supported",
+      "summary": "Inspect one named REPL session supplied through the request session ID or CLI --session.",
+      "sideEffect": "read",
+      "editorOnly": false,
+      "args": [
+        {"name": "sessionId", "type": "request-session", "required": true}
+      ],
+      "rules": {},
+      "resultFields": ["exists", "hasCompiler", "hasExecutor"],
+      "positiveIntents": ["inspect a named unity-cli REPL session", "查看命名的 unity-cli REPL 会话"],
+      "negativeIntents": ["inspect a Unity scene object or C# component"],
+      "verification": "Require missing session IDs to fail; otherwise require exists to equal hasCompiler or hasExecutor."
+    },
+    {
+      "id": "session/reset",
+      "ns": "session",
+      "action": "reset",
+      "domain": "control",
+      "tier": "control-plane",
+      "availability": "supported",
+      "summary": "Reset compiler and executor state for one named REPL session supplied through the request session ID or CLI --session.",
+      "sideEffect": "destructive",
+      "editorOnly": false,
+      "args": [
+        {"name": "sessionId", "type": "request-session", "required": true}
+      ],
+      "rules": {},
+      "resultFields": ["existed", "hasCompiler", "hasExecutor", "hasCompilerAfter", "hasExecutorAfter"],
+      "positiveIntents": ["reset a named unity-cli REPL session", "重置命名的 unity-cli REPL 会话"],
+      "negativeIntents": ["reset the Unity scene or Editor state"],
+      "verification": "Require hasCompilerAfter and hasExecutorAfter to be false and confirm with session/inspect."
+    },
+    {
+      "id": "command/list",
+      "ns": "command",
+      "action": "list",
+      "domain": "control",
+      "tier": "control-plane",
+      "availability": "supported",
+      "summary": "List registered built-in and custom command descriptors; descriptors omit defaults, constraints, and result schemas.",
+      "sideEffect": "read",
+      "editorOnly": false,
+      "args": [],
+      "rules": {},
+      "resultFields": ["commands", "commands[].id", "commands[].commandNamespace", "commands[].action", "commands[].summary", "commands[].editorOnly", "commands[].runOnMainThread", "commands[].declaringType", "commands[].methodName", "commands[].commandType", "commands[].arguments"],
+      "positiveIntents": ["discover registered Unity command descriptors", "发现已注册的 Unity 命令描述符"],
+      "negativeIntents": ["list scene assets, GameObjects, or reusable snippets"],
+      "verification": "Require unique command IDs, valid descriptor fields, and inclusion of command/list itself."
+    }
+  ]
+}
