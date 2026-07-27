@@ -23,6 +23,13 @@ def _is_connection_refused(error):
     seen = set()
     refused_codes = {errno.ECONNREFUSED, 10061}
 
+    def is_refused_code(value):
+        return (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and value in refused_codes
+        )
+
     while pending:
         current = pending.pop()
         if id(current) in seen:
@@ -31,15 +38,23 @@ def _is_connection_refused(error):
 
         if isinstance(current, ConnectionRefusedError):
             return True
-        if getattr(current, "errno", None) in refused_codes:
+        if is_refused_code(getattr(current, "errno", None)):
             return True
-        if getattr(current, "winerror", None) in refused_codes:
+        if is_refused_code(getattr(current, "winerror", None)):
             return True
 
-        for attribute in ("reason", "__cause__", "__context__"):
-            nested = getattr(current, attribute, None)
-            if isinstance(nested, BaseException):
-                pending.append(nested)
+        cause = getattr(current, "__cause__", None)
+        reason = getattr(current, "reason", None)
+        context = getattr(current, "__context__", None)
+        if isinstance(cause, BaseException):
+            pending.append(cause)
+        elif isinstance(reason, BaseException):
+            pending.append(reason)
+        elif (
+            not getattr(current, "__suppress_context__", False)
+            and isinstance(context, BaseException)
+        ):
+            pending.append(context)
 
     return False
 
