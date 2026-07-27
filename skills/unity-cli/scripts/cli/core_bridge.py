@@ -12,12 +12,6 @@ from cli import PACKAGE_NAME, DEFAULT_EDITOR_PORT, load_pkg_path, save_pkg_path
 
 CORE_RELATIVE = Path("Editor/ExternalTool~/console-client")
 _RETRY_DELAY_S = 1
-_COMMAND_ERROR_TYPES = {
-    "compile_error",
-    "runtime_error",
-    "system_error",
-    "validation_error",
-}
 _COMMAND_EXIT_CODES = {
     "compile_error": 1,
     "runtime_error": 2,
@@ -237,7 +231,7 @@ def _validate_status_type(ok, result_type, label):
         if result_type != "ok":
             raise ValueError(f"Invalid {label} type for successful status")
         return
-    if result_type not in _COMMAND_ERROR_TYPES:
+    if not result_type or result_type == "ok":
         raise ValueError(f"Invalid {label} type for failed status")
 
 
@@ -380,7 +374,11 @@ def _normalize_command_result(result, command_id, namespace, action):
         _validate_status_type(ok, result_type, "command response")
     except ValueError as exc:
         return _protocol_error(result, command_id, str(exc))
-    expected_exit_code = 0 if ok else _COMMAND_EXIT_CODES[result_type]
+    expected_exit_code = (
+        0
+        if ok
+        else _COMMAND_EXIT_CODES.get(result_type, 3)
+    )
     if exit_code != expected_exit_code:
         return _protocol_error(
             result,
