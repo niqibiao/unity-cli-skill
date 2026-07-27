@@ -1,5 +1,6 @@
 """Dynamic bridge to csharpconsole_core from an installed Unity package."""
 
+import errno
 import json
 import os
 import sys
@@ -10,6 +11,37 @@ from cli import PACKAGE_NAME, DEFAULT_EDITOR_PORT, load_pkg_path, save_pkg_path
 
 CORE_RELATIVE = Path("Editor/ExternalTool~/console-client")
 _RETRY_DELAY_S = 1
+
+
+def _is_connection_refused(error):
+    """Return True only when a request clearly failed before connecting.
+
+    Timeouts and resets can occur after Unity has applied a mutation. Retrying
+    either would risk applying one command or an entire batch twice.
+    """
+    pending = [error]
+    seen = set()
+    refused_codes = {errno.ECONNREFUSED, 10061}
+
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+
+        if isinstance(current, ConnectionRefusedError):
+            return True
+        if getattr(current, "errno", None) in refused_codes:
+            return True
+        if getattr(current, "winerror", None) in refused_codes:
+            return True
+
+        for attribute in ("reason", "__cause__", "__context__"):
+            nested = getattr(current, attribute, None)
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+
+    return False
 
 
 def _find_pkg_dir(project_root):
@@ -80,21 +112,27 @@ def _ensure_path(core_path):
 
 
 def _make_post_with_retry(transport_http, state, default_timeout):
-    """Create a POST function that retries once when the server is unreachable."""
+    """Create a POST function that retries one refused connection."""
     # The urllib-based core raises TransportError for every transport failure
     # (connection refused, timeout, non-2xx). Older requests-based cores raised
     # OSError subclasses instead. Catch both so the domain-reload retry survives
     # whichever core version is resolved; fall back to OSError only against a
     # core that predates TransportError.
     transport_error = getattr(transport_http, "TransportError", None)
-    transient = (OSError, transport_error) if transport_error is not None else (OSError,)
+    transport_failures = (
+        (OSError, transport_error)
+        if transport_error is not None
+        else (OSError,)
+    )
 
     def _post(endpoint, payload, timeout=None):
         t = timeout if timeout is not None else default_timeout
         url_base = state.current_server_base_url()
         try:
             return transport_http.post_json(url_base, endpoint, payload, t)
-        except transient:
+        except transport_failures as error:
+            if not _is_connection_refused(error):
+                raise
             time.sleep(_RETRY_DELAY_S)
             return transport_http.post_json(url_base, endpoint, payload, t)
 
