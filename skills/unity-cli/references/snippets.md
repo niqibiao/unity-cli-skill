@@ -1,12 +1,10 @@
 # Unity CLI Snippets
 
-## Decision Order (strict)
+## Entry boundary
 
-Before writing ad-hoc `cs exec` for any non-trivial Unity automation:
-
-1. `cs list-commands [--type custom]` — built-in or custom command available?
-2. `cs snippets search <description>` — matching snippet?
-3. Only if neither match: ad-hoc `cs exec`.
+Enter the snippet branch only after following the canonical routing order in
+`SKILL.md`. Built-in discovery must use its relevant domain/tier filters; do not
+load the full command registry merely to decide whether to search snippets.
 
 "Non-trivial" = >3 lines, or uses LINQ / reflection / AssetDatabase / multi-step.
 
@@ -122,11 +120,11 @@ No `Quaternion` (use `vector3` Euler or `vector4` raw inside `Run`). No `expr` (
 
 - Read `.unity-cli/snippets~/` directly with shell tools.
 - Hand-edit snippet `.md` files; use `add` / `update --file` so validation runs.
-- Skip `cs list-commands` and `cs snippets search` before ad-hoc `cs exec`.
+- Bypass the routing stages defined in `SKILL.md` before ad-hoc `cs exec`.
 - Distill one-shot operations or trivial one-liners.
 
 ## Boundary with `cs command` / `cs exec`
 
-- Built-in/custom command available → `cs command` (see references/commands.md).
-- One-off ad-hoc → `cs exec` (see references/exec-code.md).
-- Reusable ad-hoc → `cs snippets`.
+The canonical boundary is defined in `SKILL.md`. This reference owns reusable
+fallback code only; see `references/commands.md` for structured execution and
+`references/exec-code.md` for one-off raw C#.

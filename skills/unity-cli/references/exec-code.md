@@ -1,9 +1,15 @@
 # Unity CLI Exec Code (Fallback)
 
 Execute raw C# in a running Unity Editor via the Roslyn-based CSharpConsole REPL.
-Always prefer `cs command` first.
+Raw exec is the final fallback in the canonical routing order in `SKILL.md`.
+Follow that routing and exhaust the matching built-in, package custom command, and
+snippet stages before using this reference.
 
-Then check the snippet library (`cs snippets search <description>`) before writing ad-hoc code. After solving a non-trivial task that's likely to recur, consider distilling it into a snippet — see references/snippets.md.
+Raw exec must never be used to bypass the `editor/menu.open` or
+`editor/window.open` deny policies.
+
+After solving a non-trivial task that's likely to recur, consider distilling it
+into a snippet — see `references/snippets.md`.
 
 ## Usage
 
@@ -99,8 +105,8 @@ error does not require this split.
 ### LINQ queries over live scene
 
 ```csharp
-// Prefer FindObjectsByType (Unity 2023.1+); FindObjectsOfType is deprecated.
-using System.Linq; UnityEngine.Object.FindObjectsByType<Rigidbody>(FindObjectsSortMode.None).Select(r => $"{r.name}: mass={r.mass}").ToList()
+// Unity 2022 scene query.
+using System.Linq; UnityEngine.Object.FindObjectsOfType<Rigidbody>().Select(r => $"{r.name}: mass={r.mass}").ToList()
 // Resources.FindObjectsOfTypeAll is still current — it returns inactive/asset objects too:
 using System.Linq; Resources.FindObjectsOfTypeAll<GameObject>().Where(g => !g.activeInHierarchy).Select(g => g.name).ToList()
 ```
@@ -133,7 +139,7 @@ foreach(var r in GameObject.FindGameObjectsWithTag("Debug").SelectMany(g => g.Ge
 
 The simplest reset is to stop passing the old id or choose a new one. To explicitly
 reset a named session, write the normal command request
-`{"ns":"session","action":"reset","args":{}}` to the scratch JSON file and run:
+`{"id":"session/reset","args":{}}` to the scratch JSON file and run:
 
 ```bash
 cs command --session agent-a1b2c3 --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req-reset-session.json"

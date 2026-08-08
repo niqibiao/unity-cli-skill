@@ -101,15 +101,58 @@ def _make_post_with_retry(transport_http, state, default_timeout):
     return _post
 
 
-def _coerce_args_json(cmd):
-    """Extract argsJson string from a batch command item."""
-    args = cmd.get("args")
-    if isinstance(args, dict):
-        return json.dumps(args, ensure_ascii=False)
-    args_json = cmd.get("argsJson") or args
-    if isinstance(args_json, str):
-        return args_json
-    return "{}"
+def _prepared_command_parts(prepared):
+    """Return canonical id, wire route, and args from one preflight result."""
+    if not isinstance(prepared, dict) or set(prepared) != {
+        "id",
+        "partition",
+        "wire",
+        "args",
+    }:
+        raise ValueError("expected a canonical prepared command")
+    command_id = prepared["id"]
+    partition = prepared["partition"]
+    wire = prepared["wire"]
+    args = prepared["args"]
+    if not isinstance(command_id, str) or not command_id:
+        raise ValueError("prepared command id must be a non-empty string")
+    if partition not in {"builtin", "custom"}:
+        raise ValueError("prepared command partition must be builtin or custom")
+    if not isinstance(wire, dict) or set(wire) != {
+        "commandNamespace",
+        "action",
+    }:
+        raise ValueError("prepared command wire must contain exact route fields")
+    namespace = wire["commandNamespace"]
+    action = wire["action"]
+    if not isinstance(namespace, str) or not isinstance(action, str):
+        raise ValueError("prepared command wire route must use strings")
+    if not isinstance(args, dict):
+        raise ValueError("prepared command args must be an object")
+    return command_id, namespace, action, args
+
+
+def _decode_result_json(value):
+    if not isinstance(value, str):
+        return value
+    if not value.strip():
+        return {}
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
+
+
+def _normalize_command_result(result, command_id):
+    """Attach the canonical id and expose the existing parser's business data."""
+    if not isinstance(result, dict):
+        return result
+    normalized = dict(result)
+    normalized["id"] = command_id
+    data = normalized.get("data")
+    if isinstance(data, dict) and "resultJson" in data:
+        normalized["data"] = data["resultJson"]
+    return normalized
 
 
 class ConsoleSession:
@@ -144,6 +187,7 @@ class ConsoleSession:
         self._state = state
 
         self._session_id = client_base.generate_session_id(session_id)
+        self._timeout = timeout
         self._post = _make_post_with_retry(transport_http, state, timeout)
         self._mode_name = lambda: state.current_mode_name()
         # Placeholders required by csharpconsole_core API for persistent
@@ -170,11 +214,18 @@ class ConsoleSession:
             self._define, self._using, code, self._session_id, reset,
         )
 
-    def command(self, namespace, action, args=None):
+    def _request_command(self, namespace, action, args=None):
         return self._cmd.request_command(
             self._post, self._parser.parse_command_http_response,
             self._mode_name, namespace, action, self._session_id, args,
+            timeout_seconds=self._timeout,
         )
+
+    def command(self, prepared):
+        """Execute one preflighted canonical command."""
+        command_id, namespace, action, args = _prepared_command_parts(prepared)
+        result = self._request_command(namespace, action, args)
+        return _normalize_command_result(result, command_id)
 
     def health(self):
         return self._client.request_health(
@@ -213,97 +264,156 @@ class ConsoleSession:
             self.health, self._mode_name, timeout,
         )
 
-    def list_commands(self):
-        return self.command("command", "list")
+    def registry_snapshot(self, if_generation=None):
+        """Fetch the package-owned registry snapshot, conditional on a token."""
+        if if_generation is None:
+            return self._request_command("command", "registry.snapshot")
+        if not isinstance(if_generation, str) or not if_generation:
+            raise ValueError(
+                "registry snapshot ifGeneration must be a non-empty string"
+            )
+        return self._request_command(
+            "command",
+            "registry.snapshot",
+            {"ifGeneration": if_generation},
+        )
 
-    def batch(self, commands_json, stop_on_error=False):
-        """Execute multiple commands in one HTTP roundtrip via /batch endpoint."""
+    def batch(self, prepared_commands, stop_on_error=False):
+        """Execute preflighted canonical commands in one HTTP roundtrip."""
         from csharpconsole_core.models import make_result, new_run_id
+
         start = time.time()
         run_id = new_run_id()
 
-        if isinstance(commands_json, str):
-            try:
-                commands = json.loads(commands_json)
-            except json.JSONDecodeError as e:
-                return make_result(
-                    False, "command", "validation_error", 1,
-                    f"Invalid JSON: {e}", "", self._mode_name(), run_id, 0,
-                )
-        else:
-            commands = commands_json
-
-        if not isinstance(commands, list):
+        def failure(summary, result_type="validation_error", exit_code=1):
             return make_result(
-                False, "command", "validation_error", 1,
-                "Expected a JSON array of commands", "",
-                self._mode_name(), run_id, 0,
+                False,
+                "command",
+                result_type,
+                exit_code,
+                summary,
+                "",
+                self._mode_name(),
+                run_id,
+                (time.time() - start) * 1000,
             )
 
+        if not isinstance(prepared_commands, list) or not prepared_commands:
+            return failure("Expected a non-empty array of prepared commands")
+        if not isinstance(stop_on_error, bool):
+            return failure("stop_on_error must be a boolean")
+
+        canonical = []
         items = []
-        for cmd in commands:
-            if not isinstance(cmd, dict):
-                return make_result(
-                    False, "command", "validation_error", 1,
-                    "Each command must be a JSON object", "",
-                    self._mode_name(), run_id, 0,
+        try:
+            for prepared in prepared_commands:
+                command_id, namespace, action, args = (
+                    _prepared_command_parts(prepared)
                 )
-            items.append({
-                "commandNamespace": cmd.get("ns") or cmd.get("commandNamespace") or "",
-                "action": cmd.get("action") or "",
-                "sessionId": cmd.get("sessionId") or self._session_id,
-                "argsJson": _coerce_args_json(cmd),
-            })
+                canonical.append((command_id, namespace, action))
+                items.append(
+                    {
+                        "commandNamespace": namespace,
+                        "action": action,
+                        "sessionId": self._session_id,
+                        "argsJson": json.dumps(
+                            args,
+                            ensure_ascii=False,
+                            allow_nan=False,
+                        ),
+                    }
+                )
+        except ValueError as exc:
+            return failure(f"Invalid prepared batch command: {exc}")
 
         payload = {"commands": items, "stopOnError": stop_on_error}
         try:
             raw = self._post("batch", payload)
-            # Parse the batch envelope using the same logic as other endpoints:
-            # raw is JSON text → parse envelope → extract dataJson
             envelope = json.loads(raw) if isinstance(raw, str) else raw
             if not isinstance(envelope, dict) or "dataJson" not in envelope:
-                return make_result(
-                    False, "command", "system_error", 3,
-                    "Invalid batch response", "", self._mode_name(), run_id,
-                    (time.time() - start) * 1000,
-                )
-
+                return failure("Invalid batch response", "system_error", 3)
             data_raw = envelope.get("dataJson", "{}")
-            data = json.loads(data_raw) if isinstance(data_raw, str) else data_raw
+            data = (
+                json.loads(data_raw)
+                if isinstance(data_raw, str)
+                else data_raw
+            )
             if not isinstance(data, dict):
                 data = {}
-
             results_raw = data.get("resultsJson", "[]")
-            if isinstance(results_raw, str):
-                try:
-                    results_list = json.loads(results_raw)
-                except json.JSONDecodeError:
-                    results_list = []
-            else:
-                results_list = results_raw
+            results_list = (
+                json.loads(results_raw)
+                if isinstance(results_raw, str)
+                else results_raw
+            )
+            if not isinstance(results_list, list):
+                results_list = []
+            normalized_results = []
+            for index, item in enumerate(results_list):
+                if not isinstance(item, dict):
+                    normalized_results.append(
+                        {"index": index, "data": item}
+                    )
+                    continue
+                normalized = {
+                    "index": index,
+                    "ok": item.get("ok"),
+                    "type": item.get("type") or "",
+                    "summary": item.get("summary") or "",
+                    "sessionId": item.get("sessionId") or "",
+                    "data": _decode_result_json(
+                        item.get("resultJson", "")
+                    ),
+                }
+                if index < len(canonical):
+                    command_id, namespace, action = canonical[index]
+                    if (
+                        item.get("commandNamespace") == namespace
+                        and item.get("action") == action
+                    ):
+                        normalized["id"] = command_id
+                normalized_results.append(normalized)
 
             ok = bool(envelope.get("ok"))
+            total = data.get("total", len(normalized_results))
+            succeeded = data.get(
+                "succeeded",
+                sum(1 for item in normalized_results if item.get("ok")),
+            )
+            failed = data.get("failed", max(0, total - succeeded))
             return make_result(
-                ok, "command", "" if ok else "system_error",
+                ok,
+                "command",
+                "" if ok else "system_error",
                 0 if ok else 3,
-                envelope.get("summary") or f"Batch: {data.get('succeeded', 0)}/{data.get('total', 0)} succeeded",
-                "", self._mode_name(), run_id, (time.time() - start) * 1000,
+                envelope.get("summary")
+                or f"Batch: {succeeded}/{total} succeeded",
+                "",
+                self._mode_name(),
+                run_id,
+                (time.time() - start) * 1000,
                 {
-                    "total": data.get("total", 0),
-                    "succeeded": data.get("succeeded", 0),
-                    "failed": data.get("failed", 0),
-                    "results": results_list,
+                    "total": total,
+                    "succeeded": succeeded,
+                    "failed": failed,
+                    "results": normalized_results,
                 },
             )
-        except Exception as e:
-            return make_result(
-                False, "command", "system_error", 3,
-                f"Batch request failed: {e}", "", self._mode_name(), run_id,
-                (time.time() - start) * 1000,
+        except Exception as exc:
+            return failure(
+                f"Batch request failed: {exc}",
+                "system_error",
+                3,
             )
 
     def _print_text(self, result):
-        text = result.get("data", {}).get("text") or result.get("summary", "")
+        data = result.get("data")
+        if isinstance(data, dict):
+            text = data.get("text") or result.get("summary", "")
+        elif "data" in result:
+            text = json.dumps(data, ensure_ascii=False)
+        else:
+            text = result.get("summary", "")
         text = text.replace("\\n", "\n").replace("\\t", "\t")
         if result.get("ok"):
             print(text) if text else None

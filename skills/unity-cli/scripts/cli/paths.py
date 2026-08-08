@@ -1,15 +1,14 @@
 """Machine-local state location for unity-cli.
 
-All non-committed state (resolved package path, snippet usage stats) lives in a
-per-project subdir under the user's home cache — never in the project tree or the
-committed skill dir. Keying by the resolved project root means multiple Unity
-projects on one machine each get their own files, so concurrent runs across
-projects never share (and never race on) a file.
+Resolved package paths, command registries, and snippet usage stats live in a
+per-project subdir under the user's home cache. None of this state is written
+into the project tree or committed skill directory.
 """
 
 import hashlib
 import os
 import re
+import tempfile
 from pathlib import Path
 
 
@@ -40,13 +39,56 @@ def state_dir(project_root):
     return d
 
 
+def registry_cache_path(project_root):
+    """Return the per-project command-registry cache path."""
+    return state_dir(project_root) / "command-registry.v1.json"
+
+
 def atomic_write(path, text):
-    """Write text to *path* atomically (temp + os.replace). Silent on read-only."""
+    """Atomically replace *path* with UTF-8/LF *text*.
+
+    A unique temporary file in the destination directory prevents writers from
+    sharing scratch state. Failures leave the destination untouched and return
+    ``False``.
+    """
     path = Path(path)
+    temp_path = None
+    descriptor = None
     try:
+        if not isinstance(text, str):
+            return False
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(text, "utf-8")
-        os.replace(tmp, path)
-    except OSError:
-        pass
+        descriptor, temp_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+        )
+        temp_path = Path(temp_name)
+        stream = os.fdopen(
+            descriptor,
+            mode="w",
+            encoding="utf-8",
+            newline="\n",
+        )
+        descriptor = None
+        with stream:
+            stream.write(text.replace("\r\n", "\n").replace("\r", "\n"))
+            stream.flush()
+            os.fsync(stream.fileno())
+
+        os.replace(temp_path, path)
+        temp_path = None
+        return True
+    except (OSError, UnicodeError):
+        return False
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass

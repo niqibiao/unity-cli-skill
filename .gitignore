@@ -5,6 +5,16 @@ __pycache__/
 .catalog-cache.json
 skills/unity-cli-command/dynamic-commands.md
 docs
+!docs/
+docs/*
+!docs/agents/
+!docs/agents/**
+!docs/adr/
+!docs/adr/**
+!docs/specs/
+!docs/specs/**
 tests/
 cc-codex-discussion-history/
-adr
+/adr/
+.scratch/
+skills/unity-cli/scripts/cli/local_fixtures/
