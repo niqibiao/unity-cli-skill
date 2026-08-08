@@ -1,47 +1,62 @@
-# Unity CLI Catalog
+# Unity CLI Custom Catalog
 
-Two operations over the custom-command catalog, both via `cs`.
+The catalog is a version-controlled shortlist of project-defined commands for the
+team. It contains an exact copy of the last verified package custom partition, but
+it is not execution authority: always resolve the current Registry Snapshot before
+executing a candidate.
 
-## Sync the per-project custom command catalog
+## Sync
 
-After registering new C# framework commands in Unity (or when `cs catalog list` looks
-stale/empty), sync the catalog from the running Editor:
+After registering, removing, or changing project commands, sync from the running
+Editor:
 
 ```bash
 cs catalog sync
 ```
 
-Report the summary it prints (added/removed/total) and the catalog file path.
-The catalog lives at `{project}/.unity-cli/catalog.json`
-(committed — shared with the team). To read/write a different location for **one call
-only**, pass `--catalog-path /your/path/catalog.json` (not persisted).
+Sync creates one registry resolver, performs one live fingerprint comparison, and
+downloads only a missing or changed partition. It writes only when the custom
+fingerprint or contracts changed.
 
-List the cached catalog offline (text index: id, arg names, summary — for full arg
-types/descriptions, Read the catalog file directly):
+The default file is:
+
+```text
+<project-root>/.unity-cli/catalog.json
+```
+
+It is deterministic team state: no machine path or timestamp is stored. Writes use
+atomic replacement. A malformed response, stale cache, generated fallback, or
+write failure returns non-zero and preserves the existing file. Catalog v1 is
+intentionally not read; run `catalog sync` to replace it with strict v2.
+
+Use `--catalog-path <path>` to override the target for one invocation.
+
+Report the total plus `added`, `removed`, and `changed` IDs. A verified empty custom
+partition is valid and intentionally writes an empty command list.
+
+## List candidates
+
+List the shared shortlist without contacting Unity:
 
 ```bash
 cs catalog list
 ```
 
-If sync fails, check that the Unity Editor is open and the C# Console package is
-installed.
+The text form shows canonical ID, argument names, Editor requirement, and summary.
+Use it only to select likely candidates. Then load the exact current contract:
 
-## Maintainer audit: built-in tables vs the live Editor
+```bash
+cs list-commands --offline --view custom --id <canonical-id> --json
+```
 
-**Audience: skill maintainers.** Check whether the static built-in command tables in
-`references/commands.md` have drifted from the commands registered in the running
-Editor (new actions added upstream, removed actions, changed signatures). This does
-**not** touch the per-project custom-command catalog.
+If offline discovery reports custom commands unavailable, run one live discovery
+without `--offline`. Use `cs list-commands --refresh …` only when the user
+explicitly asks to force a complete command-list update.
 
-1. Fetch the live command list:
-   ```bash
-   cs list-commands --json
-   ```
-2. Parse `data.commands` (built-in + custom).
-3. Compare with the static tables in `references/commands.md`. Built-in namespaces:
-   editor, gameobject, component, transform, material, prefab, project, scene,
-   screenshot, profiler, session, command.
-4. Report differences and suggest edits to `references/commands.md`:
-   - **New** commands not in the tables → add them
-   - **Removed** commands in the tables but not live → remove them
-   - **Changed signatures** (different args) → update them
+When an exact ID is absent from a first-use fallback, stale cache, or unchecked
+offline cache, discovery fails closed with exit code 2 and
+`data.kind:"discovery-error"`. The result preserves its registry `source`,
+`customAvailable`, `requestedIds`, and any `staleReason`; it does not claim the
+ID is unknown until live or live-checked registry evidence proves that absence.
+An older cache that cannot satisfy the current routing metadata uses the same
+failure envelope and requires live discovery before its command surface is used.

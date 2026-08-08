@@ -110,10 +110,35 @@ def _read_input_text(src):
     return sys.stdin.read() if src == "-" else Path(src).read_text("utf-8-sig")
 
 
+def _reject_duplicate_json_keys(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise json.JSONDecodeError(
+                f"duplicate object key {key!r}",
+                "",
+                0,
+            )
+        value[key] = item
+    return value
+
+
+def _reject_nonfinite_json_number(value):
+    raise json.JSONDecodeError(
+        f"non-finite number {value!r} is not valid JSON",
+        "",
+        0,
+    )
+
+
 def _read_input_json(src):
     """Read and JSON-parse an --input source (see _read_input_text). Propagates the read
     errors above, or json.JSONDecodeError on a malformed payload."""
-    return json.loads(_read_input_text(src))
+    return json.loads(
+        _read_input_text(src),
+        object_pairs_hook=_reject_duplicate_json_keys,
+        parse_constant=_reject_nonfinite_json_number,
+    )
 
 
 # ── Output helpers ─────────────────────────────────────────────────────
@@ -122,6 +147,10 @@ _SLIM_DROP = {"stage", "type", "exitCode", "sessionId", "runId", "mode", "durati
 _HEALTH_DROP = {"ok", "initialized", "isEditor", "port", "refreshing", "editorState",
                 "packageVersion", "protocolVersion", "unityVersion", "operation",
                 "accepted", "sessionsCleared", "exitPlayModeRequested", "message"}
+_DISCOVERY_DIAGNOSTIC_DROP = {
+    "liveChecked",
+    "registryGeneration",
+}
 
 
 def _slim_result(result):
@@ -129,10 +158,16 @@ def _slim_result(result):
     out = {k: v for k, v in result.items() if k not in _SLIM_DROP}
     data = out.get("data")
     if isinstance(data, dict):
-        # command/list-commands/exec: flatten resultJson, parsing if it's a
+        # Canonical command results carry a top-level id. Their data is
+        # command-owned business output and must remain opaque even when its
+        # shape resembles a legacy envelope, discovery view, batch, or health.
+        if "id" in out:
+            pass
+        # Transport responses may still wrap business output in resultJson.
+        # Flatten it, parsing if it's a
         # JSON string so agents see structured data instead of a stringified
         # blob. Falls back to the raw value on parse failure.
-        if "resultJson" in data:
+        elif "resultJson" in data:
             rj = data["resultJson"]
             if isinstance(rj, str):
                 try:
@@ -143,14 +178,62 @@ def _slim_result(result):
         # command echo removal
         elif "command" in data and len(data) == 1:
             out.pop("data", None)
+        elif data.get("kind") in {
+            "domain-index",
+            "route-cards",
+            "contract-bundle",
+            "discovery-error",
+        }:
+            out["data"] = {
+                key: value
+                for key, value in data.items()
+                if key not in _DISCOVERY_DIAGNOSTIC_DROP
+            }
+        elif (
+            isinstance(data.get("results"), list)
+            and all(
+                key in data
+                for key in ("total", "succeeded", "failed")
+            )
+        ):
+            compact_results = []
+            for item in data["results"]:
+                if not isinstance(item, dict):
+                    compact_results.append(item)
+                    continue
+                compact_item = {
+                    key: item[key]
+                    for key in ("index", "id", "ok")
+                    if key in item
+                }
+                if not item.get("ok") and item.get("type"):
+                    compact_item["type"] = item["type"]
+                if item.get("summary"):
+                    compact_item["summary"] = item["summary"]
+                if "data" in item and item["data"] != {}:
+                    compact_item["data"] = item["data"]
+                compact_results.append(compact_item)
+            out["data"] = {
+                "total": data["total"],
+                "succeeded": data["succeeded"],
+                "failed": data["failed"],
+                "results": compact_results,
+            }
         # health/refresh: strip diagnostic fields
-        elif "initialized" in data or "accepted" in data:
+        elif (
+            "id" not in out
+            and ("initialized" in data or "accepted" in data)
+        ):
             trimmed = {k: v for k, v in data.items() if k not in _HEALTH_DROP}
             out["data"] = trimmed if trimmed else None
     # drop empty/redundant summary/data
     if out.get("summary") in ("", "OK"):
         out.pop("summary", None)
-    if not out.get("data"):
+    if (
+        "data" in out
+        and not out["data"]
+        and "id" not in out
+    ):
         out.pop("data", None)
     return out
 
@@ -185,6 +268,14 @@ def _warn_version_mismatch(pkg_dir):
             print(f"\u26a0 version mismatch: plugin {pl} \u2260 package {kl}")
     except Exception:
         pass
+
+
+def _unity_version_label(value):
+    """Keep user-facing Unity labels at major-year granularity."""
+    if not isinstance(value, str):
+        return ""
+    match = re.match(r"^\s*(\d{4})", value)
+    return f"Unity {match.group(1)}" if match else ""
 
 
 def _new_session(root, args, pkg_dir):
@@ -322,8 +413,8 @@ def _cmd_status_json(root, args, agent_root=None):
     # ── service / editor ─────────────────────────────────────────────────
     if pkg_dir:
         try:
-            s = _new_session(root, args, pkg_dir)
-            r = s.health()
+            session = _new_session(root, args, pkg_dir)
+            r = session.health()
             if r.get("ok"):
                 hdata = r.get("data", {})
                 data["service"] = {
@@ -340,8 +431,13 @@ def _cmd_status_json(root, args, agent_root=None):
                 # Build summary from live data
                 unity_ver = hdata.get("unityVersion", "")
                 editor_state = hdata.get("editorState", "")
-                if unity_ver:
-                    result["summary"] = f"Connected to Unity {unity_ver} ({editor_state})" if editor_state else f"Connected to Unity {unity_ver}"
+                unity_label = _unity_version_label(unity_ver)
+                if unity_label:
+                    result["summary"] = (
+                        f"Connected to {unity_label} ({editor_state})"
+                        if editor_state
+                        else f"Connected to {unity_label}"
+                    )
                 else:
                     result["summary"] = f"Connected ({editor_state})" if editor_state else "Connected"
                 result["ok"] = True
@@ -375,30 +471,6 @@ def _cmd_status_json(root, args, agent_root=None):
         }
     except Exception as e:
         data["versions"] = {"plugin": None, "package": None, "aligned": None, "error": str(e)}
-
-    # ── commands ─────────────────────────────────────────────────────────
-    if pkg_dir and data.get("service", {}).get("reachable"):
-        try:
-            s2 = _new_session(root, args, pkg_dir)
-            lc = s2.list_commands()
-            if lc.get("ok"):
-                lc_data = lc.get("data", {})
-                rj = lc_data.get("resultJson", lc_data)
-                if isinstance(rj, str):
-                    try:
-                        rj = json.loads(rj)
-                    except (ValueError, TypeError):
-                        rj = {}
-                commands = rj.get("commands", [])
-                builtin_count = sum(1 for c in commands if c.get("commandType", "builtin") == "builtin")
-                custom_count = sum(1 for c in commands if c.get("commandType") == "custom")
-                data["commands"] = {"builtin": builtin_count, "custom": custom_count}
-            else:
-                data["commands"] = {"builtin": None, "custom": None}
-        except Exception as e:
-            data["commands"] = {"builtin": None, "custom": None, "error": str(e)}
-    else:
-        data["commands"] = {"builtin": None, "custom": None}
 
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     print()
@@ -439,8 +511,9 @@ def cmd_status(root, args, agent_root=None):
                 ver_parts = [pkg_ver]
                 if proto_ver is not None:
                     ver_parts.append(f"protocol v{proto_ver}")
-                if unity_ver:
-                    ver_parts.append(f"Unity {unity_ver}")
+                unity_label = _unity_version_label(unity_ver)
+                if unity_label:
+                    ver_parts.append(unity_label)
                 print(f"version: {', '.join(ver_parts)}")
         else:
             print("service: UNREACHABLE")
@@ -472,42 +545,244 @@ def cmd_status(root, args, agent_root=None):
     return rc
 
 
-def _filter_commands_by_type(result, type_filter):
-    """Filter list-commands result by commandType field.
+def _resolve_command_listing(root, args, session=None):
+    from cli.command_discovery import DiscoveryError, discover
+    from cli.registry_resolver import RegistryResolutionError, RegistryResolver
 
-    Handles three response shapes:
-      - data.resultJson as a JSON string (canonical post-2024 wire format)
-      - data.resultJson as a parsed dict (pre-parsed by transport)
-      - data.commands as a flat list (already-flattened response)
-    In all three cases we update *both* resultJson and data.commands so
-    downstream callers (notably _slim_result) see consistent filtered data.
-    """
-    if type_filter == "all":
-        return result
-    data = result.get("data", {})
-    raw_rj = data.get("resultJson")
-    if isinstance(raw_rj, str):
-        try:
-            rj = json.loads(raw_rj)
-        except (ValueError, TypeError):
-            return result
-    elif isinstance(raw_rj, dict):
-        rj = raw_rj
+    try:
+        resolution = RegistryResolver(root, session=session).resolve(
+            offline=args.offline,
+            refresh=getattr(args, "refresh_registry", False),
+        )
+    except RegistryResolutionError as exc:
+        return {
+            "ok": False,
+            "exitCode": 1,
+            "summary": str(exc),
+        }
+
+    resolution_data = {
+        "source": resolution.source,
+        "customAvailable": resolution.custom_available,
+        "liveChecked": resolution.live_checked,
+        "cacheStored": resolution.cache_stored,
+        "registryGeneration": resolution.snapshot["registryGeneration"],
+    }
+    if resolution.stale_reason:
+        resolution_data["staleReason"] = resolution.stale_reason
+
+    try:
+        projection = discover(
+            resolution.snapshot,
+            domains=args.domains,
+            command_ids=args.command_ids,
+            tier=args.tier,
+            view=args.view,
+            contract_detail="package" if args.verbose else "compact",
+        )
+    except DiscoveryError as exc:
+        summary = str(exc)
+        data = {
+            "kind": "discovery-error",
+            "view": args.view,
+            **resolution_data,
+        }
+        if args.domains:
+            data["requestedDomains"] = list(args.domains)
+        non_authoritative = (
+            resolution.source == "stale-cache"
+            or (
+                resolution.source == "cache"
+                and not resolution.live_checked
+            )
+        )
+        if (
+            exc.code == "registry_incomplete"
+            and non_authoritative
+        ):
+            summary = (
+                f"the {resolution.source} registry is incomplete for the "
+                "current routing metadata; run live discovery to verify "
+                "the command surface"
+            )
+        if args.command_ids:
+            requested_ids = list(args.command_ids)
+            data["requestedIds"] = requested_ids
+            missing_exact_contract = exc.code in {
+                "unknown_command",
+            }
+            if missing_exact_contract and non_authoritative:
+                summary = (
+                    "requested command contracts unavailable for authoritative "
+                    f"verification from the {resolution.source} registry; run "
+                    f"live discovery to verify: {', '.join(requested_ids)}"
+                )
+        return {
+            "ok": False,
+            "exitCode": 2,
+            "summary": summary,
+            "data": data,
+        }
+
+    data = dict(projection)
+    data.update(resolution_data)
+
+    kind = projection["kind"]
+    if kind == "domain-index":
+        summary = (
+            f"Discovered {projection['totalCommands']} "
+            f"{args.view} command(s) across "
+            f"{len(projection['domains'])} domain(s)"
+        )
+    elif kind == "route-cards":
+        summary = f"Listed {len(projection['routes'])} route card(s)"
     else:
-        rj = data
-    commands = rj.get("commands", [])
-    filtered = [c for c in commands if c.get("commandType", "builtin") == type_filter]
-    rj = dict(rj)
-    rj["commands"] = filtered
-    data = dict(data)
-    data["commands"] = filtered
-    if isinstance(raw_rj, str):
-        data["resultJson"] = json.dumps(rj)
-    elif isinstance(raw_rj, dict):
-        data["resultJson"] = rj
-    result = dict(result)
-    result["data"] = data
-    return result
+        denied_count = len(projection.get("denied", ()))
+        summary = (
+            f"Loaded {len(projection['selected'])} selected and "
+            f"{len(projection['related'])} related command contract(s)"
+        )
+        if denied_count:
+            summary += f"; reported {denied_count} denied intent(s)"
+    return {
+        "ok": True,
+        "exitCode": 0,
+        "summary": summary,
+        "data": data,
+    }
+
+
+def _emit_command_listing(result, args):
+    if args.as_json:
+        json.dump(
+            result if args.verbose else _slim_result(result),
+            sys.stdout,
+            ensure_ascii=False,
+            indent=2 if args.verbose else None,
+            separators=None if args.verbose else (",", ":"),
+        )
+        print()
+    elif not result.get("ok"):
+        print(f"Error: {result.get('summary', 'registry resolution failed')}",
+              file=sys.stderr)
+    else:
+        data = result["data"]
+        if data["kind"] == "domain-index":
+            for domain in data["domains"]:
+                tiers = ", ".join(
+                    f"{tier}:{count}"
+                    for tier, count in domain["tiers"].items()
+                )
+                print(
+                    f"{domain['id']}\t{tiers}\t{domain['summary']}"
+                )
+        elif data["kind"] == "route-cards":
+            for route in data["routes"]:
+                print(
+                    f"{route['id']}\t{data['tier']}\t"
+                    f"{route['effect']}\t{route['selectWhen']}"
+                )
+        else:
+            for item in data["selected"]:
+                contract = item["contract"]
+                print(
+                    f"selected\t{contract['id']}\t"
+                    f"{contract.get('summary', '')}"
+                )
+            for item in data["related"]:
+                contract = item["contract"]
+                print(
+                    f"related\t{contract['id']}\t"
+                    f"{contract.get('summary', '')}"
+                )
+        custom_state = "available" if data["customAvailable"] else "unavailable"
+        print(
+            f"registry source: {data['source']}; custom commands: {custom_state}",
+            file=sys.stderr,
+        )
+        if data.get("staleReason"):
+            print(
+                f"Warning: using stale registry cache: {data['staleReason']}",
+                file=sys.stderr,
+            )
+    return result.get("exitCode", 1)
+
+
+def cmd_list_commands_offline(root, args):
+    """Resolve per-project cache or generated built-ins without live I/O."""
+    return _emit_command_listing(
+        _resolve_command_listing(root, args),
+        args,
+    )
+
+
+def cmd_list_commands_live(root, args, session):
+    """Resolve the live package registry through one fingerprint comparison."""
+    return _emit_command_listing(
+        _resolve_command_listing(root, args, session),
+        args,
+    )
+
+
+def _execute_canonical_request(root, args, session):
+    """Resolve once, preflight canonical requests, then dispatch internal wire."""
+    from cli.command_preflight import (
+        CommandPreflightError,
+        prepare_batch,
+        prepare_command,
+    )
+    from cli.registry_resolver import RegistryResolutionError, RegistryResolver
+
+    try:
+        resolution = RegistryResolver(root, session=session).resolve()
+    except RegistryResolutionError as exc:
+        return {
+            "ok": False,
+            "exitCode": 1,
+            "summary": f"Unable to resolve the current command registry: {exc}",
+        }
+
+    if (
+        resolution.source not in {"live", "cache"}
+        or not resolution.live_checked
+    ):
+        reason = (
+            f": {resolution.stale_reason}"
+            if resolution.stale_reason
+            else ""
+        )
+        return {
+            "ok": False,
+            "exitCode": 1,
+            "summary": (
+                "The current registry could not be verified; command execution "
+                f"refuses source {resolution.source!r}{reason}"
+            ),
+        }
+
+    try:
+        if args.cmd == "command":
+            prepared = prepare_command(
+                resolution.snapshot,
+                args.command_request["id"],
+                args.command_request["args"],
+                session_id=getattr(args, "session", None),
+                mode=args.mode,
+            )
+            return session.command(prepared)
+        prepared = prepare_batch(
+            resolution.snapshot,
+            args.command_requests,
+            session_id=getattr(args, "session", None),
+            mode=args.mode,
+        )
+    except CommandPreflightError as exc:
+        return {
+            "ok": False,
+            "exitCode": 2,
+            "summary": str(exc),
+        }
+    return session.batch(prepared, args.stop_on_error)
 
 
 # ── Catalog commands ───────────────────────────────────────────────────
@@ -523,158 +798,192 @@ def _resolve_catalog_path(root, args):
     return default_catalog_path(root)
 
 
+def _emit_catalog_error(args, message):
+    result = {
+        "ok": False,
+        "exitCode": 1,
+        "summary": message,
+    }
+    if args.as_json:
+        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+    else:
+        print(f"Error: {message}", file=sys.stderr)
+    return 1
+
+
 def cmd_catalog_sync(root, args, agent_root):
+    from cli.catalog_store import (
+        CatalogStoreError,
+        WRITE_FAILED,
+        WRITE_UNCHANGED,
+        build_catalog,
+        read_catalog_state,
+        render_catalog,
+        save_catalog,
+    )
     from cli.core_bridge import find_package_dir
-    from datetime import datetime, timezone
+    from cli.registry_resolver import RegistryResolutionError, RegistryResolver
+
+    cat_file = _resolve_catalog_path(root, args)
+    try:
+        prior = read_catalog_state(cat_file)
+    except CatalogStoreError as exc:
+        return _emit_catalog_error(
+            args,
+            f"Unable to inspect the existing catalog: {exc}. "
+            "Existing catalog preserved.",
+        )
 
     pkg_dir = find_package_dir(root, agent_root)
     if pkg_dir is None:
-        print("Error: C# Console package not found. Run 'cs setup' first.", file=sys.stderr)
-        return 1
+        return _emit_catalog_error(
+            args,
+            "C# Console package not found. Run 'cs setup' first. "
+            "Existing catalog preserved.",
+        )
 
-    s = _new_session(root, args, pkg_dir)
-    r = s.list_commands()
-    if not r.get("ok"):
-        msg = r.get("summary", "unknown error")
-        if args.as_json:
-            json.dump({"ok": False, "exitCode": 1, "summary": msg}, sys.stdout, ensure_ascii=False, indent=2)
-            print()
-        else:
-            print(f"Error: list-commands failed: {msg}", file=sys.stderr)
-        return 1
+    session = _new_session(root, args, pkg_dir)
+    try:
+        resolution = RegistryResolver(root, session=session).resolve()
+    except RegistryResolutionError as exc:
+        return _emit_catalog_error(
+            args,
+            f"Unable to resolve the current command registry: {exc}. "
+            "Existing catalog preserved.",
+        )
+    if (
+        resolution.source not in {"live", "cache"}
+        or not resolution.live_checked
+        or not resolution.custom_available
+        or not resolution.snapshot["custom"]["included"]
+    ):
+        reason = (
+            f": {resolution.stale_reason}"
+            if resolution.stale_reason
+            else ""
+        )
+        return _emit_catalog_error(
+            args,
+            "The current registry could not be verified; catalog sync "
+            f"refuses source {resolution.source!r}{reason}. "
+            "Existing catalog preserved.",
+        )
 
-    # Parse commands from response. Fail closed on malformed payloads —
-    # never overwrite the existing catalog with empty data on a parse error.
-    data = r.get("data", {})
-    rj = data.get("resultJson", data)
-    if isinstance(rj, str):
-        try:
-            rj = json.loads(rj)
-        except (ValueError, TypeError) as e:
-            msg = f"list-commands returned malformed resultJson: {e}"
-            if args.as_json:
-                json.dump({"ok": False, "exitCode": 1, "summary": msg},
-                          sys.stdout, ensure_ascii=False, indent=2)
-                print()
-            else:
-                print(f"Error: {msg}. Existing catalog preserved.", file=sys.stderr)
-            return 1
-    if not isinstance(rj, dict) or not isinstance(rj.get("commands"), list):
-        msg = "list-commands response missing 'commands' list"
-        if args.as_json:
-            json.dump({"ok": False, "exitCode": 1, "summary": msg},
-                      sys.stdout, ensure_ascii=False, indent=2)
-            print()
-        else:
-            print(f"Error: {msg}. Existing catalog preserved.", file=sys.stderr)
-        return 1
-    commands = rj["commands"]
+    custom = resolution.snapshot["custom"]
+    try:
+        catalog = build_catalog(
+            custom["commands"],
+            custom["fingerprint"],
+        )
+        catalog_text = render_catalog(catalog)
+    except CatalogStoreError as exc:
+        return _emit_catalog_error(
+            args,
+            f"Package custom contracts are invalid: {exc}. "
+            "Existing catalog preserved.",
+        )
 
-    # Filter to custom commands only
-    custom = [c for c in commands if c.get("commandType") == "custom"]
-
-    # Resolve where this project's catalog lives (prompts on first sync)
-    cat_file = _resolve_catalog_path(root, args)
-
-    # Load existing catalog to compute diff
-    old_ids = set()
-    if cat_file.is_file():
-        try:
-            old_data = json.loads(cat_file.read_text("utf-8"))
-            old_ids = {e["id"] for e in old_data.get("commands", [])}
-        except (OSError, json.JSONDecodeError, KeyError):
-            pass
-
-    # Build catalog entries. The live wire format uses `commandNamespace` and
-    # `arguments`; accept both names so older package versions still sync.
-    entries = []
-    for c in custom:
-        ns = c.get("commandNamespace") or c.get("namespace") or ""
-        action = c.get("action", "")
-        entry = {
-            "id": f"{ns}.{action}",
-            "namespace": ns,
-            "action": action,
-            "summary": c.get("summary", ""),
-            "editorOnly": c.get("editorOnly", False),
-            "args": c.get("arguments") or c.get("args") or [],
-        }
-        entries.append(entry)
-
-    new_ids = {e["id"] for e in entries}
+    old_by_id = {
+        command["id"]: command
+        for command in (
+            prior.catalog["commands"]
+            if prior.catalog is not None
+            else ()
+        )
+    }
+    new_by_id = {
+        command["id"]: command
+        for command in catalog["commands"]
+    }
+    old_ids = set(old_by_id)
+    new_ids = set(new_by_id)
     added = sorted(new_ids - old_ids)
     removed = sorted(old_ids - new_ids)
+    changed = sorted(
+        command_id
+        for command_id in old_ids & new_ids
+        if old_by_id[command_id] != new_by_id[command_id]
+    )
 
-    catalog = {
-        "version": 1,
-        "project": str(Path(root).resolve()),
-        "discovered_at": datetime.now(timezone.utc).isoformat(),
-        "commands": entries,
-    }
-
-    cat_file.parent.mkdir(parents=True, exist_ok=True)
-    cat_file.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", "utf-8")
+    write_status = save_catalog(cat_file, catalog_text)
+    if write_status == WRITE_FAILED:
+        return _emit_catalog_error(
+            args,
+            "Catalog was not updated because the atomic write failed. "
+            "Existing catalog preserved; run catalog sync again.",
+        )
 
     if args.as_json:
         result = {
             "ok": True,
             "exitCode": 0,
-            "summary": f"Synced {len(entries)} custom command(s)",
+            "summary": (
+                f"Synced {len(catalog['commands'])} custom command(s)"
+                if write_status != WRITE_UNCHANGED
+                else (
+                    f"Catalog already contains "
+                    f"{len(catalog['commands'])} current custom command(s)"
+                )
+            ),
             "data": {
                 "catalogFile": str(cat_file),
-                "total": len(entries),
+                "total": len(catalog["commands"]),
                 "added": added,
                 "removed": removed,
+                "changed": changed,
+                "customFingerprint": catalog["customFingerprint"],
+                "source": resolution.source,
+                "liveChecked": resolution.live_checked,
+                "cacheStored": resolution.cache_stored,
+                "writeStatus": write_status,
             },
         }
         json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
         print()
     else:
-        print(f"Synced {len(entries)} custom command(s) to {cat_file}")
+        verb = "Verified" if write_status == WRITE_UNCHANGED else "Synced"
+        print(
+            f"{verb} {len(catalog['commands'])} custom command(s) "
+            f"at {cat_file}"
+        )
         if added:
             print(f"  added: {', '.join(added)}")
         if removed:
             print(f"  removed: {', '.join(removed)}")
+        if changed:
+            print(f"  changed: {', '.join(changed)}")
 
     return 0
 
 
 def cmd_catalog_list(root, args):
-    from cli import default_catalog_path
+    from cli.catalog_store import CatalogStoreError, load_catalog
 
-    explicit = getattr(args, "catalog_path", None)
-    if explicit:
-        cat_file = Path(explicit).expanduser().resolve()
-    else:
-        cat_file = default_catalog_path(root)
-
-    if not cat_file.is_file():
-        msg = f"Catalog file does not exist: {cat_file}. Run 'cs catalog sync' first."
-        if args.as_json:
-            json.dump({"ok": False, "exitCode": 1, "summary": msg},
-                      sys.stdout, ensure_ascii=False, indent=2)
-            print()
-        else:
-            print(f"Error: {msg}", file=sys.stderr)
-        return 1
-
+    cat_file = _resolve_catalog_path(root, args)
     try:
-        catalog = json.loads(cat_file.read_text("utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        print(f"Error: failed to read catalog: {e}", file=sys.stderr)
-        return 1
+        catalog = load_catalog(cat_file)
+    except CatalogStoreError as exc:
+        return _emit_catalog_error(args, f"Failed to read catalog: {exc}")
 
     if args.as_json:
         json.dump({"ok": True, "exitCode": 0, "data": catalog}, sys.stdout, ensure_ascii=False, indent=2)
         print()
     else:
-        commands = catalog.get("commands", [])
-        print(f"Catalog: {len(commands)} custom command(s)  (synced {catalog.get('discovered_at', '?')})")
+        commands = catalog["commands"]
+        print(
+            f"Catalog: {len(commands)} custom command(s) "
+            f"(fingerprint {catalog['customFingerprint'][:12]})"
+        )
         for c in commands:
-            arg_names = [a.get("name", "?") for a in c.get("args", [])]
+            arg_names = [a["name"] for a in c["arguments"]]
             args_str = f" [{', '.join(arg_names)}]" if arg_names else ""
-            editor_tag = " [editor-only]" if c.get("editorOnly") else ""
-            summary = c.get("summary", "")
+            editor_tag = (
+                " [editor-only]"
+                if c["requirements"]["editor"]
+                else ""
+            )
+            summary = c["summary"]
             desc = f" - {summary}" if summary else ""
             print(f"  {c['id']}{args_str}{editor_tag}{desc}")
 
@@ -1646,33 +1955,58 @@ def _resolve_input(parser, args):
         args.code = payload["code"]
         _apply_conn_opts(parser, args, payload)
     elif cmd == "command":
-        if not isinstance(payload, dict):
-            parser.error("--input for command must be a JSON object")
-        ns = payload.get("ns", payload.get("namespace"))
-        action = payload.get("action")
-        if not isinstance(ns, str) or not isinstance(action, str):
-            parser.error('--input for command needs string "ns" and "action"')
-        args.namespace = ns
-        args.action = action
-        cmd_args = payload.get("args")
-        if cmd_args is None or isinstance(cmd_args, str):
-            args.args = cmd_args
-        else:
-            args.args = json.dumps(cmd_args, ensure_ascii=False)
-        _apply_conn_opts(parser, args, payload)
+        expected = {"id", "args"}
+        if not isinstance(payload, dict) or set(payload) != expected:
+            parser.error(
+                '--input for command must contain exactly "id" and "args"'
+            )
+        if not isinstance(payload["id"], str) or not payload["id"].strip():
+            parser.error('--input field "id" must be a non-empty string')
+        if not isinstance(payload["args"], dict):
+            parser.error('--input field "args" must be a JSON object')
+        args.command_request = {
+            "id": payload["id"],
+            "args": payload["args"],
+        }
     elif cmd == "batch":
-        if isinstance(payload, list):
-            items = payload
-        elif isinstance(payload, dict):
-            items = payload.get("commands", payload.get("items"))
-            if "stopOnError" in payload:
-                args.stop_on_error = bool(payload["stopOnError"])
-            _apply_conn_opts(parser, args, payload)
-        else:
-            parser.error("--input for batch must be a JSON array or object")
-        if not isinstance(items, list):
-            parser.error('--input for batch needs a "commands" array (or a bare JSON array)')
-        args.commands = json.dumps(items, ensure_ascii=False)
+        allowed = {"commands", "stopOnError"}
+        if (
+            not isinstance(payload, dict)
+            or "commands" not in payload
+            or not set(payload).issubset(allowed)
+        ):
+            parser.error(
+                '--input for batch must be an object containing only '
+                '"commands" and optional "stopOnError"'
+            )
+        items = payload["commands"]
+        if not isinstance(items, list) or not items:
+            parser.error('--input field "commands" must be a non-empty array')
+        for index, item in enumerate(items):
+            if not isinstance(item, dict) or set(item) != {"id", "args"}:
+                parser.error(
+                    f"--input: batch command {index} must contain exactly "
+                    '"id" and "args"'
+                )
+            if not isinstance(item["id"], str) or not item["id"].strip():
+                parser.error(
+                    f'--input: batch command {index} field "id" must be '
+                    "a non-empty string"
+                )
+            if not isinstance(item["args"], dict):
+                parser.error(
+                    f'--input: batch command {index} field "args" must be '
+                    "a JSON object"
+                )
+        if "stopOnError" in payload and not isinstance(
+            payload["stopOnError"],
+            bool,
+        ):
+            parser.error('--input field "stopOnError" must be a boolean')
+        args.stop_on_error = bool(
+            args.stop_on_error or payload.get("stopOnError", False)
+        )
+        args.command_requests = items
 def main():
     # Shared flags available on every subcommand.
     # Use SUPPRESS so subparser parses don't overwrite values supplied to the
@@ -1716,7 +2050,7 @@ def main():
 
     sp_cmd = sub.add_parser("command", parents=[shared], help="Run framework command")
     sp_cmd.add_argument("--input", "-i", dest="input", default=None, required=True,
-                        help='JSON params file (or - for stdin): {"ns":..,"action":..,"args":{..}}; avoids shell-quoting')
+                        help='JSON params file (or - for stdin): {"id":"gameobject/get","args":{}}')
 
     sub.add_parser("health", parents=[shared], help="Service health check")
 
@@ -1728,21 +2062,63 @@ def main():
     sp_refresh.add_argument("--files", nargs="+", default=None, metavar="PATH",
                             help="Explicit asset paths to import (e.g. Assets/Scripts/Foo.cs)")
 
-    sp_lc = sub.add_parser("list-commands", parents=[shared], help="List available commands")
-    sp_lc.add_argument("--type", choices=["builtin", "custom", "all"], default="all",
-                        dest="cmd_type", help="Filter by command type (default: all)")
+    sp_lc = sub.add_parser(
+        "list-commands",
+        parents=[shared],
+        help="Progressively discover package-owned command contracts",
+    )
+    sp_lc.add_argument(
+        "--view",
+        choices=("authoring", "control", "custom"),
+        default="authoring",
+        help="Select authoring, CLI control-plane, or project-defined commands",
+    )
+    selectors = sp_lc.add_mutually_exclusive_group()
+    selectors.add_argument(
+        "--domain",
+        dest="domains",
+        action="append",
+        default=None,
+        metavar="DOMAIN",
+        help="Return schema-free Route Cards; repeat for multiple domains",
+    )
+    sp_lc.add_argument(
+        "--tier",
+        choices=("core", "advanced", "control-plane", "custom"),
+        default=None,
+        help="Route Card tier (valid only with --domain)",
+    )
+    selectors.add_argument(
+        "--id",
+        dest="command_ids",
+        action="append",
+        default=None,
+        metavar="CANONICAL-ID",
+        help="Return a full Contract Bundle; repeat for multiple canonical IDs",
+    )
+    sp_lc.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use the per-project cache or generated built-ins without live I/O",
+    )
+    sp_lc.add_argument(
+        "--refresh",
+        dest="refresh_registry",
+        action="store_true",
+        help="Fetch the complete current registry even when fingerprints match",
+    )
 
     sp_batch = sub.add_parser("batch", parents=[shared], help="Execute multiple commands in one request")
     sp_batch.add_argument("--stop-on-error", action="store_true",
                           help="Stop executing on first error")
     sp_batch.add_argument("--input", "-i", dest="input", default=None, required=True,
-                          help='JSON params file (or - for stdin): {"commands":[..],"stopOnError":bool}; avoids shell-quoting')
+                          help='JSON params file (or - for stdin): {"commands":[{"id":"editor/status","args":{}}],"stopOnError":bool}')
 
     sp_cat = sub.add_parser("catalog", parents=[shared], help="Manage custom command catalog")
     cat_sub = sp_cat.add_subparsers(dest="catalog_cmd")
     sp_cat_sync = cat_sub.add_parser("sync", parents=[shared], help="Sync catalog from live editor")
     sp_cat_sync.add_argument("--catalog-path", dest="catalog_path", default=None,
-                             help="Catalog file path (default: prompt or {project}/.unity-cli/catalog.json)")
+                             help="Catalog file path (default: {project}/.unity-cli/catalog.json)")
     sp_cat_list = cat_sub.add_parser("list", parents=[shared], help="List cached catalog")
     sp_cat_list.add_argument("--catalog-path", dest="catalog_path", default=None,
                              help="Override the cached catalog file path for this read")
@@ -1849,10 +2225,33 @@ def main():
         elif getattr(args, "code", None) is None:
             p.error('exec requires --input <file> (JSON {"code":..}) or --file <path>')
 
+    if (
+        args.cmd == "list-commands"
+        and args.offline
+        and args.refresh_registry
+    ):
+        p.error("list-commands --offline cannot be combined with --refresh")
+    if args.cmd == "list-commands" and args.tier is not None:
+        if not args.domains:
+            p.error("list-commands --tier requires at least one --domain")
+        valid_tiers = {
+            "authoring": {"core", "advanced"},
+            "control": {"control-plane"},
+            "custom": {"custom"},
+        }
+        if args.tier not in valid_tiers[args.view]:
+            allowed = ", ".join(sorted(valid_tiers[args.view]))
+            p.error(
+                f"{args.view} discovery supports these tiers: {allowed}"
+            )
+
     root = find_project_root(args.project)
     # agent_root keys the per-project package-path cache; derive it from the
     # resolved project root (never raw cwd) so it stays stable across agents/cwd.
     agent_root = str(root) if root else (args.project or str(Path.cwd()))
+
+    if args.cmd == "list-commands" and args.offline:
+        sys.exit(cmd_list_commands_offline(root, args))
 
     # Auto-detect editor port from refresh_state.json when needed for
     # --port (editor mode) or --compile-port fallback (runtime mode).
@@ -1952,6 +2351,9 @@ def main():
 
     s = _new_session(root, args, pkg_dir)
 
+    if args.cmd == "list-commands":
+        sys.exit(cmd_list_commands_live(root, args, s))
+
     def _refresh():
         r = s.refresh(
             exit_playmode=getattr(args, "exit_playmode", False),
@@ -1964,30 +2366,32 @@ def main():
                 print("Warning: refresh returned ok=false; --wait skipped", file=sys.stderr)
         return r
 
-    def _list_commands_filtered(session, a):
-        r = session.list_commands()
-        return _filter_commands_by_type(r, a.cmd_type)
+    if args.cmd in {"command", "batch"}:
+        result = _execute_canonical_request(root, args, s)
+    else:
+        dispatch = {
+            "exec":     lambda: s.exec(args.code),
+            "health":   lambda: s.health(),
+            "refresh":  _refresh,
+        }
+        result = dispatch[args.cmd]()
 
-    dispatch = {
-        "exec":     lambda: s.exec(args.code),
-        "command":  lambda: s.command(args.namespace, args.action, args.args),
-        "health":   lambda: s.health(),
-        "refresh":  _refresh,
-        "list-commands": lambda: _list_commands_filtered(s, args),
-        "batch":    lambda: s.batch(args.commands, args.stop_on_error),
-    }
-
-    result = dispatch[args.cmd]()
-
+    exit_code = result.get("exitCode", 0)
     if args.as_json:
         if not args.verbose:
             result = _slim_result(result)
-        json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
+        json.dump(
+            result,
+            sys.stdout,
+            ensure_ascii=False,
+            indent=2 if args.verbose else None,
+            separators=None if args.verbose else (",", ":"),
+        )
         print()
     else:
         s.emit(result)
 
-    sys.exit(result.get("exitCode", 0))
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

@@ -6,10 +6,11 @@
 **Powered by [unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Unity](https://img.shields.io/badge/Unity-2022.3%2B-black.svg?logo=unity)](https://unity.com/)
+[![Unity](https://img.shields.io/badge/Unity-2022-black.svg?logo=unity)](https://unity.com/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 
-40+ commands for scene editing, components, assets, screenshots, profiling, and more.<br/>
+57 package-owned built-ins: 51 authoring commands across six default domains and
+6 explicit control-plane commands.<br/>
 Depends on **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — a Roslyn-powered interactive C# REPL for Unity.
 
 [Quick Start](#-quick-start) · [Usage](#-usage) · [Commands](#-commands) · [Custom Commands](#-custom-commands) · [Architecture](#️-architecture)
@@ -20,36 +21,40 @@ English | [中文](README_zh.md)
 
 ---
 
-```
+```text
 You:    "Create 10 cubes in a circle and add Rigidbody to each"
-Claude: Done. 10 cubes created at radius 5, each with a Rigidbody component.
+Agent:  Done. 10 cubes created at radius 5, each with a Rigidbody component.
 ```
 
 ### ⚡ CLI + Skills
 
-CLI commands exposed through the agent's skill system.
+CLI commands are exposed through the agent's skill system.
 
-- **Token-efficient.** Skills load on demand.
-- **Unrestricted.** Falls back to a full [Roslyn C# REPL](https://github.com/niqibiao/unity-csharpconsole) — not limited to predefined tools.
-- **No sidecar.** Service runs inside Unity Editor. No extra process.
-- **Workflow-aware.** Understands Unity's compile lifecycle, play mode, domain reload.
-- **Automatic custom command discovery.** User-defined C# commands are synced into the skill catalog.
+- **Token-efficient.** Domain Index → Route Cards → Contract Bundle keeps
+  unrelated command schemas out of context.
+- **Package-aligned.** One fingerprint comparison resolves package-owned built-in
+  and project custom contracts into a per-project machine cache.
+- **Unrestricted.** Falls back to a full
+  [Roslyn C# REPL](https://github.com/niqibiao/unity-csharpconsole) when no
+  structured command or reusable snippet fits.
+- **No sidecar.** The service runs inside Unity Editor with no extra process.
+- **Workflow-aware.** Understands Unity's compile lifecycle, play mode, and domain
+  reload.
 - **Runtime / IL2CPP support.** Works with HybridCLR for runtime builds.
-- **Self-evolving snippet library** — project-local C# snippets (`.md` files, no compilation) with validation gate, usage tracking, and aging. Discover and grow via `cs snippets`.
-
+- **Self-evolving snippet library.** Project-local C# snippets have a validation
+  gate, usage tracking, and aging.
 
 ### 🚀 Quick Start
 
 > [!IMPORTANT]
-> **Install scope = the Unity project, not global** — never your home / global skills
-> directory. The bundled CLI locates your Unity project by walking up from its own file
-> location, so detection only works when the skill lives inside the project; a home / global
-> install sits outside every project and never finds one.
+> **Install scope = the Unity project, not global.** Never install into your home
+> or global skills directory. The bundled CLI locates its Unity project by walking
+> up from its own committed location.
 
 **1 · Install the `unity-cli` skill:**
 
 ```bash
-cd path/to/your/UnityProject      # from the PROJECT, never your home/global dir
+cd path/to/your/UnityProject
 npx skills add niqibiao/unity-cli-skill --copy
 ```
 
@@ -57,241 +62,158 @@ npx skills add niqibiao/unity-cli-skill --copy
 
 In your AI agent, run **`unity-cli setup`**.
 
-**Prerequisites:** a skills-compatible agent (e.g. [Claude Code](https://claude.ai/code) or [Codex CLI](https://github.com/openai/codex) 0.139+), Node.js (for `npx`), Unity 2022.3+, Python 3.7+
+**Prerequisites:** a skills-compatible agent (for example
+[Claude Code](https://claude.ai/code) or
+[Codex CLI](https://github.com/openai/codex)), Node.js for `npx`, Unity 2022,
+and Python 3.10+.
 
 ### 💬 Usage
 
-Just tell your agent what you want:
+Tell your agent what you want:
 
-```
+```text
 > Add a directional light and rotate it 45 degrees on X
 > Find all "Enemy" objects and list their components
 > Take a screenshot of the Scene View
 > Start profiler recording with deep profiling
 ```
 
-The agent picks the right command or writes C# code as needed.
+The agent discovers the smallest relevant command contract, verifies mutations,
+and writes C# only when a structured route does not fit.
 
 #### 🧩 One skill, many subcommands
 
-Everything ships in **one skill** (`unity-cli`); its `cs` subcommands cover every
-operation, and the agent triggers it automatically (in any skills-compatible agent):
+Everything ships in one skill (`unity-cli`):
 
 | Subcommand | Description |
-| ---------- | ----------- |
-| `cs setup` | Install the package into the manifest (version-check if present) |
-| `cs status` / `cs health` | Package and service status |
-| `cs command --input` | Structured Unity Editor commands |
-| `cs exec` | Run raw C# in the Editor (fallback) |
-| `cs refresh` | Trigger asset refresh / recompile |
-| `cs catalog sync` / `cs list-commands` | Custom-command catalog + maintainer audit |
-| `cs snippets …` | Reusable C# snippet library |
-| `cs snippets doctor` | Snippet library health audit |
-
+|---|---|
+| `cs setup` | Install/version-check the Unity package |
+| `cs status` / `cs health` | Inspect package and service state |
+| `cs list-commands` | Progressively discover package-owned contracts |
+| `cs command --input` | Preflight and run one canonical command |
+| `cs batch --input` | Preflight and run a command workflow in one request |
+| `cs exec --file` | Run raw C# as the final fallback |
+| `cs refresh` | Refresh assets and wait for compilation |
+| `cs catalog sync` / `cs catalog list` | Maintain the shared custom-command shortlist |
+| `cs snippets …` | Browse and maintain reusable C# snippets |
 
 ### 📦 Commands
 
-50 built-in commands across 13 namespaces. All commands support `--json` output.
+The Unity package is the executable schema authority. The CLI does not maintain a
+second built-in argument/result manifest. Instead it combines the current package
+Registry Snapshot with a small schema-free routing overlay.
 
-#### gameobject
+Progressive discovery has three stages:
 
+```bash
+# 1. Optional Domain Index: skip when the relevant domains are already clear
+cs list-commands --offline --json
 
-| Action       | Description                                           |
-| ------------ | ----------------------------------------------------- |
-| `find`       | Find GameObjects by name, tag, or component type      |
-| `create`     | Create a new GameObject (empty or primitive)          |
-| `destroy`    | Destroy a GameObject                                  |
-| `get`        | Get detailed info about a GameObject                  |
-| `modify`     | Change name, tag, layer, active state, or static flag |
-| `set_parent` | Reparent a GameObject                                 |
-| `duplicate`  | Duplicate a GameObject                                |
+# 2. First live discovery: scoped Route Cards, still no argument/result schemas
+cs list-commands \
+  --domain objects --domain assets --tier core --json
 
+# 3. Contract Bundle: selected contracts + one direct relation layer
+cs list-commands --offline \
+  --id gameobject/create \
+  --id gameobject/get \
+  --json
+```
 
-#### component
+The first live discovery in an agent session performs one fingerprint comparison.
+Later queries use `--offline` and the validated project cache. `--refresh` forces a
+complete snapshot only when the user explicitly asks to update the command list.
 
+#### Default authoring domains
 
-| Action   | Description                              |
-| -------- | ---------------------------------------- |
-| `add`    | Add a component to a GameObject          |
-| `remove` | Remove a component from a GameObject     |
-| `get`    | Get serialized field data of a component |
-| `modify` | Modify serialized fields of a component  |
+| Domain | Scope |
+|---|---|
+| `editor` | Editor readiness, play mode, and Console diagnostics |
+| `scene` | Scene discovery, loading, saving, and hierarchy |
+| `objects` | GameObjects, components, transforms, and selection |
+| `assets` | Project assets and materials |
+| `prefabs` | Prefab creation, instantiation, inspection, and direct editing |
+| `capture` | Scene/Game View capture and Profiler recording |
 
+The six registry/session mechanics are visible only through the explicit control
+view:
 
-#### transform
+```bash
+cs list-commands --offline \
+  --view control --domain control --tier control-plane --json
+```
 
+Execute the stable canonical ID; the package contract owns its internal wire route:
 
-| Action | Description                                           |
-| ------ | ----------------------------------------------------- |
-| `get`  | Get position, rotation, and scale                     |
-| `set`  | Set position, rotation, and/or scale (local or world) |
+```json
+{"id":"gameobject/create","args":{"name":"Wall","primitiveType":"Cube"}}
+```
 
+Pass the JSON through `cs command --json --input <file>`. Built-in and custom
+commands use the same package-owned preflight. The CLI rejects stale execution
+contracts, unknown arguments, invalid types/ranges, ambiguous selectors, and
+unsafe empty mutations before Unity runs them.
 
-#### scene
+`editor/menu.open` and `editor/window.open` are deny-policy intents, not executable
+contracts. Exact-ID discovery returns them as non-executing `denied` decisions;
+the skill will not bypass them through snippets or raw C#.
 
+#### Snippets
 
-| Action      | Description                                                       |
-| ----------- | ----------------------------------------------------------------- |
-| `hierarchy` | Get the full scene hierarchy tree, optionally with component info |
-
-
-#### prefab
-
-
-| Action        | Description                                   |
-| ------------- | --------------------------------------------- |
-| `create`      | Create a prefab asset from a scene GameObject |
-| `instantiate` | Instantiate a prefab into the active scene    |
-| `unpack`      | Unpack a prefab instance                      |
-
-
-#### material
-
-
-| Action   | Description                                         |
-| -------- | --------------------------------------------------- |
-| `create` | Create a new material asset with a specified shader |
-| `get`    | Get material properties from an asset or a Renderer |
-| `assign` | Assign a material to a Renderer component           |
-
-
-#### screenshot
-
-
-| Action       | Description                             |
-| ------------ | --------------------------------------- |
-| `scene_view` | Capture the Scene View to an image file |
-| `game_view`  | Capture the Game View to an image file  |
-
-
-#### profiler
-
-
-| Action   | Description                                        |
-| -------- | -------------------------------------------------- |
-| `start`  | Start Profiler recording (optional deep profiling) |
-| `stop`   | Stop Profiler recording                            |
-| `status` | Get current Profiler state                         |
-| `save`   | Save recorded profiler data to a `.raw` file       |
-
-
-#### editor
-
-
-| Action            | Description                         |
-| ----------------- | ----------------------------------- |
-| `status`          | Get editor state and play mode info |
-| `playmode.status` | Get current play mode state         |
-| `playmode.enter`  | Enter play mode                     |
-| `playmode.exit`   | Exit play mode                      |
-| `menu.open`       | Execute a menu item by path         |
-| `window.open`     | Open an editor window by type name  |
-| `console.clear`   | Clear the editor console            |
-| `console.mark`    | Write a searchable marker to the editor log |
-
-
-#### asset
-
-
-| Action          | Description                           |
-| --------------- | ------------------------------------- |
-| `move`          | Move or rename an asset               |
-| `copy`          | Copy an asset to a new path           |
-| `delete`        | Delete one or more assets             |
-| `create_folder` | Create a folder in the Asset Database |
-
-
-#### project
-
-
-| Action           | Description                      |
-| ---------------- | -------------------------------- |
-| `scene.list`     | List all scenes in the project   |
-| `scene.open`     | Open a scene by path             |
-| `scene.save`     | Save the current scene           |
-| `selection.get`  | Get the current editor selection |
-| `selection.set`  | Set the editor selection         |
-| `asset.list`     | List assets by type filter       |
-| `asset.import`   | Import an asset by path          |
-| `asset.reimport` | Reimport an asset by path        |
-
-
-#### session
-
-
-| Action    | Description                             |
-| --------- | --------------------------------------- |
-| `list`    | List active REPL sessions               |
-| `inspect` | Inspect a session's state               |
-| `reset`   | Reset a session's compiler and executor |
-
-
-#### command
-
-
-| Action | Description                                      |
-| ------ | ------------------------------------------------ |
-| `list` | List all registered commands (built-in + custom) |
-
-
-#### snippets
-
-
-| Action       | Description                                          |
-| ------------ | ---------------------------------------------------- |
-| `list`       | Browse the local snippet library                     |
-| `show`       | Show a snippet's full content and metadata           |
-| `search`     | Search snippets by keyword                           |
-| `use`        | Run a snippet (executes its C# code)                 |
-| `add`        | Add a new snippet to the library                     |
-| `update`     | Update an existing snippet                           |
-| `deprecate`  | Mark a snippet as deprecated                         |
-| `prune`      | Remove aged-out or deprecated snippets               |
-| `stats`      | Show usage statistics for the snippet library        |
-
+| Action | Description |
+|---|---|
+| `list` / `show` / `search` | Discover reusable snippets |
+| `use` | Run a snippet |
+| `add` / `update` | Validate and maintain snippets |
+| `deprecate` / `prune` | Retire snippets |
+| `stats` / `doctor` | Audit usage and library health |
 
 ### 🔧 Custom Commands
 
-Custom commands are supported. See [unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole) for how to define and register them.
+Custom commands use the same package registry, canonical-ID discovery, preflight,
+and execution path as built-ins:
 
-The skill maintains a persistent per-project catalog of custom commands. Run `cs catalog sync` to pull the latest list from Unity and cache it to disk; run `cs catalog list` to view the cached catalog offline without connecting to the Editor.
+```bash
+cs list-commands --view custom --json
+cs list-commands --offline --view custom --id teamtools/build_room --json
+```
+
+See [unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole) for
+defining and registering them.
+
+`cs catalog sync` writes a deterministic, version-controlled shortlist from a
+registry verified during that invocation. `cs catalog list` reads the shortlist
+offline; the current package Registry Snapshot remains execution authority.
 
 ### 🏗️ Architecture
 
-```
-AI Agent                         Unity Editor
-┌──────────────────┐            ┌──────────────────────────┐
-│  Skills          │            │  com.zh1zh1.csharpconsole│
-│  ┌────────────┐  │            │  ┌────────────────────┐  │
-│  │ cli-command│──┼── HTTP ──▶ │  │ ConsoleHttpService │  │
-│  │ cli-exec   │  │            │  │  ├─ CommandRouter  │  │
-│  └────────────┘  │            │  │  ├─ REPL Compiler  │  │
-│                  │            │  │  └─ REPL Executor  │  │
-│  Python CLI      │            │  └────────────────────┘  │
-│  ┌────────────┐  │            │                          │
-│  │ cs.py      │  │            │  40+ CommandActions      │
-│  │ core_bridge│  │            │  (GameObject, Component, │
-│  └────────────┘  │            │   Prefab, Material, ...) │
-└──────────────────┘            └──────────────────────────┘
+```text
+AI Agent
+  └─ unity-cli skill
+      └─ pure-stdlib Python CLI
+          ├─ schema-free routing overlay
+          ├─ fingerprint resolver + machine-local Registry Snapshot cache
+          ├─ progressive discovery + package-contract preflight
+          └─ HTTP bridge
+              └─ com.zh1zh1.csharpconsole in Unity Editor/Player
+                  ├─ package-owned registry (51 authoring + 6 control)
+                  ├─ command handlers
+                  └─ Roslyn compiler / REPL executor
 ```
 
-- **Skill layer**: one `unity-cli` skill invoked by your agent
-- **CLI layer**: Python dispatcher, serializes requests to JSON
-- **Unity layer**: [unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole) — HTTP service, auto-discovered command handlers, Roslyn C# REPL
-
-Auto-detects project root and service port. No manual configuration.
+The CLI dynamically imports its client core from the installed Unity package, so
+client and service stay on the same `major.minor` line. Project root and service
+port are auto-detected.
 
 ### ❓ Troubleshooting
 
-
-| Problem                | Solution                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------------------------ |
-| `service: UNREACHABLE` | Make sure Unity Editor is open with the project loaded                                     |
-| `package: NOT FOUND`   | Run `cs setup` to add the package, then open Unity to let it resolve                       |
-| Port conflict          | Service auto-advances to the next free port. Check `Temp/CSharpConsole/refresh_state.json` |
-| Commands not found     | Ensure the package compiled successfully (no errors in Unity Console)                      |
-| Version mismatch       | Run `cs status` to see versions; align the Unity package with the CLI `major.minor`        |
-
+| Problem | Solution |
+|---|---|
+| `service: UNREACHABLE` | Open Unity Editor with the project loaded |
+| `package: NOT FOUND` | Run `cs setup`, then let Unity resolve the package |
+| Port conflict | The service advances to a free port; inspect `Temp/CSharpConsole/refresh_state.json` |
+| Custom unavailable offline | Run one live `cs list-commands --view custom --json` |
+| Version mismatch | Use `cs status`, then align package and CLI `major.minor` |
 
 ---
 

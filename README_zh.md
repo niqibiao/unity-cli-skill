@@ -6,11 +6,11 @@
 **基于 [unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Unity](https://img.shields.io/badge/Unity-2022.3%2B-black.svg?logo=unity)](https://unity.com/)
+[![Unity](https://img.shields.io/badge/Unity-2022-black.svg?logo=unity)](https://unity.com/)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 
-40+ 命令覆盖场景编辑、组件、资产、截图、性能分析等。<br/>
-依赖 **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — 基于 Roslyn 的 Unity 交互式 C# REPL。
+57 个由 Unity 包提供的内置命令：默认六个创作域包含 51 个，另有 6 个显式控制面命令。<br/>
+依赖 **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** —— 基于 Roslyn 的 Unity 交互式 C# REPL。
 
 [快速开始](#-快速开始) · [使用方式](#-使用方式) · [命令](#-命令) · [自定义命令](#-自定义命令) · [架构](#️-架构)
 
@@ -20,35 +20,36 @@
 
 ---
 
-```
-你：     "创建 10 个 Cube 围成一圈，每个加上 Rigidbody"
-Claude:  完成。10 个 Cube 已在半径 5 处创建，均已添加 Rigidbody 组件。
+```text
+你：    “创建 10 个 Cube 围成一圈，每个加上 Rigidbody”
+Agent： 完成。10 个 Cube 已在半径 5 处创建，均已添加 Rigidbody。
 ```
 
 ### ⚡ CLI + Skill
 
-通过 Agent 的 Skill 体系暴露 CLI 命令。
+CLI 命令通过 Agent 的 Skill 体系提供。
 
-- **省 token。** Skill 按需加载。
-- **无限制。** 可回退到完整的 [Roslyn C# REPL](https://github.com/niqibiao/unity-csharpconsole) —— 不受预定义工具限制。
-- **无需额外进程。** 服务运行在 Unity Editor 进程内，零额外基础设施。
-- **感知工作流。** 理解 Unity 的编译生命周期、Play Mode、域重载。
-- **自定义命令自动发现。** 用户定义的 C# 命令会自动同步到 Skill 目录。
-- **运行时 / IL2CPP 支持。** 配合 HybridCLR 可在运行时构建中使用。
-- **自我进化的代码片段库** — 项目本地 C# 片段（`.md` 文件，不参与编译），带验证门、使用频次跟踪、自动老化。通过 `cs snippets` 子命令发现和演化。
-
+- **节省 token。** Domain Index → Route Cards → Contract Bundle，避免把无关
+  command schema 放进上下文。
+- **与包一致。** 一次 fingerprint 比较即可把包拥有的内置和项目自定义
+  contract 解析到每项目的机器本地缓存。
+- **能力不封顶。** 没有结构化命令或可复用 snippet 能覆盖时，才回退到完整
+  [Roslyn C# REPL](https://github.com/niqibiao/unity-csharpconsole)。
+- **无需 sidecar。** 服务直接运行在 Unity Editor 内。
+- **理解工作流。** 能处理 Unity 编译生命周期、Play Mode 和域重载。
+- **运行时 / IL2CPP 支持。** 可配合 HybridCLR 用于运行时构建。
+- **可演进 snippet 库。** 项目本地 C# snippet 带验证门、使用统计和老化机制。
 
 ### 🚀 快速开始
 
 > [!IMPORTANT]
-> **安装范围 = 这个 Unity 项目，不是全局**，不要装到用户主目录 / 全局 skills 目录。skill
-> 内置的 CLI 通过从自身文件位置向上查找来定位 Unity 项目，只有装在项目内才能可靠定位；装到主
-> 目录 / 全局目录则处在所有项目之外，永远找不到。
+> **安装范围是 Unity 项目，不是全局。** 不要安装到用户主目录或全局 skills
+> 目录。内置 CLI 会从自身提交位置向上查找所属 Unity 项目。
 
 **1 · 安装 `unity-cli` skill：**
 
 ```bash
-cd path/to/your/UnityProject      # 在项目里执行，不要在主目录 / 全局目录
+cd path/to/your/UnityProject
 npx skills add niqibiao/unity-cli-skill --copy
 ```
 
@@ -56,241 +57,154 @@ npx skills add niqibiao/unity-cli-skill --copy
 
 在 AI Agent 里运行 **`unity-cli setup`**。
 
-**前置条件：** 一个兼容 skills 的 Agent（如 [Claude Code](https://claude.ai/code) 或 [Codex CLI](https://github.com/openai/codex) 0.139+）、Node.js（用于 `npx`）、Unity 2022.3+、Python 3.7+
+**前置条件：** 兼容 skills 的 Agent（例如
+[Claude Code](https://claude.ai/code) 或
+[Codex CLI](https://github.com/openai/codex)）、用于 `npx` 的 Node.js、
+Unity 2022，以及 Python 3.10+。
 
 ### 💬 使用方式
 
-直接告诉 Claude 你想做什么：
+直接告诉 Agent 你想做什么：
 
-```
+```text
 > 在场景里添加一个方向光，X 轴旋转 45 度
-> 找出所有标签为 "Enemy" 的对象，列出它们的组件
-> 截取 Scene View 的截图
+> 找出所有标签为 “Enemy” 的对象，列出它们的组件
+> 截取 Scene View
 > 开始 Profiler 录制，启用深度分析
 ```
 
-Claude 会自动选择合适的命令，或在需要时编写 C# 代码。
+Agent 会发现最小相关 command contract，验证 mutation，只有结构化路径不适用
+时才编写 C#。
 
 #### 🧩 一个 skill，多个子命令
 
-所有功能都在**一个 skill**（`unity-cli`）里；它的 `cs` 子命令覆盖全部操作，Agent 会自动触发
-（任何兼容 skills 的 Agent 通用）：
+所有功能都在一个 skill（`unity-cli`）中：
 
 | 子命令 | 说明 |
-| ----- | ---- |
-| `cs setup` | 安装包到 manifest（已安装则做版本校验） |
-| `cs status` / `cs health` | 包与服务状态 |
-| `cs command --input` | 结构化 Unity 编辑器命令 |
-| `cs exec` | 在编辑器中执行原始 C#（兜底） |
-| `cs refresh` | 触发资产刷新 / 重编译 |
-| `cs catalog sync` / `cs list-commands` | 自定义命令目录 + 维护者审计 |
-| `cs snippets …` | 可复用 C# 片段库 |
-| `cs snippets doctor` | 片段库健康审计 |
-
+|---|---|
+| `cs setup` | 安装或检查 Unity 包版本 |
+| `cs status` / `cs health` | 查看包与服务状态 |
+| `cs list-commands` | 渐进发现包拥有的 contract |
+| `cs command --input` | 预检并执行一个 canonical command |
+| `cs batch --input` | 预检并在一次请求中执行 command workflow |
+| `cs exec --file` | 以原始 C# 作为最终兜底 |
+| `cs refresh` | 刷新资产并等待编译 |
+| `cs catalog sync` / `cs catalog list` | 维护共享的自定义命令候选目录 |
+| `cs snippets …` | 发现和维护可复用 C# snippet |
 
 ### 📦 命令
 
-13 个命名空间、50 个内置命令。所有命令支持 `--json` 输出。
+Unity 包是唯一的可执行 schema 权威。CLI 不再维护第二份内置参数/结果 manifest，
+而是组合当前包的 Registry Snapshot 与一份很小的无 schema routing overlay。
 
-#### gameobject
+渐进发现分三层：
 
+```bash
+# 1. 可选 Domain Index：相关 domain 已明确时跳过
+cs list-commands --offline --json
 
-| Action       | 说明                       |
-| ------------ | ------------------------ |
-| `find`       | 按名称、标签或组件类型查找 GameObject |
-| `create`     | 创建新 GameObject（空对象或基本体）  |
-| `destroy`    | 销毁 GameObject            |
-| `get`        | 获取 GameObject 详细信息       |
-| `modify`     | 修改名称、标签、层、激活状态或静态标记      |
-| `set_parent` | 设置父对象                    |
-| `duplicate`  | 复制 GameObject            |
+# 2. 第一次 live discovery：限定范围的 Route Cards，仍不含参数/结果 schema
+cs list-commands \
+  --domain objects --domain assets --tier core --json
 
+# 3. Contract Bundle：选中的 contract + 一层直接 relation
+cs list-commands --offline \
+  --id gameobject/create \
+  --id gameobject/get \
+  --json
+```
 
-#### component
+Agent 会话中的第一次 live discovery 只比较一次 fingerprint。后续查询使用
+`--offline` 和已验证的项目缓存。只有用户明确要求更新 command list 时才用
+`--refresh` 强制获取完整 snapshot。
 
+#### 默认创作域
 
-| Action   | 说明                |
-| -------- | ----------------- |
-| `add`    | 为 GameObject 添加组件 |
-| `remove` | 移除组件              |
-| `get`    | 获取组件的序列化字段数据      |
-| `modify` | 修改组件的序列化字段        |
+| Domain | 范围 |
+|---|---|
+| `editor` | Editor 就绪状态、Play Mode 与 Console 诊断 |
+| `scene` | 场景发现、加载、保存与层级 |
+| `objects` | GameObject、组件、Transform 与选择 |
+| `assets` | 项目资产与材质 |
+| `prefabs` | Prefab 创建、实例化、检查与直接编辑 |
+| `capture` | Scene/Game View 截图与 Profiler 录制 |
 
+六个 registry/session 机制只在显式 control view 中出现：
 
-#### transform
+```bash
+cs list-commands --offline \
+  --view control --domain control --tier control-plane --json
+```
 
+执行稳定的 canonical ID；包 contract 自己拥有内部 wire route：
 
-| Action | 说明                    |
-| ------ | --------------------- |
-| `get`  | 获取位置、旋转和缩放            |
-| `set`  | 设置位置、旋转和/或缩放（本地或世界坐标） |
+```json
+{"id":"gameobject/create","args":{"name":"Wall","primitiveType":"Cube"}}
+```
 
+通过 `cs command --json --input <file>` 传入 JSON。内置与自定义命令使用同一套
+package-owned preflight。Unity 执行前，CLI 会拒绝过期 execution contract、未知
+参数、错误类型/范围、歧义 selector 和不安全的空 mutation。
 
-#### scene
+`editor/menu.open` 与 `editor/window.open` 只是 deny-policy intent，不是可执行
+contract。精确 ID 发现会把它们作为不可执行的 `denied` 决策返回；skill 不会用
+snippet 或原始 C# 绕过它们。
 
+#### Snippet
 
-| Action      | 说明                 |
-| ----------- | ------------------ |
-| `hierarchy` | 获取完整场景层级树，可选包含组件信息 |
-
-
-#### prefab
-
-
-| Action        | 说明                            |
-| ------------- | ----------------------------- |
-| `create`      | 从场景中的 GameObject 创建 Prefab 资产 |
-| `instantiate` | 将 Prefab 实例化到当前场景             |
-| `unpack`      | 解包 Prefab 实例                  |
-
-
-#### material
-
-
-| Action   | 说明                 |
-| -------- | ------------------ |
-| `create` | 创建新材质（指定 Shader）   |
-| `get`    | 获取材质属性             |
-| `assign` | 将材质分配给 Renderer 组件 |
-
-
-#### screenshot
-
-
-| Action       | 说明                  |
-| ------------ | ------------------- |
-| `scene_view` | 截取 Scene View 到图片文件 |
-| `game_view`  | 截取 Game View 到图片文件  |
-
-
-#### profiler
-
-
-| Action   | 说明                     |
-| -------- | ---------------------- |
-| `start`  | 开始 Profiler 录制（可选深度分析） |
-| `stop`   | 停止 Profiler 录制         |
-| `status` | 获取当前 Profiler 状态       |
-| `save`   | 保存录制数据到 `.raw` 文件      |
-
-
-#### editor
-
-
-| Action            | 说明                    |
-| ----------------- | --------------------- |
-| `status`          | 获取编辑器状态和 Play Mode 信息 |
-| `playmode.status` | 获取当前 Play Mode 状态     |
-| `playmode.enter`  | 进入 Play Mode          |
-| `playmode.exit`   | 退出 Play Mode          |
-| `menu.open`       | 按路径执行菜单项              |
-| `window.open`     | 按类型名打开编辑器窗口           |
-| `console.clear`   | 清空编辑器控制台              |
-| `console.mark`    | 向编辑器日志写入可搜索标记         |
-
-
-#### asset
-
-
-| Action          | 说明                   |
-| --------------- | -------------------- |
-| `move`          | 移动或重命名资产             |
-| `copy`          | 将资产复制到新路径            |
-| `delete`        | 删除一个或多个资产            |
-| `create_folder` | 在 Asset Database 创建文件夹 |
-
-
-#### project
-
-
-| Action           | 说明          |
-| ---------------- | ----------- |
-| `scene.list`     | 列出项目中所有场景   |
-| `scene.open`     | 按路径打开场景     |
-| `scene.save`     | 保存当前场景      |
-| `selection.get`  | 获取当前编辑器选中对象 |
-| `selection.set`  | 设置编辑器选中对象   |
-| `asset.list`     | 按类型筛选列出资产   |
-| `asset.import`   | 按路径导入资产     |
-| `asset.reimport` | 按路径重新导入资产   |
-
-
-#### session
-
-
-| Action    | 说明            |
-| --------- | ------------- |
-| `list`    | 列出活跃的 REPL 会话 |
-| `inspect` | 查看会话状态        |
-| `reset`   | 重置会话的编译器和执行器  |
-
-
-#### command
-
-
-| Action | 说明                  |
-| ------ | ------------------- |
-| `list` | 列出所有已注册命令（内置 + 自定义） |
-
-
-#### snippets
-
-
-| Action      | 说明                         |
-| ----------- | -------------------------- |
-| `list`      | 浏览本地代码片段库                  |
-| `show`      | 查看片段的完整内容和元数据              |
-| `search`    | 按关键词搜索片段                   |
-| `use`       | 运行片段（执行其 C# 代码）            |
-| `add`       | 向片段库添加新片段                  |
-| `update`    | 更新已有片段                     |
-| `deprecate` | 将片段标记为已废弃                  |
-| `prune`     | 移除已老化或废弃的片段                |
-| `stats`     | 查看片段库的使用统计                 |
-
+| Action | 说明 |
+|---|---|
+| `list` / `show` / `search` | 发现可复用 snippet |
+| `use` | 运行 snippet |
+| `add` / `update` | 验证并维护 snippet |
+| `deprecate` / `prune` | 淘汰 snippet |
+| `stats` / `doctor` | 审计用量和库健康状态 |
 
 ### 🔧 自定义命令
 
-支持自定义命令。定义和注册方式请参考 [unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)。
+自定义命令与内置命令使用相同的 package registry、canonical-ID discovery、
+preflight 和 execution 路径：
 
-本 skill 为每个 Unity 项目维护一份持久化的自定义命令目录。运行 `cs catalog sync` 可从 Unity 拉取最新命令列表并缓存到磁盘；运行 `cs catalog list` 可在不连接编辑器的情况下离线查看已缓存的目录。
+```bash
+cs list-commands --view custom --json
+cs list-commands --offline --view custom --id teamtools/build_room --json
+```
+
+定义和注册方式请参考
+[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)。
+
+`cs catalog sync` 会从本次调用中已验证的 registry 生成确定性、可版本控制的候选
+目录。`cs catalog list` 可以离线读取候选；当前包的 Registry Snapshot 始终是执行
+权威。
 
 ### 🏗️ 架构
 
-```
-AI Agent                         Unity Editor
-┌──────────────────┐            ┌──────────────────────────┐
-│  Skills          │            │  com.zh1zh1.csharpconsole│
-│  ┌────────────┐  │            │  ┌────────────────────┐  │
-│  │ cli-command│──┼── HTTP ──▶ │  │ ConsoleHttpService │  │
-│  │ cli-exec   │  │            │  │  ├─ CommandRouter  │  │
-│  └────────────┘  │            │  │  ├─ REPL 编译器     │  │
-│                  │            │  │  └─ REPL 执行器     │  │
-│  Python CLI      │            │  └────────────────────┘  │
-│  ┌────────────┐  │            │                          │
-│  │ cs.py      │  │            │  40+ CommandActions      │
-│  │ core_bridge│  │            │  (GameObject, Component, │
-│  └────────────┘  │            │   Prefab, Material, ...) │
-└──────────────────┘            └──────────────────────────┘
+```text
+AI Agent
+  └─ unity-cli skill
+      └─ 纯标准库 Python CLI
+          ├─ 无 schema routing overlay
+          ├─ fingerprint resolver + 机器本地 Registry Snapshot 缓存
+          ├─ 渐进发现 + package-contract preflight
+          └─ HTTP bridge
+              └─ Unity Editor/Player 中的 com.zh1zh1.csharpconsole
+                  ├─ package-owned registry（51 authoring + 6 control）
+                  ├─ command handlers
+                  └─ Roslyn compiler / REPL executor
 ```
 
-- **Skill 层**：你的 Agent 调用的 `unity-cli` skill
-- **CLI 层**：Python 调度器，将请求序列化为 JSON
-- **Unity 层**：[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole) — HTTP 服务，自动发现命令处理器，Roslyn C# REPL
-
-自动检测项目根目录和服务端口，无需手动配置。
+CLI 从已安装的 Unity 包动态导入 client core，使 client 与 service 保持在同一
+`major.minor` 版本线。项目根目录和服务端口会自动发现。
 
 ### ❓ 常见问题
 
-
-| 问题                     | 解决方案                                                       |
-| ---------------------- | ---------------------------------------------------------- |
-| `service: UNREACHABLE` | 确保 Unity 编辑器已打开并加载了项目                                      |
-| `package: NOT FOUND`   | 运行 `cs setup` 添加包，再打开 Unity 解析它   |
-| 端口冲突                   | 服务会自动切换到下一个可用端口，查看 `Temp/CSharpConsole/refresh_state.json` |
-| 找不到命令                  | 确保包编译成功（Unity Console 中无报错）                                |
-| 版本不匹配                  | 运行 `cs status` 查看版本；把 Unity 包对齐到 CLI 的 `major.minor`        |
-
+| 问题 | 解决方案 |
+|---|---|
+| `service: UNREACHABLE` | 打开 Unity Editor 并加载项目 |
+| `package: NOT FOUND` | 运行 `cs setup`，再让 Unity 解析包 |
+| 端口冲突 | 服务会改用空闲端口；查看 `Temp/CSharpConsole/refresh_state.json` |
+| 离线 custom unavailable | 运行一次 live `cs list-commands --view custom --json` |
+| 版本不匹配 | 用 `cs status` 查看，再对齐包与 CLI 的 `major.minor` |
 
 ---
 

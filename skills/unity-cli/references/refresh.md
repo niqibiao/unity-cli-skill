@@ -17,12 +17,13 @@ After completion, verify with `cs status` if needed.
 
 **Manual control (when you need fine-grained steps):**
 
-1. Check play mode — `req.json`: `{"ns":"editor","action":"playmode.status"}`:
+1. Check play mode — `req.json`: `{"id":"editor/status","args":{}}`:
 ```bash
 cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"
 ```
 
-2. If `isPlaying: true` and you need to exit first — `{"ns":"editor","action":"playmode.exit"}`:
+2. If `isPlaying: true` and you need to exit first —
+   `{"id":"editor/playmode.exit","args":{}}`:
 ```bash
 cs command --json --input "<project-root>/Temp/CSharpConsole/AgentScratch/req.json"
 ```

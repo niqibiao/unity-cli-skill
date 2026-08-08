@@ -50,8 +50,18 @@ cache the resolved package lazily, so setup is a convenience rather than a gate.
 ### Command-first principle
 
 Prefer `cs command` whenever a built-in framework command covers the task. Use
-`cs list-commands --json` to discover commands, then check the snippet library
-(`cs snippets`) before falling back to ad-hoc `cs exec`.
+`cs list-commands --domain <domain> --tier core --json` for the first discovery in
+an agent session. This performs one live fingerprint comparison and fetches only a
+missing or changed package-owned registry partition. Use `--offline` for subsequent
+domain or exact-ID queries in the same agent session, and query `advanced` only
+when needed. Use `--refresh` only when the user explicitly asks to update the
+command list. Then check project custom commands and the snippet library before
+falling back to ad-hoc `cs exec`.
+
+Built-in and custom requests are preflighted from the resolved package-owned
+contract before HTTP dispatch. Unknown arguments, missing requirements, invalid
+types/ranges, ambiguous selectors, empty mutations, deny-policy actions, and
+missing explicit session ids fail without executing Unity.
 
 ### Command map
 
@@ -64,7 +74,8 @@ Prefer `cs command` whenever a built-in framework command covers the task. Use
 | `cs batch --input FILE --json` | post | Run multiple commands in one request |
 | `cs health` | post | Check service health |
 | `cs refresh [--wait TIMEOUT] [--exit-playmode]` | post | Refresh assets and compile |
-| `cs list-commands --json` | post | Discover available commands |
+| `cs list-commands --offline … --json` | pre/post | Discover the validated cache or generated built-in fallback |
+| `cs list-commands … --json` | post | Compare and progressively inspect the installed package registry |
 | `cs catalog sync` / `cs catalog list` | post | Maintain the custom-command catalog |
 | `cs snippets …` | post | Browse, run, and maintain reusable snippets |
 
@@ -74,6 +85,8 @@ Prefer `cs command` whenever a built-in framework command covers the task. Use
 Agent harness
   └─ skills/unity-cli/SKILL.md (routing and operating rules)
       └─ scripts/cli/cs.py (argparse and handlers)
+          ├─ registry_resolver.py (fingerprint, cache, generated fallback)
+          ├─ command_discovery.py / command_preflight.py
           └─ core_bridge.py (dynamic csharpconsole_core import)
               └─ HTTP service in Unity Editor/Player
 ```
@@ -96,7 +109,8 @@ retried once after one second to tolerate Unity domain reloads.
   source to the newest tag on the CLI's `major.minor` line when setup writes the
   manifest; `file:` sources, explicit fragments, and failed tag queries are left
   unpinned.
-- Package-path cache and snippet usage statistics live in a per-project user cache
+- Package path, Registry Snapshot/fingerprints, and snippet usage statistics live
+  in a per-project user cache
   (`%LOCALAPPDATA%\unity-cli\<project-key>\` on Windows or
   `$XDG_CACHE_HOME/unity-cli/<project-key>/` elsewhere), never in the project tree.
 - The committed custom-command catalog and snippet audit remain project state; see
@@ -108,6 +122,12 @@ retried once after one second to tolerate Unity domain reloads.
 skills/unity-cli/SKILL.md                 Skill entry and routing
 skills/unity-cli/references/*.md          Topic-specific operating guidance
 skills/unity-cli/scripts/cli/cs.py        CLI dispatcher
+skills/unity-cli/scripts/cli/command_discovery.py
+skills/unity-cli/scripts/cli/command_preflight.py
+skills/unity-cli/scripts/cli/catalog_store.py
+skills/unity-cli/scripts/cli/registry_*.py
+skills/unity-cli/scripts/cli/routing_overlay.json
+skills/unity-cli/scripts/cli/data/builtin_registry_snapshot.v1.json
 skills/unity-cli/scripts/cli/core_bridge.py
 skills/unity-cli/scripts/cli/paths.py     Per-project cache paths
 skills/unity-cli/scripts/cli/VERSION      Release version

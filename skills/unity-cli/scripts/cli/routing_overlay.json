@@ -1,0 +1,699 @@
+{
+  "schemaVersion": 1,
+  "expectedCounts": {
+    "authoring": 51,
+    "control": 5
+  },
+  "domains": {
+    "editor": {
+      "view": "authoring",
+      "summary": "Editor readiness, play mode, and Console diagnostics."
+    },
+    "scene": {
+      "view": "authoring",
+      "summary": "Scene discovery, loading, saving, and hierarchy inspection."
+    },
+    "objects": {
+      "view": "authoring",
+      "summary": "Scene GameObjects, components, transforms, and selection."
+    },
+    "assets": {
+      "view": "authoring",
+      "summary": "Project assets and materials."
+    },
+    "prefabs": {
+      "view": "authoring",
+      "summary": "Prefab creation, instantiation, inspection, and direct editing."
+    },
+    "capture": {
+      "view": "authoring",
+      "summary": "Scene/Game View capture and Profiler recording."
+    },
+    "control": {
+      "view": "control",
+      "summary": "Registry and REPL session mechanics used by the CLI."
+    }
+  },
+  "commands": {
+    "editor/status": {
+      "view": "authoring",
+      "domains": ["editor"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Check whether the Unity Editor and play-mode state are ready.",
+      "avoidWhen": "The request is to enter or exit play mode.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "editor/playmode.enter": {
+      "view": "authoring",
+      "domains": ["editor"],
+      "tier": "core",
+      "effect": "lifecycle",
+      "selectWhen": "Enter Unity play mode.",
+      "avoidWhen": "Only the current Editor state is needed.",
+      "prepareWith": ["editor/status"],
+      "verifyWith": ["editor/status"],
+      "limitations": ["The transition is asynchronous; poll editor/status for completion."]
+    },
+    "editor/playmode.exit": {
+      "view": "authoring",
+      "domains": ["editor"],
+      "tier": "core",
+      "effect": "lifecycle",
+      "selectWhen": "Exit Unity play mode.",
+      "avoidWhen": "Only the current Editor state is needed.",
+      "prepareWith": ["editor/status"],
+      "verifyWith": ["editor/status"],
+      "limitations": ["The transition is asynchronous; poll editor/status for completion."]
+    },
+    "editor/console.clear": {
+      "view": "authoring",
+      "domains": ["editor"],
+      "tier": "advanced",
+      "effect": "destructive",
+      "selectWhen": "Clear the Unity Editor Console.",
+      "avoidWhen": "Existing Console messages must remain available.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["Clearing may be unavailable in restricted Editor contexts."]
+    },
+    "editor/console.mark": {
+      "view": "authoring",
+      "domains": ["editor"],
+      "tier": "advanced",
+      "effect": "diagnostic",
+      "selectWhen": "Place a unique log marker before a diagnostic operation.",
+      "avoidWhen": "No log boundary is needed.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "gameobject/find": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Find scene GameObjects by name, tag, or component.",
+      "avoidWhen": "The complete scene hierarchy is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["Results are bounded; use scene/hierarchy for complete structural inspection."]
+    },
+    "gameobject/create": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Create an empty GameObject or primitive in a loaded scene, optionally under a known parent.",
+      "avoidWhen": "An existing prefab asset should be instantiated.",
+      "prepareWith": [],
+      "verifyWith": ["gameobject/get"],
+      "limitations": []
+    },
+    "gameobject/destroy": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "advanced",
+      "effect": "destructive",
+      "selectWhen": "Destroy a GameObject in a loaded scene.",
+      "avoidWhen": "An asset or prefab-asset child should be deleted.",
+      "prepareWith": ["gameobject/get"],
+      "verifyWith": ["gameobject/get"],
+      "limitations": ["The mutation is destructive and cannot be verified from the returned object alone."]
+    },
+    "gameobject/get": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Inspect one GameObject whose selector is supplied or will be bound from a known producer.",
+      "avoidWhen": "Do not select or exact-load merely for a hierarchy-wide scan or a future drill-down whose necessity depends on whether an upstream read returns a concrete target. A supplied selector or explicitly requested known-producer consumer is not deferred. Use component/get for serialized fields.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "gameobject/modify": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Rename a GameObject or change its basic state.",
+      "avoidWhen": "Transform vectors or component fields should change.",
+      "prepareWith": [],
+      "verifyWith": ["gameobject/get"],
+      "limitations": []
+    },
+    "gameobject/set_parent": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Reparent an existing scene GameObject or move it to a scene root.",
+      "avoidWhen": "The object is being created under a known parent (use gameobject/create parentPath), or the target is stored inside a prefab asset.",
+      "prepareWith": [],
+      "verifyWith": ["gameobject/get"],
+      "limitations": []
+    },
+    "gameobject/duplicate": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Duplicate a GameObject in the current scene.",
+      "avoidWhen": "An asset should be copied or a prefab instantiated.",
+      "prepareWith": [],
+      "verifyWith": ["gameobject/get"],
+      "limitations": []
+    },
+    "component/add": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Add a component to a scene GameObject.",
+      "avoidWhen": "The component belongs directly in a prefab asset.",
+      "prepareWith": [],
+      "verifyWith": ["gameobject/get"],
+      "limitations": []
+    },
+    "component/remove": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "advanced",
+      "effect": "destructive",
+      "selectWhen": "Apply an explicitly requested or rule-specified component removal to a scene GameObject.",
+      "avoidWhen": "Do not infer removal from a diagnostic scan. Select or exact-load only when an applicable repair rule requires removal or the user explicitly requests removal. Use prefab/asset_remove_component for a prefab asset.",
+      "prepareWith": ["component/get"],
+      "verifyWith": ["gameobject/get"],
+      "limitations": ["The mutation is destructive; verify that the removed component instance is absent from the object's component summaries."]
+    },
+    "component/get": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Inspect one scene component whose selectors are supplied or will be bound from a known producer.",
+      "avoidWhen": "Do not select or exact-load merely for a broad scan or a future drill-down whose necessity depends on whether an upstream read returns a concrete target and component. A supplied selector or explicitly requested known-producer consumer is not deferred. Use gameobject/get for component type summaries.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["Serialized property output is bounded."]
+    },
+    "component/modify": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Change serialized fields on a scene component.",
+      "avoidWhen": "GameObject identity or transform properties should change.",
+      "prepareWith": [],
+      "verifyWith": ["component/get"],
+      "limitations": []
+    },
+    "transform/set": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Move, rotate, or scale a scene GameObject.",
+      "avoidWhen": "A RectTransform or other serialized component field should change.",
+      "prepareWith": [],
+      "verifyWith": ["gameobject/get"],
+      "limitations": ["Compare floating-point vectors with an appropriate tolerance."]
+    },
+    "project/selection.get": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "advanced",
+      "effect": "read",
+      "selectWhen": "Inspect the current Unity Editor selection.",
+      "avoidWhen": "Objects should be found independently of Editor selection.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "project/selection.set": {
+      "view": "authoring",
+      "domains": ["objects"],
+      "tier": "advanced",
+      "effect": "write",
+      "selectWhen": "Select scene objects or assets in the Unity Editor.",
+      "avoidWhen": "An object only needs to be located.",
+      "prepareWith": [],
+      "verifyWith": ["project/selection.get"],
+      "limitations": []
+    },
+    "project/scene.list": {
+      "view": "authoring",
+      "domains": ["scene"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "List scene assets available in the project.",
+      "avoidWhen": "The active scene hierarchy is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "project/scene.open": {
+      "view": "authoring",
+      "domains": ["scene"],
+      "tier": "core",
+      "effect": "lifecycle",
+      "selectWhen": "Open a specific scene asset, including each scene enumerated for a project-wide scan.",
+      "avoidWhen": "The already active scene only needs inspection.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["No built-in independent readback currently proves the loaded-scene set after an additive open."]
+    },
+    "project/scene.save": {
+      "view": "authoring",
+      "domains": ["scene"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Save the active scene to an explicit asset path.",
+      "avoidWhen": "A specific non-active loaded scene must be saved.",
+      "prepareWith": ["project/asset.list", "asset/create_folder"],
+      "verifyWith": ["project/scene.list"],
+      "limitations": [
+        "When scenePath names a new scene, its parent folder under Assets must already exist.",
+        "project/scene.list can confirm that the target scene asset path is listed after saving, but no built-in independent readback proves that an existing scene became clean or that all intended content persisted."
+      ]
+    },
+    "scene/hierarchy": {
+      "view": "authoring",
+      "domains": ["scene"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Inspect the active scene hierarchy.",
+      "avoidWhen": "Scene assets or a prefab-asset hierarchy should be listed.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": [
+        "Depth and component inclusion directly affect response size.",
+        "Use includeComponents=true only for an explicit hierarchy-wide component scan; otherwise keep it false.",
+        "Component summaries do not guarantee Missing Script slots or other task-specific markers."
+      ]
+    },
+    "project/asset.list": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Find project assets by type, name, or folder.",
+      "avoidWhen": "The request mutates an asset.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "project/asset.import": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "advanced",
+      "effect": "lifecycle",
+      "selectWhen": "Import a newly written asset into Unity.",
+      "avoidWhen": "An already imported asset requires a forced update.",
+      "prepareWith": [],
+      "verifyWith": ["project/asset.list"],
+      "limitations": ["Use project/asset.reimport for an existing imported asset."]
+    },
+    "project/asset.reimport": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "advanced",
+      "effect": "lifecycle",
+      "selectWhen": "Force Unity to reimport an existing asset.",
+      "avoidWhen": "The asset is newly written and not yet imported.",
+      "prepareWith": [],
+      "verifyWith": ["project/asset.list"],
+      "limitations": ["The target asset must already exist."]
+    },
+    "asset/move": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Move or rename an asset.",
+      "avoidWhen": "The source asset should remain in place.",
+      "prepareWith": [],
+      "verifyWith": ["project/asset.list"],
+      "limitations": []
+    },
+    "asset/copy": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Copy an asset while retaining the source.",
+      "avoidWhen": "The original asset should move.",
+      "prepareWith": [],
+      "verifyWith": ["project/asset.list"],
+      "limitations": []
+    },
+    "asset/delete": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "advanced",
+      "effect": "destructive",
+      "selectWhen": "Delete one or more project assets or folders.",
+      "avoidWhen": "A GameObject in a loaded scene should be destroyed.",
+      "prepareWith": ["project/asset.list"],
+      "verifyWith": ["project/asset.list"],
+      "limitations": ["The mutation is destructive; inspect failedPaths before treating it as complete."]
+    },
+    "asset/create_folder": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "advanced",
+      "effect": "write",
+      "selectWhen": "Create a folder in the Unity Assets tree.",
+      "avoidWhen": "An operating-system folder outside the project is required.",
+      "prepareWith": [],
+      "verifyWith": ["project/asset.list"],
+      "limitations": []
+    },
+    "material/create": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Create a material asset.",
+      "avoidWhen": "An existing material only needs assignment.",
+      "prepareWith": [],
+      "verifyWith": ["material/get"],
+      "limitations": ["Missing parent folders under Assets are created automatically; do not pre-create them."]
+    },
+    "material/get": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Inspect a material shader and its properties.",
+      "avoidWhen": "A Renderer component's serialized state is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["gameObjectPath reads Renderer slot 0 only; higher slots have no built-in material-path proof."]
+    },
+    "material/assign": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Assign an existing material to a Renderer slot.",
+      "avoidWhen": "The material asset itself should be created or edited.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["No generic built-in readback contract guarantees the assigned material path for every Renderer slot."]
+    },
+    "prefab/create": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Create a prefab asset from a scene GameObject.",
+      "avoidWhen": "An existing prefab should be instantiated.",
+      "prepareWith": [],
+      "verifyWith": ["prefab/asset_get"],
+      "limitations": ["Missing parent folders under Assets are created automatically; do not pre-create them."]
+    },
+    "prefab/instantiate": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Instantiate a prefab asset in the active scene.",
+      "avoidWhen": "A new prefab asset should be created.",
+      "prepareWith": [],
+      "verifyWith": ["gameobject/get"],
+      "limitations": ["Verify with gameobject/get using the returned instanceId; never predict the instance name or path."]
+    },
+    "prefab/unpack": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "destructive",
+      "selectWhen": "Unpack a prefab instance in a loaded scene.",
+      "avoidWhen": "The prefab asset itself should be edited or deleted.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["No built-in independent readback currently exposes the prefab relationship needed to verify unpacking."]
+    },
+    "prefab/asset_hierarchy": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "read",
+      "selectWhen": "Inspect the hierarchy stored inside a prefab asset.",
+      "avoidWhen": "The active scene hierarchy is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": [
+        "Depth directly affects response size.",
+        "Component summaries do not guarantee Missing Script slots or other task-specific markers."
+      ]
+    },
+    "prefab/asset_get": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "read",
+      "selectWhen": "Inspect one prefab GameObject whose selectors are supplied or will be bound from a known producer.",
+      "avoidWhen": "Do not select or exact-load merely for a prefab-wide scan or a future drill-down whose necessity depends on whether an upstream read returns a concrete target. A supplied selector or explicitly requested known-producer consumer is not deferred. Use gameobject/get for a loaded scene instance.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name."]
+    },
+    "prefab/asset_get_component": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "read",
+      "selectWhen": "Inspect one prefab component whose selectors are supplied or will be bound from a known producer.",
+      "avoidWhen": "Do not select or exact-load merely for a broad scan or a future drill-down whose necessity depends on whether an upstream read returns a concrete target and component. A supplied selector or explicitly requested known-producer consumer is not deferred. Use component/get for a loaded scene instance.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": [
+        "gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name.",
+        "Serialized property output is bounded."
+      ]
+    },
+    "prefab/asset_modify_component": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "write",
+      "selectWhen": "Modify serialized component fields inside a prefab asset.",
+      "avoidWhen": "The component belongs to a loaded scene object.",
+      "prepareWith": [],
+      "verifyWith": ["prefab/asset_get_component"],
+      "limitations": ["gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name."]
+    },
+    "prefab/asset_add_component": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "write",
+      "selectWhen": "Add a component directly to a prefab asset.",
+      "avoidWhen": "The target is a loaded scene instance.",
+      "prepareWith": [],
+      "verifyWith": ["prefab/asset_get"],
+      "limitations": ["gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name."]
+    },
+    "prefab/asset_remove_component": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "destructive",
+      "selectWhen": "Apply an explicitly requested or rule-specified component removal directly to a prefab asset.",
+      "avoidWhen": "Do not infer removal from a diagnostic scan. Select or exact-load only when an applicable repair rule requires removal or the user explicitly requests removal. Use component/remove for a loaded scene instance.",
+      "prepareWith": ["prefab/asset_get_component"],
+      "verifyWith": ["prefab/asset_get"],
+      "limitations": [
+        "gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name.",
+        "The mutation is destructive; verify the remaining prefab component summaries after reload."
+      ]
+    },
+    "prefab/asset_modify_gameobject": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "write",
+      "selectWhen": "Change basic GameObject properties inside a prefab asset.",
+      "avoidWhen": "A loaded scene instance is the target.",
+      "prepareWith": [],
+      "verifyWith": ["prefab/asset_get"],
+      "limitations": ["gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name."]
+    },
+    "prefab/asset_add_gameobject": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "write",
+      "selectWhen": "Add a child GameObject directly inside a prefab asset.",
+      "avoidWhen": "A child should be added to a loaded scene object.",
+      "prepareWith": [],
+      "verifyWith": ["prefab/asset_get"],
+      "limitations": [
+        "parentPath is relative to the prefab root; use an empty string for the root and never include the root name.",
+        "A newly added child starts with only its Transform component."
+      ]
+    },
+    "prefab/asset_remove_gameobject": {
+      "view": "authoring",
+      "domains": ["prefabs"],
+      "tier": "advanced",
+      "effect": "destructive",
+      "selectWhen": "Remove a child GameObject directly from a prefab asset.",
+      "avoidWhen": "A loaded scene GameObject or the prefab root is the target.",
+      "prepareWith": ["prefab/asset_get"],
+      "verifyWith": ["prefab/asset_get"],
+      "limitations": [
+        "gameObjectPath is relative to the prefab root and never includes the root name.",
+        "The prefab root cannot be removed with this command."
+      ]
+    },
+    "screenshot/scene_view": {
+      "view": "authoring",
+      "domains": ["capture"],
+      "tier": "advanced",
+      "effect": "write",
+      "selectWhen": "Capture the current Unity Scene View.",
+      "avoidWhen": "The Game View or a runtime frame is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["Completion requires the output image file to exist."]
+    },
+    "screenshot/game_view": {
+      "view": "authoring",
+      "domains": ["capture"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Capture the Unity Game View or gameplay frame.",
+      "avoidWhen": "The Scene View editor camera is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["Completion requires the output image file to exist."]
+    },
+    "profiler/start": {
+      "view": "authoring",
+      "domains": ["capture"],
+      "tier": "advanced",
+      "effect": "lifecycle",
+      "selectWhen": "Start recording Unity Profiler data.",
+      "avoidWhen": "Profiler state only needs inspection.",
+      "prepareWith": ["profiler/status"],
+      "verifyWith": ["profiler/status"],
+      "limitations": []
+    },
+    "profiler/stop": {
+      "view": "authoring",
+      "domains": ["capture"],
+      "tier": "advanced",
+      "effect": "lifecycle",
+      "selectWhen": "Stop recording Unity Profiler data.",
+      "avoidWhen": "Recorded data only needs to be saved.",
+      "prepareWith": ["profiler/status"],
+      "verifyWith": ["profiler/status"],
+      "limitations": []
+    },
+    "profiler/status": {
+      "view": "authoring",
+      "domains": ["capture"],
+      "tier": "advanced",
+      "effect": "read",
+      "selectWhen": "Inspect current Unity Profiler recording state.",
+      "avoidWhen": "General Editor readiness is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "profiler/save": {
+      "view": "authoring",
+      "domains": ["capture"],
+      "tier": "advanced",
+      "effect": "write",
+      "selectWhen": "Save captured Unity Profiler data to a file.",
+      "avoidWhen": "Profiler recording should start or stop.",
+      "prepareWith": ["profiler/status"],
+      "verifyWith": [],
+      "limitations": ["Completion requires the output file to exist and be nonempty."]
+    },
+    "command/list": {
+      "view": "control",
+      "domains": ["control"],
+      "tier": "control-plane",
+      "effect": "read",
+      "selectWhen": "Inspect the live command registry through its executable command.",
+      "avoidWhen": "Agent-facing progressive discovery is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "command/registry.snapshot": {
+      "view": "control",
+      "domains": ["control"],
+      "tier": "control-plane",
+      "effect": "read",
+      "selectWhen": "Fetch package-owned command contracts, optionally conditional on a cached registry generation.",
+      "avoidWhen": "Agent-facing progressive discovery is required.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["An unchanged answer carries no contracts; reuse the cached snapshot."]
+    },
+    "session/list": {
+      "view": "control",
+      "domains": ["control"],
+      "tier": "control-plane",
+      "effect": "read",
+      "selectWhen": "List active C# REPL sessions.",
+      "avoidWhen": "Unity scenes or GameObjects should be listed.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "session/inspect": {
+      "view": "control",
+      "domains": ["control"],
+      "tier": "control-plane",
+      "effect": "read",
+      "selectWhen": "Inspect one named C# REPL session.",
+      "avoidWhen": "A Unity scene object or component is the target.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": []
+    },
+    "session/reset": {
+      "view": "control",
+      "domains": ["control"],
+      "tier": "control-plane",
+      "effect": "destructive",
+      "selectWhen": "Reset one named C# REPL session.",
+      "avoidWhen": "Unity scene or Editor state should change.",
+      "prepareWith": ["session/inspect"],
+      "verifyWith": ["session/inspect"],
+      "limitations": ["The named session compiler and executor state are discarded."]
+    }
+  },
+  "denyPolicy": [
+    {
+      "id": "editor/menu.open",
+      "domains": [
+        "editor"
+      ],
+      "tier": "advanced",
+      "intent": "Invoke an arbitrary Unity menu item.",
+      "reason": "Arbitrary menu actions can open modal UI or trigger opaque side effects.",
+      "fallbackPolicy": "prohibited"
+    },
+    {
+      "id": "editor/window.open",
+      "domains": [
+        "editor"
+      ],
+      "tier": "advanced",
+      "intent": "Open an arbitrary Unity Editor window.",
+      "reason": "Window automation does not provide a deterministic non-interactive result.",
+      "fallbackPolicy": "prohibited"
+    }
+  ]
+}
