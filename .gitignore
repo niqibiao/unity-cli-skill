@@ -4,15 +4,8 @@ __pycache__/
 .pkg-cache.json
 .catalog-cache.json
 skills/unity-cli-command/dynamic-commands.md
-docs
-!docs/
-docs/*
-!docs/agents/
-!docs/agents/**
-!docs/adr/
-!docs/adr/**
-!docs/specs/
-!docs/specs/**
+docs/
+CONTEXT.md
 tests/
 cc-codex-discussion-history/
 /adr/
