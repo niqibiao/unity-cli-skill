@@ -192,15 +192,24 @@ def _prepared_command_parts(prepared):
     return command_id, namespace, action, args
 
 
-def _reject_json_constant(value):
-    raise ValueError(f"non-finite JSON value {value!r} is not allowed")
+def _keep_json_constant(value):
+    """Keep a non-finite literal as text so the result stays readable JSON.
+
+    Unity serializes float.NaN and float.Infinity as bare JSON constants, and a
+    corrupted Transform is exactly the state worth inspecting. Dropping the
+    whole result would hide it; re-emitting the raw constant would produce
+    output the agent cannot parse.
+    """
+    return value
 
 
 def _parse_json_float(value):
     parsed = float(value)
-    if not math.isfinite(parsed):
-        raise ValueError(f"non-finite JSON number {value!r} is not allowed")
-    return parsed
+    if math.isfinite(parsed):
+        return parsed
+    if math.isnan(parsed):
+        return "NaN"
+    return "Infinity" if parsed > 0 else "-Infinity"
 
 
 def _unique_json_object(pairs):
@@ -219,7 +228,7 @@ def _load_json_strict(raw, label):
         return json.loads(
             raw,
             object_pairs_hook=_unique_json_object,
-            parse_constant=_reject_json_constant,
+            parse_constant=_keep_json_constant,
             parse_float=_parse_json_float,
         )
     except (json.JSONDecodeError, ValueError, OverflowError) as exc:
@@ -282,6 +291,17 @@ def _validate_batch_result_item(item, index):
     )
 
 
+def _routed_echo(echo, ok):
+    """Return True when the echoed route must match the request.
+
+    The package clears every route field when it answers without an invocation,
+    which it can only legitimately do on a failure.
+    """
+    if ok:
+        return True
+    return any(echo.get(field) for field in ("commandNamespace", "action"))
+
+
 def _parse_command_http_response_strict(
     delegate,
     raw,
@@ -306,16 +326,23 @@ def _parse_command_http_response_strict(
     for field in ("commandNamespace", "action", "sessionId"):
         if not isinstance(command.get(field), str):
             raise ValueError(f"Invalid command route field {field}")
-    if (
-        command["commandNamespace"] != expected_namespace
-        or command["action"] != expected_action
-    ):
-        raise ValueError("Command response wire route did not match the request")
-    if (
-        command["sessionId"] != expected_session_id
-        or envelope["sessionId"] != expected_session_id
-    ):
-        raise ValueError("Command response session did not match the request")
+    # A failed response may carry no route at all: the package answers with an
+    # empty invocation when it could not parse the request into a command. That
+    # answer holds the only diagnostic there is, so let it through rather than
+    # replacing it with a route complaint.
+    if _routed_echo(command, envelope["ok"]):
+        if (
+            command["commandNamespace"] != expected_namespace
+            or command["action"] != expected_action
+        ):
+            raise ValueError(
+                "Command response wire route did not match the request"
+            )
+        if (
+            command["sessionId"] != expected_session_id
+            or envelope["sessionId"] != expected_session_id
+        ):
+            raise ValueError("Command response session did not match the request")
     _validate_result_json(
         data.get("resultJson"),
         envelope["ok"],
@@ -410,7 +437,7 @@ def _normalize_command_result(result, command_id, namespace, action):
             command_id,
             "Command response is missing its wire route",
         )
-    if (
+    if _routed_echo(echo, ok) and (
         echo.get("commandNamespace") != namespace
         or echo.get("action") != action
     ):
