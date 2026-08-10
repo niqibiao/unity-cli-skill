@@ -79,10 +79,11 @@ state was reached.
    perform the smallest independent read-back. Assign each postcondition to one
    proof and remove a read whose full proof purpose is already covered elsewhere;
    retain a narrower read only for a selector or field absent from the broader
-   result. Keep a caller-defined deterministic path when the mutation fixed the
-   name and parent. Otherwise, when it returns an `instanceId`, path, or other
-   stable selector, bind the read-back to that field instead of predicting a
-   Unity-generated name.
+   result. Keep a caller-defined deterministic selector only when the consumer
+   contract accepts it and the mutation fixed its value. Otherwise, bind the
+   read-back only to a returned field that the verifier contract explicitly
+   accepts as a selector; a diagnostic field is not a selector merely because
+   its name contains `instanceId` or `path`.
 3. After asset or C# changes that compile, follow `references/refresh.md`; a
    domain reload clears REPL sessions.
 4. If the CLI returns a transport failure after a mutation, state may be
