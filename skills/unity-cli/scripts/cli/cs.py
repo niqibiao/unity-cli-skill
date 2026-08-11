@@ -815,6 +815,7 @@ def _emit_catalog_error(args, message):
 def cmd_catalog_sync(root, args, agent_root):
     from cli.catalog_store import (
         CatalogStoreError,
+        WRITE_CONFLICT,
         WRITE_FAILED,
         WRITE_UNCHANGED,
         build_catalog,
@@ -906,7 +907,17 @@ def cmd_catalog_sync(root, args, agent_root):
         if old_by_id[command_id] != new_by_id[command_id]
     )
 
-    write_status = save_catalog(cat_file, catalog_text)
+    write_status = save_catalog(
+        cat_file,
+        catalog_text,
+        expected_digest=prior.digest,
+    )
+    if write_status == WRITE_CONFLICT:
+        return _emit_catalog_error(
+            args,
+            "Catalog changed while the current registry was being resolved. "
+            "The newer catalog was preserved; run catalog sync again.",
+        )
     if write_status == WRITE_FAILED:
         return _emit_catalog_error(
             args,

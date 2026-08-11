@@ -25,6 +25,7 @@ from cli.registry_protocol import (
 CATALOG_VERSION = 2
 WRITE_WRITTEN = "written"
 WRITE_UNCHANGED = "unchanged"
+WRITE_CONFLICT = "conflict"
 WRITE_FAILED = "failed"
 
 _CATALOG_FIELDS = frozenset({
@@ -204,8 +205,23 @@ def _current_digest(path):
     return _digest_bytes(raw) if raw is not None else None
 
 
-def save_catalog(path, text):
-    """Atomically replace a valid catalog, or report that it is unchanged."""
+def _valid_expected_digest(value):
+    return (
+        value is None
+        or (
+            isinstance(value, str)
+            and len(value) == 64
+            and value == value.lower()
+            and all(character in "0123456789abcdef" for character in value)
+        )
+    )
+
+
+def save_catalog(path, text, *, expected_digest=None):
+    """Compare-and-swap one valid catalog into place."""
+    if not _valid_expected_digest(expected_digest):
+        return WRITE_FAILED
+
     try:
         candidate = validate_catalog(_strict_json_loads(text))
         if text != _canonical_text(candidate):
@@ -221,12 +237,14 @@ def save_catalog(path, text):
     ):
         return WRITE_FAILED
 
+    target = Path(path)
     try:
-        observed = _current_digest(path)
-        candidate_digest = _digest_bytes(encoded)
-        if observed == candidate_digest:
+        observed = _current_digest(target)
+        if observed == _digest_bytes(encoded):
             return WRITE_UNCHANGED
-        if atomic_write(path, text):
+        if observed != expected_digest:
+            return WRITE_CONFLICT
+        if atomic_write(target, text):
             return WRITE_WRITTEN
         return WRITE_FAILED
     except CatalogStoreError:
