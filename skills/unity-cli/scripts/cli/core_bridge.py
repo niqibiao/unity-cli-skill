@@ -204,12 +204,14 @@ def _keep_json_constant(value):
 
 
 def _parse_json_float(value):
+    """Keep a literal that overflows a double as its own text.
+
+    Only parse_constant sees Unity's bare non-finite tokens, so anything
+    reaching here is a real numeric literal and must not be relabelled as one
+    of them.
+    """
     parsed = float(value)
-    if math.isfinite(parsed):
-        return parsed
-    if math.isnan(parsed):
-        return "NaN"
-    return "Infinity" if parsed > 0 else "-Infinity"
+    return parsed if math.isfinite(parsed) else value
 
 
 def _unique_json_object(pairs):
