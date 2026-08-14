@@ -20,7 +20,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 HERE = Path(__file__).resolve().parent
@@ -392,7 +392,7 @@ def _command_payload(command):
     tokens = _tokens(normalized)
     if not tokens:
         return "", "empty command execution"
-    first = Path(tokens[0]).name.casefold()
+    first = PureWindowsPath(tokens[0]).name.casefold()
     powershell_names = {
         "pwsh",
         "pwsh.exe",
@@ -408,7 +408,7 @@ def _command_payload(command):
             "<pwsh|powershell> -Command \"<single command>\""
         )
     executable = match.group("quoted_exe") or match.group("bare_exe")
-    executable_name = Path(executable).name.casefold()
+    executable_name = PureWindowsPath(executable).name.casefold()
     if executable_name not in powershell_names:
         return "", "PowerShell trace transport executable is not recognized"
     slash_executable = executable.replace("\\", "/").casefold()
@@ -508,7 +508,7 @@ def _offline_discovery_query(command, candidate):
     tokens = _tokens(payload)
     if not tokens:
         return None
-    first = Path(tokens[0]).name.casefold()
+    first = PureWindowsPath(tokens[0]).name.casefold()
     if first not in {"python", "python.exe", "py", "py.exe"}:
         return None
     if _offline_discovery_violation(tokens, candidate):
@@ -573,7 +573,7 @@ def _valid_offline_discovery_output(output):
 
 
 def _markdown_read_violation(tokens, candidate):
-    if Path(tokens[0]).name.casefold() != "get-content":
+    if PureWindowsPath(tokens[0]).name.casefold() != "get-content":
         return f"shell command is outside the read allowlist: {tokens[0]}"
     targets = []
     index = 1
@@ -632,7 +632,7 @@ def _command_violation(command, candidate):
     tokens = _tokens(normalized)
     if not tokens:
         return "empty command execution"
-    first = Path(tokens[0]).name.casefold()
+    first = PureWindowsPath(tokens[0]).name.casefold()
     if any(
         token in {".", "./", ".\\"}
         or token.replace("\\", "/").startswith("../")
