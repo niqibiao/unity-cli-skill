@@ -1,6 +1,7 @@
 """Safety and provenance tests for the local candidate routing runner."""
 
 import importlib.util
+import os
 import subprocess
 import tempfile
 import unittest
@@ -222,6 +223,14 @@ class RoutingRunnerTests(unittest.TestCase):
             any("item type" in item for item in result["violations"])
         )
 
+    # The runner resolves a traced path against the candidate checkout on the
+    # machine that produced the trace, so an absolute path only means what it
+    # says on that machine's filesystem. Every other case here uses a path
+    # relative to the candidate and runs everywhere.
+    @unittest.skipUnless(
+        os.name == "nt",
+        "the case pins absolute Windows paths against a Windows checkout",
+    )
     def test_trace_accepts_exact_windows_wrapper_and_todo_without_tool_count(self):
         candidate = Path(
             r"E:\UnityProjects\_unity-cli-pr12-complex-eval\candidate-pr12"
