@@ -1,0 +1,111 @@
+{
+  "skill_name": "unity-cli",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Route the following independent Unity requests using the supplied unity-cli skill. Do not execute Unity, call tools, or claim that any state changed. Return JSON only as {\"results\":[...]}, with one result per case in input order. A protocol result has id, kind=\"protocol\", commandId as one canonical slash ID, args, and tier. A permanently unavailable non-interactive action has kind=\"blocked\", commandId, args, tier, invoke=false, and a short reason. Include in args only values explicitly requested; do not invent non-default values.\nr01: 检查当前 Unity Editor 的整体状态，包括是否正在编译、更新以及 Play Mode 信息。\nr02: 只告诉我当前是否正在或暂停于 Play Mode，不要查询完整 Editor 状态。\nr03: 让当前 Unity Editor 进入 Play Mode。\nr04: 退出当前 Unity Editor 的 Play Mode。\nr05: 在 Unity Editor 中打开 Assets/Create/Material 菜单。\nr06: 在 Unity Editor 中打开 InspectorWindow，并使用普通非 utility 窗口。\nr07: 清空 Unity Editor Console。\nr08: 在 Unity 日志中写入可搜索标记 benchmark-start。\nc05: 检查 Editor 是否正在编译或更新，并顺带返回 Play Mode 信息。\nc06: 只检查是否正在 Play Mode 或暂停，不要完整 Editor 状态。",
+      "expected_output": "A JSON-only routing classification for r01-r08 and c05-c06 that matches the corresponding oracle records in evals/route_cases.json without performing live execution.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly r01-r08 and c05-c06 once each, in input order.",
+        "Every kind, canonical commandId, argument value, and visibility tier matches evals/route_cases.json.",
+        "r05 and r06 identify the registered action but set kind to blocked and invoke to false because these actions are unavailable in non-interactive mode.",
+        "The response does not call tools, claim execution, or claim that Unity state changed."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Route the following independent Unity requests using the supplied unity-cli skill. Do not execute Unity, call tools, or claim that any state changed. Return JSON only as {\"results\":[...]}, with one result per case in input order. Each result has id, kind=\"protocol\", commandId as one canonical slash ID, args, and tier. Include in args only values explicitly requested, preserving JSON types such as int, bool, and Vector3 objects.\nr09: 在已加载场景中查找名称包含 Enemy 的 GameObject。\nr10: 在 Environment 下创建名为 ArenaFloor 的 Cube。\nr11: 删除层级路径 Enemies/ObsoleteEnemy 对应的 GameObject。\nr12: 获取 Player GameObject 的名称、tag、layer、Transform 和组件列表等完整信息。\nr13: 把 Enemies/Boss 重命名为 BossDisabled，并设为 inactive。\nr14: 把 Props/Sword 改挂到 Player/Hand 下，并保留原来的局部 Transform。\nr15: 复制 Enemies/Grunt，并把副本命名为 Grunt_Copy。\nr20: 只读取 Player 的位置、旋转和缩放，不需要 GameObject 的组件详情。\nr21: 把 Player 的局部位置设为 (1,2,3)，局部旋转设为 (0,90,0)，局部缩放设为 (1,1,1)。\nc07: 获取 Player 的 tag、layer、组件清单和 Transform 摘要。\nc08: 只获取 Player 的位置、旋转和缩放。",
+      "expected_output": "A JSON-only routing classification for the GameObject and Transform cases that distinguishes full GameObject inspection from Transform-only inspection and matches evals/route_cases.json.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly r09-r15, r20-r21, and c07-c08 once each, in input order.",
+        "Every canonical commandId, argument value, JSON value type, and visibility tier matches evals/route_cases.json.",
+        "c07 and c08 both route to gameobject/get; c08 requests only the Transform projection.",
+        "The response does not call tools, claim execution, or claim that Unity state changed."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Route the following independent Unity requests using the supplied unity-cli skill. Do not execute Unity, call tools, or claim that any state changed. Return JSON only as {\"results\":[...]}, with one result per case in input order. Each result has id, kind=\"protocol\", commandId as one canonical slash ID, args, and tier. Include only explicitly requested argument values. Preserve FieldPair values as strings and boolean values as JSON booleans.\nr16: 给 Player GameObject 添加 Rigidbody 组件。\nr17: 移除 Player 上索引为 1 的 BoxCollider 组件。\nr18: 读取 Directional Light 上第 0 个 Light 组件的序列化字段。\nr19: 把 Player 上 Health 组件的 maxHealth 序列化字段改成 200。\nr22: 使用 Standard shader 创建 Assets/Materials/Enemy.mat。\nr23: 读取 Assets/Materials/Enemy.mat 的材质属性。\nr24: 把 Assets/Materials/Enemy.mat 分配给 Enemies/Boss 上 Renderer 的第 0 个材质槽。",
+      "expected_output": "A JSON-only routing classification for r16-r19 and r22-r24 with valid component FieldPair and material argument shapes matching evals/route_cases.json.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly r16-r19 and r22-r24 once each, in input order.",
+        "Every canonical commandId, argument value, JSON value type, and visibility tier matches evals/route_cases.json.",
+        "r19 represents fields as an array of name/value objects and keeps the serialized value 200 as a string.",
+        "The response does not call tools, claim execution, or claim that Unity state changed."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Route the following independent Unity requests using the supplied unity-cli skill. Do not execute Unity, call tools, or claim that any state changed. Return JSON only as {\"results\":[...]}, with one result per case in input order. Each result has id, kind=\"protocol\", commandId as one canonical slash ID, args, and tier. Distinguish scene-instance prefab operations from direct prefab-asset editing. Include only explicitly requested argument values and preserve JSON types.\nr25: 从场景中的 Player 创建 Assets/Prefabs/Player.prefab。\nr26: 在 Environment 下实例化 Assets/Prefabs/Enemy.prefab，位置设为 (5,0,2)。\nr27: 完全解包场景中的 Environment/EnemyPrefab 实例。\nr28: 直接读取 Assets/Prefabs/Player.prefab 内 Body 节点的详细信息，不要实例化。\nr29: 读取 Assets/Prefabs/Player.prefab 两层深度的层级，并包含组件。\nr30: 直接给 Assets/Prefabs/Player.prefab 内 Body 节点添加 BoxCollider。\nr31: 读取 Assets/Prefabs/Player.prefab 内 Body 节点第 0 个 BoxCollider 的序列化属性。\nr32: 直接把 Assets/Prefabs/Enemy.prefab 根节点 Health 组件的 maxHealth 改成 300。\nr33: 直接移除 Assets/Prefabs/Player.prefab 内 Body 节点第 0 个 BoxCollider。\nr34: 在 Assets/Prefabs/Player.prefab 的 Visuals 节点下新增名为 WeaponSocket 的子 GameObject。\nr35: 把 Assets/Prefabs/Enemy.prefab 内 Visuals/DebugMesh 节点设为 inactive。\nr36: 从 Assets/Prefabs/Player.prefab 中删除 Visuals/LegacyMesh 子节点。",
+      "expected_output": "A JSON-only routing classification for all twelve prefab actions, including direct asset-editing schemas, matching evals/route_cases.json.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly r25-r36 once each, in input order.",
+        "Every canonical commandId, argument value, JSON value type, and visibility tier matches evals/route_cases.json.",
+        "The direct asset-editing cases use prefab asset_* actions rather than scene GameObject or component actions.",
+        "r32 uses a string FieldPair value and r35 uses JSON boolean active=false.",
+        "The response does not call tools, claim execution, or claim that Unity state changed."
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Route the following independent Unity requests using the supplied unity-cli skill. Do not execute Unity, call tools, or claim that any state changed. Return JSON only as {\"results\":[...]}, with one result per case in input order. Each result has id, kind=\"protocol\", commandId as one canonical slash ID, args, and tier. Distinguish project scene/asset discovery from active-scene hierarchy and Asset Database mutations. Include only explicitly requested argument values and preserve arrays, booleans, and integers.\nr37: 列出这个 Unity 项目中的所有 Scene 资源。\nr38: 以 additive 模式打开 Assets/Scenes/UI.unity。\nr39: 把当前场景保存到 Assets/Scenes/Arena.unity，不保存为副本。\nr40: 获取 Unity Editor 当前选中的对象和资源。\nr41: 把实例 ID 101 和 202，以及 Assets/Materials/Enemy.mat 设置为当前 Editor Selection。\nr42: 列出 Assets/Art 下的所有 Material 资源。\nr43: 把新写入的 Assets/Data/Enemies.json 同步导入 AssetDatabase，并强制同步完成。\nr44: 重新导入已有的 Assets/Textures/Hero.png，不强制同步等待。\nr45: 把 Assets/Textures/Old.png 移动并重命名为 Assets/Textures/Hero.png。\nr46: 把 Assets/Materials/Base.mat 复制为 Assets/Materials/Enemy.mat。\nr47: 删除 Assets/Temp/A.asset 和 Assets/Temp/B.asset 两个资源。\nr48: 在 Asset Database 中创建 Assets/Generated/Icons 文件夹。\nr49: 获取当前已打开 Scene 的 GameObject 层级，限制深度为 3，并包含组件。\nc01: 列出项目里的所有 .unity Scene 资源。\nc02: 列出当前打开 Scene 内的 GameObject 层级。\nc03: 查找 Assets/Art 中的所有 Texture2D 资源。\nc04: 把 Assets/Art/A.png 移到 Assets/Textures/A.png。",
+      "expected_output": "A JSON-only routing classification for r37-r49 and c01-c04 that resolves project.scene versus scene.hierarchy and project.asset versus asset collisions according to evals/route_cases.json.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly r37-r49 and c01-c04 once each, in input order.",
+        "Every canonical commandId, argument value, JSON value type, and visibility tier matches evals/route_cases.json.",
+        "c01 routes to project/scene.list while c02 routes to scene/hierarchy.",
+        "c03 routes to project/asset.list while c04 routes to asset/move.",
+        "The response does not call tools, claim execution, or claim that Unity state changed."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Route the following independent Unity requests using the supplied unity-cli skill. Do not execute Unity, call tools, or claim that any state changed. Return JSON only as {\"results\":[...]}, with one result per case in input order. Each result has id, kind=\"protocol\", commandId as one canonical slash ID, args, and tier. Include only explicitly requested argument values and preserve numeric and boolean JSON types.\nr50: 把当前 Scene View 截成 1920x1080 图片并保存到 Assets/Captures/scene.png。\nr51: 以 1280x720、2 倍 superSize 截取 Game View，保存到 Assets/Captures/game.png。\nr52: 开启 Unity Profiler 深度采样，并把二进制记录写到 Temp/Profiler/deep.raw。\nr53: 停止当前 Unity Profiler 录制。\nr54: 查询 Unity Profiler 当前是否开启、是否深度采样以及帧范围。\nr55: 把已经录制的 Profiler 数据保存为 Temp/Profiler/capture.raw。",
+      "expected_output": "A JSON-only routing classification for screenshot and profiler cases r50-r55 matching evals/route_cases.json without claiming files or profiler state were changed.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly r50-r55 once each, in input order.",
+        "Every canonical commandId, argument value, JSON value type, and visibility tier matches evals/route_cases.json.",
+        "Scene View and Game View captures are routed to their distinct screenshot actions.",
+        "The response does not call tools, claim execution, claim a screenshot exists, or claim profiler state changed."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Route the following independent unity-cli control-plane requests using the supplied skill. Do not execute Unity, call tools, or claim that any state changed. Return JSON only as {\"results\":[...]}, with one result per case in input order. A protocol result has id, kind=\"protocol\", commandId as one canonical slash ID, args, tier, plus session when requested. A CLI result has id, kind=\"cli\", subcommand, argvContains, usesInputFile, and tier. Distinguish the command/list protocol action from the list-commands CLI discovery subcommand.\nr56: 列出 C# Console 当前所有活跃 REPL sessions。\nr57: 检查名为 combat-debug 的 REPL session 是否持有 compiler 和 executor 状态。\nr58: 重置名为 combat-debug 的 REPL session 的 compiler 和 executor。\nr59: 明确通过 command protocol 的 command/list action 返回所有已注册命令。\nc09: 使用 CLI 的发现接口列出 custom commands，并要求 JSON。\nc10: 不要用 CLI discovery endpoint；通过 framework command 协议调用 command/list。",
+      "expected_output": "A JSON-only routing classification for r56-r59 and c09-c10 that preserves the requested session and distinguishes protocol command/list from CLI list-commands according to evals/route_cases.json.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly r56-r59 and c09-c10 once each, in input order.",
+        "Every route, session value, argument value, CLI flag, and visibility tier matches evals/route_cases.json.",
+        "c09 uses CLI list-commands with --view custom and --json and no input file, while c10 uses protocol command/list.",
+        "The response does not call tools, claim execution, or claim that a session was inspected or reset."
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Classify whether the unity-cli skill should activate for each independent user query. Judge activation only; do not answer the queries, execute tools, or inspect a live Unity project. Return JSON only as {\"results\":[{\"id\":\"t01\",\"shouldTrigger\":true},...]}, preserving input order and including no extra fields.\nt01: 在当前 Unity 场景创建一个名为 SpawnPoint 的空 GameObject。\nt02: 检查我现在打开的 Unity Editor 是否正在编译。\nt03: 给当前场景里的 Player 添加 Rigidbody。\nt04: 把 Main Camera 移到 (0,3,-10)。\nt05: 截一张当前 Unity Scene View 的图。\nt06: 在 Editor 中 additive 打开 Assets/Scenes/UI.unity。\nt07: 直接修改 Player.prefab 里的 Health 组件，不要实例化。\nt08: 启动 Unity Profiler 深度采样。\nt09: 在当前 live Unity Editor 里执行一段临时 C#。\nt10: 帮我在这个 Unity 项目里安装并检查 unity-cli。\nt11: 解释 Unity 中 Awake、OnEnable 和 Start 的调用顺序。\nt12: 只给我一个 MonoBehaviour 单例的代码示例，不操作任何打开的 Unity 项目。\nt13: 审查这段 C# diff 的命名和空引用风险。\nt14: 比较 Unity 和 Unreal 的授权模式。\nt15: Unity UI 的锚点概念是什么？\nt16: 运行这个 .NET 项目的 dotnet test。\nt17: 在 Godot 中创建一个 Node3D。\nt18: 解析磁盘上的旧 Player.log 文本，不连接 Unity。\nt19: 修改这个 Unity 仓库的 README 安装说明。\nt20: 在 Blender 中给模型添加骨骼。",
+      "expected_output": "A JSON-only activation classification for all twenty balanced trigger queries matching evals/trigger_queries.json, with live Unity automation and setup requests positive and explanation, offline review, unrelated engine, and documentation requests negative.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly t01-t20 once each, in input order, with only id and shouldTrigger fields.",
+        "Every shouldTrigger boolean matches evals/trigger_queries.json.",
+        "All ten positive queries t01-t10 are classified true and all ten negative queries t11-t20 are classified false.",
+        "The response does not answer any query, call tools, or claim live execution."
+      ]
+    }
+  ]
+}
