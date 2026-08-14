@@ -1,0 +1,102 @@
+[
+  {
+    "id": "t01",
+    "query": "在当前 Unity 场景创建一个名为 SpawnPoint 的空 GameObject。",
+    "should_trigger": true
+  },
+  {
+    "id": "t02",
+    "query": "检查我现在打开的 Unity Editor 是否正在编译。",
+    "should_trigger": true
+  },
+  {
+    "id": "t03",
+    "query": "给当前场景里的 Player 添加 Rigidbody。",
+    "should_trigger": true
+  },
+  {
+    "id": "t04",
+    "query": "把 Main Camera 移到 (0,3,-10)。",
+    "should_trigger": true
+  },
+  {
+    "id": "t05",
+    "query": "截一张当前 Unity Scene View 的图。",
+    "should_trigger": true
+  },
+  {
+    "id": "t06",
+    "query": "在 Editor 中 additive 打开 Assets/Scenes/UI.unity。",
+    "should_trigger": true
+  },
+  {
+    "id": "t07",
+    "query": "直接修改 Player.prefab 里的 Health 组件，不要实例化。",
+    "should_trigger": true
+  },
+  {
+    "id": "t08",
+    "query": "启动 Unity Profiler 深度采样。",
+    "should_trigger": true
+  },
+  {
+    "id": "t09",
+    "query": "在当前 live Unity Editor 里执行一段临时 C#。",
+    "should_trigger": true
+  },
+  {
+    "id": "t10",
+    "query": "帮我在这个 Unity 项目里安装并检查 unity-cli。",
+    "should_trigger": true
+  },
+  {
+    "id": "t11",
+    "query": "解释 Unity 中 Awake、OnEnable 和 Start 的调用顺序。",
+    "should_trigger": false
+  },
+  {
+    "id": "t12",
+    "query": "只给我一个 MonoBehaviour 单例的代码示例，不操作任何打开的 Unity 项目。",
+    "should_trigger": false
+  },
+  {
+    "id": "t13",
+    "query": "审查这段 C# diff 的命名和空引用风险。",
+    "should_trigger": false
+  },
+  {
+    "id": "t14",
+    "query": "比较 Unity 和 Unreal 的授权模式。",
+    "should_trigger": false
+  },
+  {
+    "id": "t15",
+    "query": "Unity UI 的锚点概念是什么？",
+    "should_trigger": false
+  },
+  {
+    "id": "t16",
+    "query": "运行这个 .NET 项目的 dotnet test。",
+    "should_trigger": false
+  },
+  {
+    "id": "t17",
+    "query": "在 Godot 中创建一个 Node3D。",
+    "should_trigger": false
+  },
+  {
+    "id": "t18",
+    "query": "解析磁盘上的旧 Player.log 文本，不连接 Unity。",
+    "should_trigger": false
+  },
+  {
+    "id": "t19",
+    "query": "修改这个 Unity 仓库的 README 安装说明。",
+    "should_trigger": false
+  },
+  {
+    "id": "t20",
+    "query": "在 Blender 中给模型添加骨骼。",
+    "should_trigger": false
+  }
+]

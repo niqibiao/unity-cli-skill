@@ -1,0 +1,701 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "r01",
+      "prompt": "检查当前 Unity Editor 的整体状态，包括是否正在编译、更新以及 Play Mode 信息。",
+      "expected": {"kind": "protocol", "commandId": "editor/status", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "r02",
+      "prompt": "只告诉我当前是否正在或暂停于 Play Mode，不要查询完整 Editor 状态。",
+      "expected": {"kind": "protocol", "commandId": "editor/status", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "r03",
+      "prompt": "让当前 Unity Editor 进入 Play Mode。",
+      "expected": {"kind": "protocol", "commandId": "editor/playmode.enter", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "r04",
+      "prompt": "退出当前 Unity Editor 的 Play Mode。",
+      "expected": {"kind": "protocol", "commandId": "editor/playmode.exit", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "r05",
+      "prompt": "在 Unity Editor 中打开 Assets/Create/Material 菜单。",
+      "expected": {
+        "kind": "blocked",
+        "commandId": "editor/menu.open",
+        "invoke": false,
+        "reason": "deny_policy",
+        "args": {}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r06",
+      "prompt": "在 Unity Editor 中打开 InspectorWindow，并使用普通非 utility 窗口。",
+      "expected": {
+        "kind": "blocked",
+        "commandId": "editor/window.open",
+        "invoke": false,
+        "reason": "deny_policy",
+        "args": {}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r07",
+      "prompt": "清空 Unity Editor Console。",
+      "expected": {"kind": "protocol", "commandId": "editor/console.clear", "args": {}},
+      "tier": "advanced"
+    },
+    {
+      "id": "r08",
+      "prompt": "在 Unity 日志中写入可搜索标记 benchmark-start。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/console.mark",
+        "args": {"label": "benchmark-start"}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r09",
+      "prompt": "在已加载场景中查找名称包含 Enemy 的 GameObject。",
+      "expected": {"kind": "protocol", "commandId": "gameobject/find", "args": {"name": "Enemy"}},
+      "tier": "core"
+    },
+    {
+      "id": "r10",
+      "prompt": "在 Environment 下创建名为 ArenaFloor 的 Cube。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/create",
+        "args": {"name": "ArenaFloor", "primitiveType": "Cube", "parentPath": "Environment"}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r11",
+      "prompt": "删除层级路径 Enemies/ObsoleteEnemy 对应的 GameObject。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/destroy",
+        "args": {"path": "Enemies/ObsoleteEnemy"}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r12",
+      "prompt": "获取 Player GameObject 的名称、tag、layer、Transform 和组件列表等完整信息。",
+      "expected": {"kind": "protocol", "commandId": "gameobject/get", "args": {"path": "Player"}},
+      "tier": "core"
+    },
+    {
+      "id": "r13",
+      "prompt": "把 Enemies/Boss 重命名为 BossDisabled，并设为 inactive。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/modify",
+        "args": {"path": "Enemies/Boss", "name": "BossDisabled", "active": false}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r14",
+      "prompt": "把 Props/Sword 改挂到 Player/Hand 下，并保留原来的局部 Transform。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/set_parent",
+        "args": {
+          "path": "Props/Sword",
+          "parentPath": "Player/Hand",
+          "worldPositionStays": false
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r15",
+      "prompt": "复制 Enemies/Grunt，并把副本命名为 Grunt_Copy。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/duplicate",
+        "args": {"path": "Enemies/Grunt", "newName": "Grunt_Copy"}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r16",
+      "prompt": "给 Player GameObject 添加 Rigidbody 组件。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "component/add",
+        "args": {"typeName": "Rigidbody", "gameObjectPath": "Player"}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r17",
+      "prompt": "移除 Player 上索引为 1 的 BoxCollider 组件。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "component/remove",
+        "args": {"typeName": "BoxCollider", "gameObjectPath": "Player", "index": 1}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r18",
+      "prompt": "读取 Directional Light 上第 0 个 Light 组件的序列化字段。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "component/get",
+        "args": {"typeName": "Light", "gameObjectPath": "Directional Light", "index": 0}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r19",
+      "prompt": "把 Player 上 Health 组件的 maxHealth 序列化字段改成 200。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "component/modify",
+        "args": {
+          "typeName": "Health",
+          "gameObjectPath": "Player",
+          "fields": [{"name": "maxHealth", "value": "200"}]
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r20",
+      "prompt": "只读取 Player 的位置、旋转和缩放，不需要 GameObject 的组件详情。",
+      "expected": {"kind": "protocol", "commandId": "gameobject/get", "args": {"path": "Player"}},
+      "tier": "core"
+    },
+    {
+      "id": "r21",
+      "prompt": "把 Player 的局部位置设为 (1,2,3)，局部旋转设为 (0,90,0)，局部缩放设为 (1,1,1)。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "transform/set",
+        "args": {
+          "path": "Player",
+          "position": {"x": 1, "y": 2, "z": 3},
+          "rotation": {"x": 0, "y": 90, "z": 0},
+          "scale": {"x": 1, "y": 1, "z": 1},
+          "local": true
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r22",
+      "prompt": "使用 Standard shader 创建 Assets/Materials/Enemy.mat。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "material/create",
+        "args": {"savePath": "Assets/Materials/Enemy.mat", "shaderName": "Standard"}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r23",
+      "prompt": "读取 Assets/Materials/Enemy.mat 的材质属性。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "material/get",
+        "args": {"assetPath": "Assets/Materials/Enemy.mat"}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r24",
+      "prompt": "把 Assets/Materials/Enemy.mat 分配给 Enemies/Boss 上 Renderer 的第 0 个材质槽。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "material/assign",
+        "args": {
+          "materialPath": "Assets/Materials/Enemy.mat",
+          "gameObjectPath": "Enemies/Boss",
+          "index": 0
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r25",
+      "prompt": "从场景中的 Player 创建 Assets/Prefabs/Player.prefab。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/create",
+        "args": {"savePath": "Assets/Prefabs/Player.prefab", "gameObjectPath": "Player"}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r26",
+      "prompt": "在 Environment 下实例化 Assets/Prefabs/Enemy.prefab，位置设为 (5,0,2)。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/instantiate",
+        "args": {
+          "assetPath": "Assets/Prefabs/Enemy.prefab",
+          "parentPath": "Environment",
+          "position": {"x": 5, "y": 0, "z": 2}
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r27",
+      "prompt": "完全解包场景中的 Environment/EnemyPrefab 实例。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/unpack",
+        "args": {"gameObjectPath": "Environment/EnemyPrefab", "full": true}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r28",
+      "prompt": "直接读取 Assets/Prefabs/Player.prefab 内 Body 节点的详细信息，不要实例化。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_get",
+        "args": {"assetPath": "Assets/Prefabs/Player.prefab", "gameObjectPath": "Body"}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r29",
+      "prompt": "读取 Assets/Prefabs/Player.prefab 两层深度的层级，并包含组件。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_hierarchy",
+        "args": {
+          "assetPath": "Assets/Prefabs/Player.prefab",
+          "depth": 2,
+          "includeComponents": true
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r30",
+      "prompt": "直接给 Assets/Prefabs/Player.prefab 内 Body 节点添加 BoxCollider。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_add_component",
+        "args": {
+          "assetPath": "Assets/Prefabs/Player.prefab",
+          "typeName": "BoxCollider",
+          "gameObjectPath": "Body"
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r31",
+      "prompt": "读取 Assets/Prefabs/Player.prefab 内 Body 节点第 0 个 BoxCollider 的序列化属性。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_get_component",
+        "args": {
+          "assetPath": "Assets/Prefabs/Player.prefab",
+          "typeName": "BoxCollider",
+          "gameObjectPath": "Body",
+          "index": 0
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r32",
+      "prompt": "直接把 Assets/Prefabs/Enemy.prefab 根节点 Health 组件的 maxHealth 改成 300。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_modify_component",
+        "args": {
+          "assetPath": "Assets/Prefabs/Enemy.prefab",
+          "typeName": "Health",
+          "gameObjectPath": "",
+          "fields": [{"name": "maxHealth", "value": "300"}]
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r33",
+      "prompt": "直接移除 Assets/Prefabs/Player.prefab 内 Body 节点第 0 个 BoxCollider。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_remove_component",
+        "args": {
+          "assetPath": "Assets/Prefabs/Player.prefab",
+          "typeName": "BoxCollider",
+          "gameObjectPath": "Body",
+          "index": 0
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r34",
+      "prompt": "在 Assets/Prefabs/Player.prefab 的 Visuals 节点下新增名为 WeaponSocket 的子 GameObject。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_add_gameobject",
+        "args": {
+          "assetPath": "Assets/Prefabs/Player.prefab",
+          "parentPath": "Visuals",
+          "name": "WeaponSocket"
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r35",
+      "prompt": "把 Assets/Prefabs/Enemy.prefab 内 Visuals/DebugMesh 节点设为 inactive。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_modify_gameobject",
+        "args": {
+          "assetPath": "Assets/Prefabs/Enemy.prefab",
+          "gameObjectPath": "Visuals/DebugMesh",
+          "active": false
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r36",
+      "prompt": "从 Assets/Prefabs/Player.prefab 中删除 Visuals/LegacyMesh 子节点。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "prefab/asset_remove_gameobject",
+        "args": {
+          "assetPath": "Assets/Prefabs/Player.prefab",
+          "gameObjectPath": "Visuals/LegacyMesh"
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r37",
+      "prompt": "列出这个 Unity 项目中的所有 Scene 资源。",
+      "expected": {"kind": "protocol", "commandId": "project/scene.list", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "r38",
+      "prompt": "以 additive 模式打开 Assets/Scenes/UI.unity。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/scene.open",
+        "args": {"scenePath": "Assets/Scenes/UI.unity", "mode": "additive"}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r39",
+      "prompt": "把当前场景保存到 Assets/Scenes/Arena.unity，不保存为副本。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/scene.save",
+        "args": {"scenePath": "Assets/Scenes/Arena.unity", "saveAsCopy": false}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r40",
+      "prompt": "获取 Unity Editor 当前选中的对象和资源。",
+      "expected": {"kind": "protocol", "commandId": "project/selection.get", "args": {}},
+      "tier": "advanced"
+    },
+    {
+      "id": "r41",
+      "prompt": "把实例 ID 101 和 202，以及 Assets/Materials/Enemy.mat 设置为当前 Editor Selection。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/selection.set",
+        "args": {
+          "instanceIds": [101, 202],
+          "assetPaths": ["Assets/Materials/Enemy.mat"]
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r42",
+      "prompt": "列出 Assets/Art 下的所有 Material 资源。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/asset.list",
+        "args": {"filter": "t:Material", "folders": ["Assets/Art"]}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r43",
+      "prompt": "把新写入的 Assets/Data/Enemies.json 同步导入 AssetDatabase，并强制同步完成。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/asset.import",
+        "args": {
+          "assetPath": "Assets/Data/Enemies.json",
+          "forceSynchronousImport": true
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r44",
+      "prompt": "重新导入已有的 Assets/Textures/Hero.png，不强制同步等待。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/asset.reimport",
+        "args": {
+          "assetPath": "Assets/Textures/Hero.png",
+          "forceSynchronousImport": false
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r45",
+      "prompt": "把 Assets/Textures/Old.png 移动并重命名为 Assets/Textures/Hero.png。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "asset/move",
+        "args": {
+          "sourcePath": "Assets/Textures/Old.png",
+          "destinationPath": "Assets/Textures/Hero.png"
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r46",
+      "prompt": "把 Assets/Materials/Base.mat 复制为 Assets/Materials/Enemy.mat。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "asset/copy",
+        "args": {
+          "sourcePath": "Assets/Materials/Base.mat",
+          "destinationPath": "Assets/Materials/Enemy.mat"
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r47",
+      "prompt": "删除 Assets/Temp/A.asset 和 Assets/Temp/B.asset 两个资源。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "asset/delete",
+        "args": {"assetPaths": ["Assets/Temp/A.asset", "Assets/Temp/B.asset"]}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r48",
+      "prompt": "在 Asset Database 中创建 Assets/Generated/Icons 文件夹。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "asset/create_folder",
+        "args": {"folderPath": "Assets/Generated/Icons"}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r49",
+      "prompt": "获取当前已打开 Scene 的 GameObject 层级，限制深度为 3，并包含组件。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "scene/hierarchy",
+        "args": {"depth": 3, "includeComponents": true}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r50",
+      "prompt": "把当前 Scene View 截成 1920x1080 图片并保存到 Assets/Captures/scene.png。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "screenshot/scene_view",
+        "args": {
+          "savePath": "Assets/Captures/scene.png",
+          "width": 1920,
+          "height": 1080
+        }
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r51",
+      "prompt": "以 1280x720、2 倍 superSize 截取 Game View，保存到 Assets/Captures/game.png。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "screenshot/game_view",
+        "args": {
+          "savePath": "Assets/Captures/game.png",
+          "width": 1280,
+          "height": 720,
+          "superSize": 2
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "r52",
+      "prompt": "开启 Unity Profiler 深度采样，并把二进制记录写到 Temp/Profiler/deep.raw。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "profiler/start",
+        "args": {"deep": true, "logFile": "Temp/Profiler/deep.raw"}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r53",
+      "prompt": "停止当前 Unity Profiler 录制。",
+      "expected": {"kind": "protocol", "commandId": "profiler/stop", "args": {}},
+      "tier": "advanced"
+    },
+    {
+      "id": "r54",
+      "prompt": "查询 Unity Profiler 当前是否开启、是否深度采样以及帧范围。",
+      "expected": {"kind": "protocol", "commandId": "profiler/status", "args": {}},
+      "tier": "advanced"
+    },
+    {
+      "id": "r55",
+      "prompt": "把已经录制的 Profiler 数据保存为 Temp/Profiler/capture.raw。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "profiler/save",
+        "args": {"savePath": "Temp/Profiler/capture.raw"}
+      },
+      "tier": "advanced"
+    },
+    {
+      "id": "r56",
+      "prompt": "列出 C# Console 当前所有活跃 REPL sessions。",
+      "expected": {"kind": "protocol", "commandId": "session/list", "args": {}},
+      "tier": "control-plane"
+    },
+    {
+      "id": "r57",
+      "prompt": "检查名为 combat-debug 的 REPL session 是否持有 compiler 和 executor 状态。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "session/inspect",
+        "session": "combat-debug",
+        "args": {}
+      },
+      "tier": "control-plane"
+    },
+    {
+      "id": "r58",
+      "prompt": "重置名为 combat-debug 的 REPL session 的 compiler 和 executor。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "session/reset",
+        "session": "combat-debug",
+        "args": {}
+      },
+      "tier": "control-plane"
+    },
+    {
+      "id": "r59",
+      "prompt": "明确通过 command protocol 的 command/list action 返回所有已注册命令。",
+      "expected": {"kind": "protocol", "commandId": "command/list", "args": {}},
+      "tier": "control-plane"
+    },
+    {
+      "id": "c01",
+      "prompt": "列出项目里的所有 .unity Scene 资源。",
+      "expected": {"kind": "protocol", "commandId": "project/scene.list", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "c02",
+      "prompt": "列出当前打开 Scene 内的 GameObject 层级。",
+      "expected": {"kind": "protocol", "commandId": "scene/hierarchy", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "c03",
+      "prompt": "查找 Assets/Art 中的所有 Texture2D 资源。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/asset.list",
+        "args": {"filter": "t:Texture2D", "folders": ["Assets/Art"]}
+      },
+      "tier": "core"
+    },
+    {
+      "id": "c04",
+      "prompt": "把 Assets/Art/A.png 移到 Assets/Textures/A.png。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "asset/move",
+        "args": {
+          "sourcePath": "Assets/Art/A.png",
+          "destinationPath": "Assets/Textures/A.png"
+        }
+      },
+      "tier": "core"
+    },
+    {
+      "id": "c05",
+      "prompt": "检查 Editor 是否正在编译或更新，并顺带返回 Play Mode 信息。",
+      "expected": {"kind": "protocol", "commandId": "editor/status", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "c06",
+      "prompt": "只检查是否正在 Play Mode 或暂停，不要完整 Editor 状态。",
+      "expected": {"kind": "protocol", "commandId": "editor/status", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "c07",
+      "prompt": "获取 Player 的 tag、layer、组件清单和 Transform 摘要。",
+      "expected": {"kind": "protocol", "commandId": "gameobject/get", "args": {"path": "Player"}},
+      "tier": "core"
+    },
+    {
+      "id": "c08",
+      "prompt": "只获取 Player 的位置、旋转和缩放。",
+      "expected": {"kind": "protocol", "commandId": "gameobject/get", "args": {"path": "Player"}},
+      "tier": "core"
+    },
+    {
+      "id": "c09",
+      "prompt": "使用 CLI 的发现接口列出 custom commands，并要求 JSON。",
+      "expected": {
+        "kind": "cli",
+        "subcommand": "list-commands",
+        "argvContains": ["--view", "custom", "--json"],
+        "usesInputFile": false
+      },
+      "tier": "control-plane"
+    },
+    {
+      "id": "c10",
+      "prompt": "不要用 CLI discovery endpoint；通过 framework command 协议调用 command/list。",
+      "expected": {"kind": "protocol", "commandId": "command/list", "args": {}},
+      "tier": "control-plane"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity-cli activation result",
+  "type": "object",
+  "required": ["results"],
+  "additionalProperties": false,
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "shouldTrigger"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^t[0-9]{2}$"
+          },
+          "shouldTrigger": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

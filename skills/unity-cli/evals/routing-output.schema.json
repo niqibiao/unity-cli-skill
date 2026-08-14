@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity-cli routing result",
+  "type": "object",
+  "required": ["results"],
+  "additionalProperties": false,
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "required": ["id", "kind", "commandId", "args", "tier"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[rc][0-9]{2}$"
+              },
+              "kind": {
+                "type": "string",
+                "const": "protocol"
+              },
+              "commandId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "valueJson"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "valueJson": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["core", "advanced", "control-plane"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "commandId",
+              "args",
+              "tier",
+              "session"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[rc][0-9]{2}$"
+              },
+              "kind": {
+                "type": "string",
+                "const": "protocol"
+              },
+              "commandId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "valueJson"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "valueJson": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["core", "advanced", "control-plane"]
+              },
+              "session": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "commandId",
+              "args",
+              "tier",
+              "invoke",
+              "reason"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^r[0-9]{2}$"
+              },
+              "kind": {
+                "type": "string",
+                "const": "blocked"
+              },
+              "commandId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "valueJson"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "valueJson": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["core", "advanced", "control-plane"]
+              },
+              "invoke": {
+                "type": "boolean",
+                "const": false
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "subcommand",
+              "argvContains",
+              "usesInputFile",
+              "tier"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^c[0-9]{2}$"
+              },
+              "kind": {
+                "type": "string",
+                "const": "cli"
+              },
+              "subcommand": {
+                "type": "string",
+                "minLength": 1
+              },
+              "argvContains": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "usesInputFile": {
+                "type": "boolean"
+              },
+              "tier": {
+                "type": "string",
+                "enum": ["core", "advanced", "control-plane"]
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

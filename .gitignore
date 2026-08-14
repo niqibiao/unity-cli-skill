@@ -10,4 +10,4 @@ tests/
 cc-codex-discussion-history/
 /adr/
 .scratch/
-skills/unity-cli/scripts/cli/local_fixtures/
+reports/
