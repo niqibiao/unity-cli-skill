@@ -443,12 +443,13 @@
       "domains": ["prefabs"],
       "tier": "advanced",
       "effect": "read",
-      "selectWhen": "Inspect the hierarchy stored inside a prefab asset.",
+      "selectWhen": "Inspect the hierarchy stored inside a prefab asset or obtain stable gameObjectPath selectors for existing prefab GameObjects.",
       "avoidWhen": "The active scene hierarchy is required.",
       "prepareWith": [],
       "verifyWith": [],
       "limitations": [
         "Depth directly affects response size.",
+        "The root returns gameObjectPath=\"\"; each non-root node returns an opaque gid:<asset-guid>:<local-file-id>. Pass it unchanged and never derive it from names.",
         "Component summaries do not guarantee Missing Script slots or other task-specific markers."
       ]
     },
@@ -461,7 +462,7 @@
       "avoidWhen": "Do not select or exact-load merely for a prefab-wide scan or a future drill-down whose necessity depends on whether an upstream read returns a concrete target. A supplied selector or explicitly requested known-producer consumer is not deferred. Use gameobject/get for a loaded scene instance.",
       "prepareWith": [],
       "verifyWith": [],
-      "limitations": ["gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name."]
+      "limitations": ["gameObjectPath=\"\" selects the root; otherwise pass through an opaque gid returned by prefab/asset_hierarchy or another prefab asset command. Never derive it from names."]
     },
     "prefab/asset_get_component": {
       "view": "authoring",
@@ -473,7 +474,7 @@
       "prepareWith": [],
       "verifyWith": [],
       "limitations": [
-        "gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name.",
+        "gameObjectPath=\"\" selects the root; otherwise pass through an opaque gid returned by prefab/asset_hierarchy or another prefab asset command. Never derive it from names.",
         "Serialized property output is bounded."
       ]
     },
@@ -486,7 +487,7 @@
       "avoidWhen": "The component belongs to a loaded scene object.",
       "prepareWith": [],
       "verifyWith": ["prefab/asset_get_component"],
-      "limitations": ["gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name."]
+      "limitations": ["gameObjectPath=\"\" selects the root; otherwise pass through an opaque gid returned by prefab/asset_hierarchy or another prefab asset command. Never derive it from names."]
     },
     "prefab/asset_add_component": {
       "view": "authoring",
@@ -497,7 +498,7 @@
       "avoidWhen": "The target is a loaded scene instance.",
       "prepareWith": [],
       "verifyWith": ["prefab/asset_get"],
-      "limitations": ["gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name."]
+      "limitations": ["gameObjectPath=\"\" selects the root; otherwise pass through an opaque gid returned by prefab/asset_hierarchy or another prefab asset command. Never derive it from names."]
     },
     "prefab/asset_remove_component": {
       "view": "authoring",
@@ -509,7 +510,7 @@
       "prepareWith": ["prefab/asset_get_component"],
       "verifyWith": ["prefab/asset_get"],
       "limitations": [
-        "gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name.",
+        "gameObjectPath=\"\" selects the root; otherwise pass through an opaque gid returned by prefab/asset_hierarchy or another prefab asset command. Never derive it from names.",
         "The mutation is destructive; verify the remaining prefab component summaries after reload."
       ]
     },
@@ -522,7 +523,7 @@
       "avoidWhen": "A loaded scene instance is the target.",
       "prepareWith": [],
       "verifyWith": ["prefab/asset_get"],
-      "limitations": ["gameObjectPath is relative to the prefab root; use an empty string for the root and never include the root name."]
+      "limitations": ["gameObjectPath=\"\" selects the root; otherwise pass through an opaque gid returned by prefab/asset_hierarchy or another prefab asset command. Never derive it from names."]
     },
     "prefab/asset_add_gameobject": {
       "view": "authoring",
@@ -534,7 +535,7 @@
       "prepareWith": [],
       "verifyWith": ["prefab/asset_get"],
       "limitations": [
-        "parentPath is relative to the prefab root; use an empty string for the root and never include the root name.",
+        "parentPath=\"\" selects the root; otherwise pass through a gameObjectPath gid returned by prefab/asset_hierarchy or another prefab asset command. Never derive it from names.",
         "A newly added child starts with only its Transform component."
       ]
     },
@@ -548,7 +549,7 @@
       "prepareWith": ["prefab/asset_get"],
       "verifyWith": ["prefab/asset_get"],
       "limitations": [
-        "gameObjectPath is relative to the prefab root and never includes the root name.",
+        "Pass through the opaque gameObjectPath gid returned by prefab/asset_hierarchy or another prefab asset command; never derive it from names.",
         "The prefab root cannot be removed with this command."
       ]
     },
