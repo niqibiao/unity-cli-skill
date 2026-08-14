@@ -91,6 +91,12 @@ state was reached.
    duplicate, destroy, import, or another non-idempotent mutation again.
 5. Report completion only when observed state matches the request.
 
+For prefab asset GameObjects, `gameObjectPath=""` selects the root. Obtain every
+non-root selector from `prefab/asset_hierarchy` or another prefab asset command,
+then pass the opaque `gid:<asset-guid>:<local-file-id>` value through unchanged.
+Never construct or parse it from object names, hierarchy positions, or sibling
+indices.
+
 ## Project custom commands
 
 `cs catalog list` is a committed team shortlist, not an execution contract. When
