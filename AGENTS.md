@@ -73,6 +73,8 @@ missing explicit session ids fail without executing Unity.
 | `cs command --input FILE --json` | post | Run one framework command |
 | `cs batch --input FILE --json` | post | Run multiple commands in one request |
 | `cs health` | post | Check service health |
+| `cs doctor` | pre/post | Read-only reliability diagnosis with findings |
+| `cs wait-ready [--timeout N]` | pre/post | Wait until the service is genuinely ready |
 | `cs refresh [--wait TIMEOUT] [--exit-playmode]` | post | Refresh assets and compile |
 | `cs list-commands --offline … --json` | pre/post | Discover the validated cache or generated built-in fallback |
 | `cs list-commands … --json` | post | Compare and progressively inspect the installed package registry |

@@ -11,6 +11,33 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **`cs doctor`** — read-only reliability diagnosis with structured findings
+  (project/package/version offline checks plus live service health), working
+  before the Unity package is installed.
+- **`cs wait-ready`** — poll until the editor service is genuinely ready
+  (phase, compile/update flags, and the 2.1 main-thread heartbeat), with
+  `--expect-operation`/`--min-generation` to bind the wait to one refresh
+  operation and reject stale state from earlier generations.
+- **Play-mode compile deferral detection** — when a waited refresh is deferred
+  by the editor's Script Changes While Playing preference
+  (`recompile_after_finished`), `cs refresh --wait` and `cs wait-ready` fail
+  fast with `editor.play_mode_deferring_compile` instead of burning the
+  timeout, and instruct the agent to ask the user before exiting play mode.
+
+### Changed
+
+- **`cs refresh --wait` readiness now binds to the triggered operation** — the
+  wait tracks the returned operation id and generation rather than the first
+  `ready` phase mirror, so a service-restart blip can no longer report ready
+  while the requested compile is still pending.
+- **`references/refresh.md` no longer recommends `--exit-playmode` by
+  default** — plain `cs refresh --wait` is the first choice; exiting play mode
+  requires the user's approval because it discards runtime state.
+- **CLI version moves to 2.1.0** to stay on the same compatibility line as the
+  Unity package's 2.1.0 health-field additions.
+
 ## [2.0.8] - 2026-07-23
 
 ### Removed
