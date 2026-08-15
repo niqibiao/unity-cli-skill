@@ -477,6 +477,54 @@ def _cmd_status_json(root, args, agent_root=None):
     return result["exitCode"]
 
 
+def _reliability_coordinator(root, args, agent_root):
+    from cli.reliability import ReliabilityCoordinator
+    pkg_dir = None
+    if root is not None:
+        from cli.core_bridge import find_package_dir
+        pkg_dir = find_package_dir(root, agent_root)
+    if args.mode == "runtime":
+        # Refresh/compile diagnostics always target the editor service.
+        ip = args.compile_ip or "127.0.0.1"
+        port = args.compile_port or DEFAULT_EDITOR_PORT
+    else:
+        ip, port = args.ip, args.port
+    return ReliabilityCoordinator(
+        root, package_dir=pkg_dir, ip=ip, port=port)
+
+
+def _print_reliability_report(report, as_json):
+    if as_json:
+        json.dump(report, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+        return
+    stream = sys.stdout if report.get("ok") else sys.stderr
+    print(report.get("summary", ""), file=stream)
+    for item in (report.get("data") or {}).get("findings", []):
+        print(f"  [{item['severity']}] {item['code']}: {item['summary']}", file=stream)
+        if item.get("remediation"):
+            print(f"      fix: {item['remediation']}", file=stream)
+
+
+def cmd_doctor(root, args, agent_root=None):
+    coordinator = _reliability_coordinator(root, args, agent_root)
+    report = coordinator.doctor(verbose=args.verbose)
+    _print_reliability_report(report, args.as_json)
+    return report.get("exitCode", 1)
+
+
+def cmd_wait_ready(root, args, agent_root=None):
+    coordinator = _reliability_coordinator(root, args, agent_root)
+    report = coordinator.wait_ready(
+        args.wait_timeout,
+        expected_operation_id=args.expect_operation,
+        minimum_generation=args.min_generation,
+        verbose=args.verbose,
+    )
+    _print_reliability_report(report, args.as_json)
+    return report.get("exitCode", 1)
+
+
 def cmd_status(root, args, agent_root=None):
     if args.as_json:
         return _cmd_status_json(root, args, agent_root)
@@ -2065,6 +2113,17 @@ def main():
 
     sub.add_parser("health", parents=[shared], help="Service health check")
 
+    sub.add_parser("doctor", parents=[shared],
+                   help="Read-only reliability diagnosis (works without the package)")
+
+    sp_wait = sub.add_parser("wait-ready", parents=[shared],
+                             help="Wait until the Unity service is ready "
+                                  "(--timeout is the wait budget, default 60s)")
+    sp_wait.add_argument("--expect-operation", dest="expect_operation", default=None, metavar="ID",
+                         help="Only accept ready from this refresh operation id")
+    sp_wait.add_argument("--min-generation", dest="min_generation", type=int, default=None, metavar="N",
+                         help="Only accept ready at or above this refresh generation")
+
     sp_refresh = sub.add_parser("refresh", parents=[shared], help="Trigger asset refresh and script compilation")
     sp_refresh.add_argument("--wait", type=int, nargs="?", const=60, default=None, metavar="TIMEOUT",
                             help="Wait for refresh to complete (default timeout: 60s)")
@@ -2212,6 +2271,13 @@ def main():
     # shell.  Payloads (C# code, nested args) are where all the escaping pain lives.
     _resolve_input(p, args)
 
+    # wait-ready reuses the shared --timeout flag as its wait budget with a 60s
+    # default (a wait, not the 30s HTTP default) — capture explicitness before
+    # the defaults fill below erases it.
+    wait_ready_timeout = (
+        getattr(args, "timeout", None) if args.cmd == "wait-ready" else None
+    )
+
     # Apply defaults for any shared arg the user didn't pass (SUPPRESS leaves
     # attr unset).  This restores the original UX while preventing subparser
     # overwrites of values given at the top level.
@@ -2297,6 +2363,17 @@ def main():
         sys.exit(cmd_setup(root, args))
     if args.cmd == "status":
         sys.exit(cmd_status(root, args, agent_root))
+    if args.cmd == "doctor":
+        sys.exit(cmd_doctor(root, args, agent_root))
+    if args.cmd == "wait-ready":
+        args.wait_timeout = 60 if wait_ready_timeout is None else wait_ready_timeout
+        if args.wait_timeout < 0:
+            print("Error: --timeout must be non-negative.", file=sys.stderr)
+            sys.exit(1)
+        if args.wait_timeout > 600:
+            print(f"Warning: --timeout capped to 600s (requested {args.wait_timeout}s)", file=sys.stderr)
+            args.wait_timeout = 600
+        sys.exit(cmd_wait_ready(root, args, agent_root))
     if args.cmd == "catalog":
         if root is None:
             print("Error: no Unity project found.", file=sys.stderr)
@@ -2366,13 +2443,23 @@ def main():
         sys.exit(cmd_list_commands_live(root, args, s))
 
     def _refresh():
+        exit_playmode = getattr(args, "exit_playmode", False)
         r = s.refresh(
-            exit_playmode=getattr(args, "exit_playmode", False),
+            exit_playmode=exit_playmode,
             changed_files=getattr(args, "files", None),
         )
         if args.wait is not None:
             if r.get("ok"):
-                r = s.wait_ready(timeout=args.wait)
+                data = r.get("data") or {}
+                operation = data.get("operation") or {}
+                coordinator = _reliability_coordinator(root, args, agent_root)
+                r = coordinator.wait_ready(
+                    args.wait,
+                    expected_operation_id=operation.get("opId") or None,
+                    minimum_generation=data.get("generation"),
+                    exit_playmode_granted=exit_playmode,
+                    verbose=args.verbose,
+                )
             else:
                 print("Warning: refresh returned ok=false; --wait skipped", file=sys.stderr)
         return r

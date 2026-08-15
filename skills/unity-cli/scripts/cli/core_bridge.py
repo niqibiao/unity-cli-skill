@@ -580,11 +580,6 @@ class ConsoleSession:
                 self._mode_name(), run_id, (time.time() - start) * 1000,
             )
 
-    def wait_ready(self, timeout=60):
-        return self._client.wait_for_service_recovery(
-            self.health, self._mode_name, timeout,
-        )
-
     def registry_snapshot(self, if_generation=None):
         """Fetch the package-owned registry snapshot, conditional on a token."""
         if if_generation is None:
