@@ -34,6 +34,11 @@ ACTIVE_PHASES = frozenset({
     "reloading",
 })
 
+# Phases where operation.compileRequested reflects sampled reality. In the
+# "requested" phase it is still the optimistic creation default (the trigger
+# has not run), so it cannot prove a play-mode deferral.
+DEFERRAL_PHASES = frozenset({"refreshing_assets", "compiling"})
+
 # Findings that waiting longer cannot fix.
 TERMINAL_CODES = frozenset({
     "project.not_found",
@@ -149,7 +154,7 @@ def _classify_play_mode_deferral(data):
     but no preference published — caller debounces), or ``None``.
     """
     operation = data.get("operation") or {}
-    if operation.get("phase") not in ACTIVE_PHASES:
+    if operation.get("phase") not in DEFERRAL_PHASES:
         return None
     if not operation.get("compileRequested") or not data.get("isPlaying"):
         return None

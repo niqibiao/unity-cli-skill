@@ -202,6 +202,19 @@ class PlayModeDeferralTests(CoordinatorCase):
         self.assertFalse(report["ok"])
         self.assertEqual(report["type"], "play_mode_deferring_compile")
 
+    def test_requested_phase_is_not_deferral_evidence(self):
+        # compileRequested is still the creation default before the trigger
+        # runs; a no-change refresh during play must not fast-fail.
+        pending = compiling_in_play(
+            editorState="requested",
+            isCompiling=False,
+            operation={"phase": "requested", "message": "Refresh requested"},
+        )
+        coordinator = self.coordinator([pending, make_health()])
+        report = coordinator.wait_ready(60)
+        self.assertTrue(report["ok"])
+        self.assertGreaterEqual(coordinator.adapter.calls, 2)
+
 
 class OperationBindingTests(CoordinatorCase):
     def test_min_generation_ignores_stale_compile_failed(self):
