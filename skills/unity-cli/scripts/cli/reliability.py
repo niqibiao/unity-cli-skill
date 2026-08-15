@@ -122,16 +122,23 @@ def _finding(code, severity, summary, remediation=None, evidence=None):
     return item
 
 
+def _heartbeat_age_ms(data):
+    """The published heartbeat age, or None when the service omits it."""
+    age = data.get("mainThreadHeartbeatAgeMs")
+    if isinstance(age, bool) or not isinstance(age, (int, float)):
+        return None
+    return age
+
+
 def _health_is_ready(data):
     operation = data.get("operation") or {}
     phase = operation.get("phase") or ""
-    heartbeat_age = data.get("mainThreadHeartbeatAgeMs")
-    if isinstance(heartbeat_age, bool) or not isinstance(heartbeat_age, (int, float)):
-        # Pre-2.1 packages do not publish the heartbeat; fall back to the
-        # phase/flag checks alone (doctor reports health.heartbeat_missing).
-        heartbeat_ready = True
-    else:
-        heartbeat_ready = 0 <= heartbeat_age <= HEARTBEAT_STALE_MS
+    heartbeat_age = _heartbeat_age_ms(data)
+    # Pre-2.1 packages do not publish the heartbeat; fall back to the
+    # phase/flag checks alone (doctor reports health.heartbeat_missing).
+    heartbeat_ready = (
+        heartbeat_age is None or 0 <= heartbeat_age <= HEARTBEAT_STALE_MS
+    )
     # isPlaying is deliberately not checked: play mode is a legitimate ready
     # state for executing commands.
     return (
@@ -282,8 +289,7 @@ class ReliabilityCoordinator:
                     {"unityVersion": unity_version},
                 ))
 
-            heartbeat_age = health.get("mainThreadHeartbeatAgeMs")
-            if isinstance(heartbeat_age, bool) or not isinstance(heartbeat_age, (int, float)):
+            if _heartbeat_age_ms(health) is None:
                 findings.append(_finding(
                     "health.heartbeat_missing",
                     "warning",
@@ -402,7 +408,6 @@ class ReliabilityCoordinator:
         minimum_generation=None,
         exit_playmode_granted=False,
         verbose=False,
-        poll_interval=DEFAULT_POLL_INTERVAL,
     ):
         timeout = max(0.0, float(timeout))
         deadline = self.clock() + timeout
@@ -543,5 +548,5 @@ class ReliabilityCoordinator:
                 return report
 
             self.sleeper(
-                min(poll_interval, max(0.0, deadline - self.clock()))
+                min(DEFAULT_POLL_INTERVAL, max(0.0, deadline - self.clock()))
             )

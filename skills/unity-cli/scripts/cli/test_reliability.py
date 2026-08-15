@@ -217,7 +217,7 @@ class PlayModeDeferralTests(CoordinatorCase):
 
 
 class OperationBindingTests(CoordinatorCase):
-    def test_min_generation_ignores_stale_compile_failed(self):
+    def test_stale_generation_with_old_operation_is_ignored(self):
         stale = make_health(
             compileFailed=True,
             generation=2,
