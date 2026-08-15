@@ -127,10 +127,12 @@ skills/unity-cli/scripts/cli/command_preflight.py
 skills/unity-cli/scripts/cli/catalog_store.py
 skills/unity-cli/scripts/cli/registry_*.py
 skills/unity-cli/scripts/cli/routing_overlay.json
-skills/unity-cli/scripts/cli/data/builtin_registry_snapshot.v1.json
 skills/unity-cli/scripts/cli/core_bridge.py
 skills/unity-cli/scripts/cli/paths.py     Per-project cache paths
 skills/unity-cli/scripts/cli/VERSION      Release version
+skills/unity-cli/scripts/cli/test_*.py    Unit suite
+skills/unity-cli/scripts/cli/local_fixtures/  Pinned registry snapshot the suite reads
+skills/unity-cli/evals/                   Routing eval harness and oracles
 ```
 
 Everything ships in this one skill; there are no slash commands.
