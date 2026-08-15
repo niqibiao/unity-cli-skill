@@ -302,6 +302,7 @@ route those intents to snippets or raw `exec` as an automatic fallback.
 | Reusable C# | `cs snippets …` | `references/snippets.md` |
 | Snippet audit | `cs snippets doctor` / `stats` | `references/snippets-audit.md` |
 | Refresh and compile | `cs refresh` | `references/refresh.md` |
+| Editor log inspection | `editor/console.mark` + local read | `references/logs.md` |
 | Custom-command catalog | `cs catalog sync` / `list` | `references/catalog.md` |
 | Package / connection state | `cs status` / `cs health` | `references/status.md` |
 | Package setup | `cs setup` | `references/setup.md` |
