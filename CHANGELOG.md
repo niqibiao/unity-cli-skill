@@ -11,6 +11,8 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-15
+
 ### Added
 
 - **`cs doctor`** — read-only reliability diagnosis with structured findings
