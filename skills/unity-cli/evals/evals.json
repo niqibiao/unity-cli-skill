@@ -106,6 +106,19 @@
         "All ten positive queries t01-t10 are classified true and all ten negative queries t11-t20 are classified false.",
         "The response does not answer any query, call tools, or claim live execution."
       ]
+    },
+    {
+      "id": 9,
+      "prompt": "Route the following independent Unity requests using the supplied unity-cli skill. Do not execute Unity, call tools, or claim that any state changed. Return JSON only as {\"results\":[...]}, with one result per case in input order. Each result has id, kind=\"protocol\", commandId as one canonical slash ID, args, and tier. Include only explicitly requested argument values and preserve numeric and boolean JSON types.\nr60: 运行项目的 PlayMode 测试并在结束后汇报结果。\nr61: 查询最近一次 Unity 测试运行的进度和结果。\nr62: 在 Assets/Configs/GameSettings.asset 创建一个 GameSettings 类型的 ScriptableObject 资产。\nr63: 读取 Assets/Configs/GameSettings.asset 这个 ScriptableObject 的序列化字段。\nr64: 把 Assets/Configs/GameSettings.asset 的 maxPlayers 字段改成 8。",
+      "expected_output": "A JSON-only routing classification for test-run and ScriptableObject cases r60-r64 matching evals/route_cases.json without claiming any test ran or asset changed.",
+      "files": [],
+      "expectations": [
+        "The response is one parseable JSON object with a results array and no prose outside it.",
+        "The results contain exactly r60-r64 once each, in input order.",
+        "Every canonical commandId, argument value, JSON value type, and visibility tier matches evals/route_cases.json.",
+        "The test cases are routed to editor/test.run and editor/test.status, not to play mode or refresh commands.",
+        "The response does not call tools, claim a test run started or finished, or claim an asset was created or modified."
+      ]
     }
   ]
 }

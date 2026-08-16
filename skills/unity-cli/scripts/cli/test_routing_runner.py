@@ -521,22 +521,18 @@ class RoutingRunnerTests(unittest.TestCase):
         )
         self.assertEqual(str(candidate), command[command.index("-C") + 1])
 
-    def test_schema_selection_and_case_count_are_fixed_for_eight_evals(self):
+    def test_schema_selection_and_case_count_are_fixed_for_nine_evals(self):
         evals = RUNNER.load_evals()
 
-        self.assertEqual(8, len(evals))
-        self.assertEqual(89, RUNNER.case_count(evals))
-        self.assertEqual(
-            EVALS_DIR / "routing-trigger-output.schema.json",
-            RUNNER.schema_for_eval(evals[-1]),
-        )
-        self.assertTrue(
-            all(
-                RUNNER.schema_for_eval(item)
-                == EVALS_DIR / "routing-output.schema.json"
-                for item in evals[:-1]
+        self.assertEqual(9, len(evals))
+        self.assertEqual(94, RUNNER.case_count(evals))
+        for item in evals:
+            expected = (
+                EVALS_DIR / "routing-trigger-output.schema.json"
+                if item["id"] == 8
+                else EVALS_DIR / "routing-output.schema.json"
             )
-        )
+            self.assertEqual(expected, RUNNER.schema_for_eval(item))
 
 
 if __name__ == "__main__":

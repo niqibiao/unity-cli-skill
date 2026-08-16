@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "expectedCounts": {
-    "authoring": 51,
+    "authoring": 56,
     "control": 5
   },
   "domains": {
     "editor": {
       "view": "authoring",
-      "summary": "Editor readiness, play mode, and Console diagnostics."
+      "summary": "Editor readiness, play mode, test runs, and Console diagnostics."
     },
     "scene": {
       "view": "authoring",
@@ -19,7 +19,7 @@
     },
     "assets": {
       "view": "authoring",
-      "summary": "Project assets and materials."
+      "summary": "Project assets, materials, and ScriptableObjects."
     },
     "prefabs": {
       "view": "authoring",
@@ -89,6 +89,32 @@
       "prepareWith": [],
       "verifyWith": [],
       "limitations": []
+    },
+    "editor/test.run": {
+      "view": "authoring",
+      "domains": ["editor"],
+      "tier": "core",
+      "effect": "lifecycle",
+      "selectWhen": "Start a Unity Test Framework run in EditMode or PlayMode.",
+      "avoidWhen": "Only the result of an earlier run is needed.",
+      "prepareWith": ["editor/status"],
+      "verifyWith": ["editor/test.status"],
+      "limitations": [
+        "The run is asynchronous; poll editor/test.status for completion.",
+        "PlayMode runs enter and exit play mode automatically.",
+        "Requires com.unity.test-framework in the project; without it the command returns an explanatory error."
+      ]
+    },
+    "editor/test.status": {
+      "view": "authoring",
+      "domains": ["editor"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Check the progress or results of the latest test run.",
+      "avoidWhen": "No test run has been started.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["Reports only the latest run; earlier results are overwritten."]
     },
     "gameobject/find": {
       "view": "authoring",
@@ -404,6 +430,39 @@
       "prepareWith": [],
       "verifyWith": [],
       "limitations": ["No generic built-in readback contract guarantees the assigned material path for every Renderer slot."]
+    },
+    "scriptableobject/create": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Create a ScriptableObject asset of a known type.",
+      "avoidWhen": "An existing asset only needs reading or editing.",
+      "prepareWith": [],
+      "verifyWith": ["scriptableobject/get"],
+      "limitations": ["savePath must end with '.asset'; missing parent folders under Assets are created automatically."]
+    },
+    "scriptableobject/get": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "read",
+      "selectWhen": "Read serialized fields of a ScriptableObject asset.",
+      "avoidWhen": "The asset only needs to be located; use project/asset.list.",
+      "prepareWith": [],
+      "verifyWith": [],
+      "limitations": ["Reports at most 200 visible serialized properties."]
+    },
+    "scriptableobject/modify": {
+      "view": "authoring",
+      "domains": ["assets"],
+      "tier": "core",
+      "effect": "write",
+      "selectWhen": "Set serialized fields of a ScriptableObject asset.",
+      "avoidWhen": "The target is a component on a scene GameObject; use component/modify.",
+      "prepareWith": ["scriptableobject/get"],
+      "verifyWith": ["scriptableobject/get"],
+      "limitations": ["Field names are serialized property names as returned by scriptableobject/get."]
     },
     "prefab/create": {
       "view": "authoring",

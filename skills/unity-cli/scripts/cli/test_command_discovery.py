@@ -880,7 +880,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
         ):
             discover(_snapshot(), overlay=overlay)
 
-    def test_agent_encoding_preserves_all_56_preflight_contracts(self):
+    def test_agent_encoding_preserves_all_61_preflight_contracts(self):
         def expected_schema(schema):
             result = {"kind": schema["kind"]}
             if schema.get("format"):
@@ -981,7 +981,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
                 domains=["control"],
             )["routes"]
         ]
-        self.assertEqual(56, len(authoring_ids) + len(control_ids))
+        self.assertEqual(61, len(authoring_ids) + len(control_ids))
 
         for view, command_ids in (
             ("authoring", authoring_ids),
@@ -1038,7 +1038,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
                         {"wire", "summary", "partition"}.isdisjoint(projected)
                     )
 
-    def test_real_overlay_exposes_exact_final_51_authoring_commands(self):
+    def test_real_overlay_exposes_exact_final_56_authoring_commands(self):
         snapshot = json.loads(
             (
                 CLI_DIR
@@ -1047,7 +1047,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
             ).read_text("utf-8")
         )
         index = discover(snapshot)
-        self.assertEqual(51, index["totalCommands"])
+        self.assertEqual(56, index["totalCommands"])
 
         core = discover(
             snapshot,
@@ -1062,8 +1062,8 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
         routes = core["routes"] + advanced["routes"]
         route_ids = [item["id"] for item in routes]
 
-        self.assertEqual(51, len(route_ids))
-        self.assertEqual(51, len(set(route_ids)))
+        self.assertEqual(56, len(route_ids))
+        self.assertEqual(56, len(set(route_ids)))
         self.assertTrue(
             {
                 "editor/menu.open",

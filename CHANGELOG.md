@@ -11,6 +11,28 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-08-16
+
+### Added
+
+- **`cs test`** — run Unity Test Framework tests (EditMode or PlayMode) through
+  the new `editor/test.run`/`editor/test.status` package commands, poll until
+  completion across play-mode transitions and domain reloads, and report
+  structured pass/fail results (exit 0 pass, 3 failures, 4 outcome unknown).
+  Requires `com.unity.test-framework` in the consuming project; without it the
+  commands stay discoverable and return an explanatory error.
+- **ScriptableObject authoring** — `scriptableobject/create`, `scriptableobject/get`,
+  and `scriptableobject/modify` package commands in the `assets` domain for
+  creating SO assets by type and reading/writing their serialized fields.
+
+### Changed
+
+- The authoring surface grows to 56 commands (61 package-owned built-ins with
+  the 5 control-plane contracts); documented counts now match the registry.
+- READMEs state the trusted-LAN service model explicitly: the Unity-side
+  service binds all interfaces without authentication by design and must not
+  be exposed to untrusted networks.
+
 ## [2.1.0] - 2026-08-15
 
 ### Added
