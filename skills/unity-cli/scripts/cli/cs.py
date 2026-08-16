@@ -564,7 +564,7 @@ def cmd_test(root, args, agent_root=None):
 
     try:
         session = _new_session(root, args, pkg_dir)
-        start = session._request_command("editor", "test.run", run_args)
+        start = session.request_wire_command("editor", "test.run", run_args)
     except Exception as e:
         print(f"test run failed to start: {e}", file=sys.stderr)
         return 1
@@ -599,7 +599,7 @@ def cmd_test(root, args, agent_root=None):
         # transient errors and not-ready envelopes just mean "poll again".
         time.sleep(1.0)
         try:
-            status = session._request_command("editor", "test.status", None)
+            status = session.request_wire_command("editor", "test.status", None)
         except Exception:
             continue
         if not status.get("ok"):

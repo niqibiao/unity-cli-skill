@@ -42,7 +42,9 @@ Use `--json` for the full structured report (counts, duration, failures).
 - `editor/test.run`/`editor/test.status` require `com.unity.test-framework` in
   the project. Without it they stay discoverable but return an explanatory
   error; report that to the user instead of retrying.
-- If the editor is restarted mid-run, the record is reported as `aborted`.
+- If the editor crashes or is killed mid-run, the record is reported as
+  `aborted` on the next start. A graceful editor quit clears Unity's `Temp/`
+  state with it, so the record resets to `idle` instead.
 
 For structured routing, the same capability is exposed as the canonical
 commands `editor/test.run` and `editor/test.status`; `cs test` is the
