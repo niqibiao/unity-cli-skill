@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Ensure the cli package is importable when run as a standalone script
@@ -523,6 +524,134 @@ def cmd_wait_ready(root, args, agent_root=None):
     )
     _print_reliability_report(report, args.as_json)
     return report.get("exitCode", 1)
+
+
+def _print_test_report(report, as_json):
+    if as_json:
+        json.dump(report, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+        return
+    stream = sys.stdout if report.get("ok") else sys.stderr
+    print(report.get("summary", ""), file=stream)
+    for failure in (report.get("data") or {}).get("failures") or []:
+        print(f"  FAIL {failure.get('testName', '')}", file=stream)
+        message = (failure.get("message") or "").strip()
+        if message:
+            print(f"      {message.splitlines()[0]}", file=stream)
+
+
+def cmd_test(root, args, agent_root=None):
+    if root is None:
+        print("unity_project: NOT FOUND", file=sys.stderr)
+        return 1
+    if args.mode == "runtime":
+        print("cs test targets the editor service; drop --mode runtime", file=sys.stderr)
+        return 1
+    from cli.core_bridge import find_package_dir
+    pkg_dir = find_package_dir(root, agent_root)
+    if not pkg_dir:
+        print("package: NOT FOUND", file=sys.stderr)
+        return 1
+
+    mode = "playMode" if args.testmode == "playmode" else "editMode"
+    run_args = {"mode": mode}
+    if args.filter:
+        run_args["testNames"] = list(args.filter)
+    if args.group:
+        run_args["groupNames"] = list(args.group)
+    if args.force:
+        run_args["force"] = True
+
+    try:
+        session = _new_session(root, args, pkg_dir)
+        start = session.request_wire_command("editor", "test.run", run_args)
+    except Exception as e:
+        print(f"test run failed to start: {e}", file=sys.stderr)
+        return 1
+    if not start.get("ok"):
+        _print_test_report({
+            "ok": False,
+            "type": "start_rejected",
+            "exitCode": 3,
+            "summary": start.get("summary") or "The editor rejected the test run",
+            "data": {},
+        }, args.as_json)
+        return 3
+
+    started = (start.get("data") or {}).get("resultJson") or {}
+    run_id = started.get("runId") or ""
+    wait_seconds = max(0, args.wait)
+    if wait_seconds == 0:
+        _print_test_report({
+            "ok": True,
+            "type": "started",
+            "exitCode": 0,
+            "summary": f"Started {mode} test run (runId '{run_id}'); "
+                       "poll editor/test.status for results",
+            "data": {"runId": run_id, "mode": mode},
+        }, args.as_json)
+        return 0
+
+    deadline = time.monotonic() + wait_seconds
+    state = None
+    while time.monotonic() < deadline:
+        # PlayMode transitions and domain reloads drop the service briefly, so
+        # transient errors and not-ready envelopes just mean "poll again".
+        time.sleep(1.0)
+        try:
+            status = session.request_wire_command("editor", "test.status", None)
+        except Exception:
+            continue
+        if not status.get("ok"):
+            continue
+        candidate = (status.get("data") or {}).get("resultJson") or {}
+        phase = candidate.get("phase")
+        if phase not in ("finished", "aborted"):
+            continue
+        if run_id and candidate.get("runId") not in ("", run_id):
+            # Another run superseded ours; its result would be misleading.
+            continue
+        state = candidate
+        break
+
+    if state is None:
+        _print_test_report({
+            "ok": False,
+            "type": "outcome_unknown",
+            "exitCode": 4,
+            "summary": f"The test run did not report completion within {wait_seconds}s; "
+                       "poll editor/test.status to check it later",
+            "data": {"runId": run_id, "mode": mode},
+        }, args.as_json)
+        return 4
+
+    if state.get("phase") == "aborted":
+        _print_test_report({
+            "ok": False,
+            "type": "aborted",
+            "exitCode": 3,
+            "summary": state.get("message") or "The test run was aborted",
+            "data": state,
+        }, args.as_json)
+        return 3
+
+    failed = int(state.get("failed") or 0)
+    passed = int(state.get("passed") or 0)
+    skipped = int(state.get("skipped") or 0)
+    duration = float(state.get("durationSeconds") or 0.0)
+    ok = failed == 0
+    report = {
+        "ok": ok,
+        "type": "finished",
+        "exitCode": 0 if ok else 3,
+        "summary": (
+            f"Test run finished: {passed} passed, {failed} failed, "
+            f"{skipped} skipped ({mode}, {duration:.1f}s)"
+        ),
+        "data": state,
+    }
+    _print_test_report(report, args.as_json)
+    return report["exitCode"]
 
 
 def cmd_status(root, args, agent_root=None):
@@ -2124,6 +2253,20 @@ def main():
     sp_wait.add_argument("--min-generation", dest="min_generation", type=int, default=None, metavar="N",
                          help="Only accept ready at or above this refresh generation")
 
+    sp_test = sub.add_parser("test", parents=[shared],
+                             help="Run Unity Test Framework tests and wait for results")
+    sp_test.add_argument("testmode", nargs="?", choices=["editmode", "playmode"],
+                         default="editmode",
+                         help="Test mode to run (default: editmode)")
+    sp_test.add_argument("--filter", action="append", default=None, metavar="NAME",
+                         help="Full test name to run (repeatable)")
+    sp_test.add_argument("--group", action="append", default=None, metavar="REGEX",
+                         help="Fixture/namespace group regex to run (repeatable)")
+    sp_test.add_argument("--force", action="store_true",
+                         help="Supersede a stale in-progress run record")
+    sp_test.add_argument("--wait", type=int, default=300, metavar="TIMEOUT",
+                         help="Seconds to wait for completion (0 = start only, default: 300)")
+
     sp_refresh = sub.add_parser("refresh", parents=[shared], help="Trigger asset refresh and script compilation")
     sp_refresh.add_argument("--wait", type=int, nargs="?", const=60, default=None, metavar="TIMEOUT",
                             help="Wait for refresh to complete (default timeout: 60s)")
@@ -2374,6 +2517,8 @@ def main():
             print(f"Warning: --timeout capped to 600s (requested {args.wait_timeout}s)", file=sys.stderr)
             args.wait_timeout = 600
         sys.exit(cmd_wait_ready(root, args, agent_root))
+    if args.cmd == "test":
+        sys.exit(cmd_test(root, args, agent_root))
     if args.cmd == "catalog":
         if root is None:
             print("Error: no Unity project found.", file=sys.stderr)

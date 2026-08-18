@@ -382,7 +382,7 @@ class BenchmarkGradingTests(unittest.TestCase):
                 self.assertFalse(grading["expectations"][0]["passed"])
                 self.assertEqual(0, metrics["cases_passed"])
 
-    def test_candidate_only_grade_is_strict_89_case_micro_and_ignores_baseline(self):
+    def test_candidate_only_grade_is_strict_94_case_micro_and_ignores_baseline(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             _write_current_outputs(workspace)
@@ -422,16 +422,16 @@ class BenchmarkGradingTests(unittest.TestCase):
             )
 
         self.assertEqual("current", summary["configuration"])
-        self.assertEqual(89, summary["passed"])
-        self.assertEqual(89, summary["total"])
+        self.assertEqual(94, summary["passed"])
+        self.assertEqual(94, summary["total"])
         self.assertEqual(1.0, summary["strict_micro_rate"])
         self.assertEqual(
             {"current"},
             {run["configuration"] for run in benchmark["runs"]},
         )
-        self.assertEqual(8, len(benchmark["runs"]))
+        self.assertEqual(9, len(benchmark["runs"]))
 
-    def test_candidate_only_grade_keeps_89_denominator_after_one_wrong_answer(self):
+    def test_candidate_only_grade_keeps_94_denominator_after_one_wrong_answer(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             workspace = Path(temp_dir)
             _write_current_outputs(workspace)
@@ -452,9 +452,9 @@ class BenchmarkGradingTests(unittest.TestCase):
                 (workspace / "summary.json").read_text("utf-8")
             )
 
-        self.assertEqual(88, summary["passed"])
-        self.assertEqual(89, summary["total"])
-        self.assertAlmostEqual(88 / 89, summary["strict_micro_rate"])
+        self.assertEqual(93, summary["passed"])
+        self.assertEqual(94, summary["total"])
+        self.assertAlmostEqual(93 / 94, summary["strict_micro_rate"])
 
 
 if __name__ == "__main__":

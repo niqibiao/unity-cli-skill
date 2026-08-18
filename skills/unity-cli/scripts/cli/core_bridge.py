@@ -580,6 +580,15 @@ class ConsoleSession:
                 self._mode_name(), run_id, (time.time() - start) * 1000,
             )
 
+    def request_wire_command(self, namespace, action, args=None):
+        """Dispatch one CLI-internal builtin command without agent preflight.
+
+        Only for invocations the CLI itself constructs against known package
+        contracts (e.g. the cs test poll loop); agent-supplied requests must
+        keep going through command()/batch() preflight.
+        """
+        return self._request_command(namespace, action, args)
+
     def registry_snapshot(self, if_generation=None):
         """Fetch the package-owned registry snapshot, conditional on a token."""
         if if_generation is None:

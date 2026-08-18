@@ -622,6 +622,36 @@
       "tier": "control-plane"
     },
     {
+      "id": "r60",
+      "prompt": "运行项目的 PlayMode 测试并在结束后汇报结果。",
+      "expected": {"kind": "protocol", "commandId": "editor/test.run", "args": {"mode": "playMode"}},
+      "tier": "core"
+    },
+    {
+      "id": "r61",
+      "prompt": "查询最近一次 Unity 测试运行的进度和结果。",
+      "expected": {"kind": "protocol", "commandId": "editor/test.status", "args": {}},
+      "tier": "core"
+    },
+    {
+      "id": "r62",
+      "prompt": "在 Assets/Configs/GameSettings.asset 创建一个 GameSettings 类型的 ScriptableObject 资产。",
+      "expected": {"kind": "protocol", "commandId": "scriptableobject/create", "args": {"typeName": "GameSettings", "savePath": "Assets/Configs/GameSettings.asset"}},
+      "tier": "core"
+    },
+    {
+      "id": "r63",
+      "prompt": "读取 Assets/Configs/GameSettings.asset 这个 ScriptableObject 的序列化字段。",
+      "expected": {"kind": "protocol", "commandId": "scriptableobject/get", "args": {"assetPath": "Assets/Configs/GameSettings.asset"}},
+      "tier": "core"
+    },
+    {
+      "id": "r64",
+      "prompt": "把 Assets/Configs/GameSettings.asset 的 maxPlayers 字段改成 8。",
+      "expected": {"kind": "protocol", "commandId": "scriptableobject/modify", "args": {"assetPath": "Assets/Configs/GameSettings.asset", "fields": [{"name": "maxPlayers", "value": "8"}]}},
+      "tier": "core"
+    },
+    {
       "id": "c01",
       "prompt": "列出项目里的所有 .unity Scene 资源。",
       "expected": {"kind": "protocol", "commandId": "project/scene.list", "args": {}},

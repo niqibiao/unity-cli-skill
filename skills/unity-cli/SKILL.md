@@ -3,10 +3,11 @@ name: unity-cli
 description: >
   Drive a live Unity Editor or Player with unity-cli. Use when a task must inspect
   or change Unity scenes, GameObjects, components, transforms, prefabs, materials,
-  project assets, play mode, screenshots, profiler recording, or execute C# inside
-  Unity; also use for Unity console maintenance and unity-cli setup, status,
-  refresh, snippets, or custom commands. Do not use for source-only Unity coding
-  that does not require interaction with the live Editor or Player.
+  ScriptableObjects, project assets, play mode, screenshots, profiler recording,
+  Unity Test Framework runs, or execute C# inside Unity; also use for Unity console
+  maintenance and unity-cli setup, status, refresh, snippets, or custom commands.
+  Do not use for source-only Unity coding that does not require interaction with
+  the live Editor or Player.
 ---
 
 # Unity CLI
@@ -271,19 +272,19 @@ one-exact budget. A dry-run that stops before authoring raw C# records the `exec
 decision without reading `references/exec-code.md`.
 
 Use `cs list-commands --refresh …` only when the user explicitly asks to update
-the command list. Do not load or print the unfiltered 57-command package registry
+the command list. Do not load or print the unfiltered 61-command package registry
 during routine work.
 
 | Domain | Positive intent | Exclude / route elsewhere |
 |---|---|---|
-| `editor` | Editor state, play mode, console maintenance | Scene contents, object selection, asset files |
+| `editor` | Editor state, play mode, test runs, console maintenance | Scene contents, object selection, asset files |
 | `scene` | Scene listing/open/save and hierarchy-wide reads, including component summaries | Properties of an identified GameObject/component, prefab contents |
 | `objects` | Operations on an explicitly identified scene GameObject, component, transform, or selection | Hierarchy-wide scans, unknown future targets, project assets, prefab-file editing |
-| `assets` | Asset search/import/CRUD, materials, and material assignment | Scene hierarchy, prefab contents |
+| `assets` | Asset search/import/CRUD, materials, and ScriptableObjects | Scene hierarchy, prefab contents |
 | `prefabs` | Create/instantiate/unpack or directly inspect/edit prefab contents | Generic prefab enumeration (`assets/core`) and unrelated asset paths |
 | `capture` | Scene/Game screenshots and Profiler recording | Structured state inspection |
 
-The six control-plane contracts are outside the default authoring view. Inspect
+The five control-plane contracts are outside the default authoring view. Inspect
 them only when the user's requested capability is itself control-plane, using
 `--view control --domain control --tier control-plane`. Merely using
 `cs list-commands` for discovery does not justify querying the control view or
@@ -303,6 +304,7 @@ route those intents to snippets or raw `exec` as an automatic fallback.
 | Snippet audit | `cs snippets doctor` / `stats` | `references/snippets-audit.md` |
 | Refresh and compile | `cs refresh` | `references/refresh.md` |
 | Readiness diagnosis / wait | `cs doctor` / `cs wait-ready` | `references/refresh.md` |
+| Unity Test Framework runs | `cs test` | `references/tests.md` |
 | Editor log inspection | `editor/console.mark` + local read | `references/logs.md` |
 | Custom-command catalog | `cs catalog sync` / `list` | `references/catalog.md` |
 | Package / connection state | `cs status` / `cs health` | `references/status.md` |

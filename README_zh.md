@@ -10,7 +10,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 [![Codex](https://img.shields.io/badge/Codex-black.svg?logo=openai&logoColor=white)](https://github.com/openai/codex)
 
-57 个由 Unity 包提供的内置命令：默认六个创作域包含 51 个，另有 6 个显式控制面命令。<br/>
+61 个由 Unity 包提供的内置命令：默认六个创作域包含 56 个，另有 5 个显式控制面命令。<br/>
 依赖 **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** —— 基于 Roslyn 的 Unity 交互式 C# REPL。
 
 [快速开始](#-快速开始) · [使用方式](#-使用方式) · [命令](#-命令) · [自定义命令](#-自定义命令) · [架构](#️-架构)
@@ -90,6 +90,7 @@ Agent 会发现最小相关 command contract，验证 mutation，只有结构化
 | `cs batch --input` | 预检并在一次请求中执行 command workflow |
 | `cs exec --file` | 以原始 C# 作为最终兜底 |
 | `cs refresh` | 刷新资产并等待编译 |
+| `cs test` | 运行 Unity Test Framework 测试并等待结果 |
 | `cs catalog sync` / `cs catalog list` | 维护共享的自定义命令候选目录 |
 | `cs snippets …` | 发现和维护可复用 C# snippet |
 
@@ -123,14 +124,14 @@ Agent 会话中的第一次 live discovery 只比较一次 fingerprint。后续�
 
 | Domain | 范围 |
 |---|---|
-| `editor` | Editor 就绪状态、Play Mode 与 Console 诊断 |
+| `editor` | Editor 就绪状态、Play Mode、测试运行与 Console 诊断 |
 | `scene` | 场景发现、加载、保存与层级 |
 | `objects` | GameObject、组件、Transform 与选择 |
-| `assets` | 项目资产与材质 |
+| `assets` | 项目资产、材质与 ScriptableObject |
 | `prefabs` | Prefab 创建、实例化、检查与直接编辑 |
 | `capture` | Scene/Game View 截图与 Profiler 录制 |
 
-六个 registry/session 机制只在显式 control view 中出现：
+五个 registry/session 机制只在显式 control view 中出现：
 
 ```bash
 cs list-commands --offline \
@@ -189,7 +190,7 @@ AI Agent
           ├─ 渐进发现 + package-contract preflight
           └─ HTTP bridge
               └─ Unity Editor/Player 中的 com.zh1zh1.csharpconsole
-                  ├─ package-owned registry（51 authoring + 6 control）
+                  ├─ package-owned registry（56 authoring + 5 control）
                   ├─ command handlers
                   └─ Roslyn compiler / REPL executor
 ```
@@ -198,6 +199,10 @@ CLI 从已安装的 Unity 包动态导入 client core，使 client 与 service �
 `major.minor` 版本线。项目根目录和服务端口会自动发现。
 
 ### ❓ 常见问题
+
+> [!WARNING]
+> Unity 侧服务监听所有网卡且不做鉴权，这是面向可信局域网的设计（连到同事机器上的
+> Editor 是功能的一部分）。请勿把端口暴露到不可信网络。
 
 | 问题 | 解决方案 |
 |---|---|

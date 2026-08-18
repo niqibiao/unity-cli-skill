@@ -15,6 +15,11 @@ from cli.reliability import (  # noqa: E402
     ReliabilityCoordinator,
     _health_is_ready,
 )
+from cli.version_check import get_plugin_version  # noqa: E402
+
+# The aligned package version tracks the CLI VERSION file so version bumps do
+# not invalidate these fixtures.
+PLUGIN_VERSION = get_plugin_version()
 
 
 def make_health(**overrides):
@@ -34,7 +39,7 @@ def make_health(**overrides):
         "refreshing": False,
         "generation": operation["generation"],
         "editorState": "ready",
-        "packageVersion": "2.1.0",
+        "packageVersion": PLUGIN_VERSION,
         "protocolVersion": 1,
         "unityVersion": "2022.3.10f1",
         "isCompiling": False,
@@ -95,7 +100,7 @@ class CoordinatorCase(unittest.TestCase):
         self.project_root = Path(self._tmp.name)
         self.package_dir = self.project_root / "pkg"
         self.package_dir.mkdir()
-        self.write_package_version("2.1.0")
+        self.write_package_version(PLUGIN_VERSION)
 
     def write_package_version(self, version):
         (self.package_dir / "package.json").write_text(

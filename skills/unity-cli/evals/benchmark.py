@@ -83,6 +83,7 @@ def _eval_dir(workspace, eval_item):
         6: "capture-profiler",
         7: "control",
         8: "activation",
+        9: "tests-scriptableobjects",
     }[eval_item["id"]]
     return Path(workspace) / f"eval-{eval_item['id']:03d}-{slug}"
 
@@ -631,7 +632,7 @@ def _load_oracles():
 
 
 def grade_current(workspace):
-    """Grade only fresh candidate outputs and report the strict 89-case micro rate."""
+    """Grade only fresh candidate outputs and report the strict 94-case micro rate."""
     workspace = Path(workspace).resolve()
     evals = _read_json(EVALS_PATH)["evals"]
     route_oracle, trigger_oracle = _load_oracles()
@@ -640,9 +641,9 @@ def grade_current(workspace):
         for eval_item in evals
         for case_id in _case_ids(eval_item["prompt"])
     ]
-    if len(embedded_case_ids) != 89 or len(set(embedded_case_ids)) != 89:
+    if len(embedded_case_ids) != 94 or len(set(embedded_case_ids)) != 94:
         raise ValueError(
-            "candidate routing benchmark must contain 89 unique embedded cases"
+            "candidate routing benchmark must contain 94 unique embedded cases"
         )
 
     runs = []
@@ -691,8 +692,8 @@ def grade_current(workspace):
             }
         )
 
-    if total != 89:
-        raise ValueError(f"candidate routing denominator changed: {total}, expected 89")
+    if total != 94:
+        raise ValueError(f"candidate routing denominator changed: {total}, expected 94")
     strict_micro_rate = _metric(passed, total)
     benchmark = {
         "metadata": {

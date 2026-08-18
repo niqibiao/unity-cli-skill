@@ -10,8 +10,8 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 [![Codex](https://img.shields.io/badge/Codex-black.svg?logo=openai&logoColor=white)](https://github.com/openai/codex)
 
-57 package-owned built-ins: 51 authoring commands across six default domains and
-6 explicit control-plane commands.<br/>
+61 package-owned built-ins: 56 authoring commands across six default domains and
+5 explicit control-plane commands.<br/>
 Depends on **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — a Roslyn-powered interactive C# REPL for Unity.
 
 [Quick Start](#-quick-start) · [Usage](#-usage) · [Commands](#-commands) · [Custom Commands](#-custom-commands) · [Architecture](#️-architecture)
@@ -95,6 +95,7 @@ Everything ships in one skill (`unity-cli`):
 | `cs batch --input` | Preflight and run a command workflow in one request |
 | `cs exec --file` | Run raw C# as the final fallback |
 | `cs refresh` | Refresh assets and wait for compilation |
+| `cs test` | Run Unity Test Framework tests and wait for results |
 | `cs catalog sync` / `cs catalog list` | Maintain the shared custom-command shortlist |
 | `cs snippets …` | Browse and maintain reusable C# snippets |
 
@@ -129,14 +130,14 @@ complete snapshot only when the user explicitly asks to update the command list.
 
 | Domain | Scope |
 |---|---|
-| `editor` | Editor readiness, play mode, and Console diagnostics |
+| `editor` | Editor readiness, play mode, test runs, and Console diagnostics |
 | `scene` | Scene discovery, loading, saving, and hierarchy |
 | `objects` | GameObjects, components, transforms, and selection |
-| `assets` | Project assets and materials |
+| `assets` | Project assets, materials, and ScriptableObjects |
 | `prefabs` | Prefab creation, instantiation, inspection, and direct editing |
 | `capture` | Scene/Game View capture and Profiler recording |
 
-The six registry/session mechanics are visible only through the explicit control
+The five registry/session mechanics are visible only through the explicit control
 view:
 
 ```bash
@@ -197,7 +198,7 @@ AI Agent
           ├─ progressive discovery + package-contract preflight
           └─ HTTP bridge
               └─ com.zh1zh1.csharpconsole in Unity Editor/Player
-                  ├─ package-owned registry (51 authoring + 6 control)
+                  ├─ package-owned registry (56 authoring + 5 control)
                   ├─ command handlers
                   └─ Roslyn compiler / REPL executor
 ```
@@ -207,6 +208,11 @@ client and service stay on the same `major.minor` line. Project root and service
 port are auto-detected.
 
 ### ❓ Troubleshooting
+
+> [!WARNING]
+> The Unity-side service binds all interfaces without authentication — a trusted-LAN
+> design (reaching a teammate's Editor is a feature). Do not expose the port to
+> untrusted networks.
 
 | Problem | Solution |
 |---|---|
