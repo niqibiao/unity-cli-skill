@@ -525,7 +525,7 @@ class RoutingRunnerTests(unittest.TestCase):
         evals = RUNNER.load_evals()
 
         self.assertEqual(9, len(evals))
-        self.assertEqual(94, RUNNER.case_count(evals))
+        self.assertEqual(95, RUNNER.case_count(evals))
         for item in evals:
             expected = (
                 EVALS_DIR / "routing-trigger-output.schema.json"

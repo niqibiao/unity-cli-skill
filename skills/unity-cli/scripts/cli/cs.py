@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePath
 
 # Ensure the cli package is importable when run as a standalone script
 _CLI_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -17,6 +17,11 @@ if os.path.dirname(_CLI_DIR) not in sys.path:
 
 from cli import PACKAGE_NAME, DEFAULT_SOURCE, DEFAULT_EDITOR_PORT, DEFAULT_RUNTIME_PORT
 from cli.version_check import get_plugin_version, is_aligned, parse_semver
+
+# In runtime mode these are answered by the player itself, so they are the ones
+# that need a located player. Everything else -- refresh, doctor, wait-ready --
+# is about the editor's compile pipeline and is unaffected by --mode.
+PLAYER_TARGETED_COMMANDS = frozenset({"health", "exec", "command", "batch", "pull"})
 
 
 def _is_unity_root(d):
@@ -89,19 +94,35 @@ def detect_port(project_root):
     return None
 
 
-def _probe_port(ip, start, count, timeout=0.3):
-    """Return the first TCP-reachable port in [start, start+count), or None.
+def _probe_port(ip, start, count, timeout=1.0):
+    """Return the lowest TCP-reachable port in [start, start+count), or None.
 
     Runtime players don't write refresh_state.json, and the in-player console
     service advances past taken ports on startup, so when --port is omitted we
-    probe the runtime range to find where it actually landed."""
+    probe the runtime range to find where it actually landed.
+
+    The probes run at once. A closed port does not always refuse promptly --
+    hosts that drop the SYN instead make each attempt wait out the timeout --
+    and probing ten of those one after another would cost ten seconds on the
+    common path where the player simply is not running. The timeout is
+    generous enough for a player on another machine."""
     import socket
-    for port in range(start, start + count):
+    from concurrent.futures import ThreadPoolExecutor
+
+    def reachable(port):
         try:
             with socket.create_connection((ip, port), timeout=timeout):
                 return port
         except OSError:
-            continue
+            return None
+
+    ports = list(range(start, start + count))
+    with ThreadPoolExecutor(max_workers=len(ports)) as pool:
+        # map keeps input order, so this stays the lowest reachable port
+        # rather than whichever probe happened to answer first.
+        for found in pool.map(reachable, ports):
+            if found is not None:
+                return found
     return None
 
 
@@ -524,6 +545,122 @@ def cmd_wait_ready(root, args, agent_root=None):
     )
     _print_reliability_report(report, args.as_json)
     return report.get("exitCode", 1)
+
+
+PULL_CHUNK_BYTES = 32 * 1024 * 1024
+
+
+def _resolve_remote_path(requested, info):
+    """Return the path to fetch on the target, and how it was arrived at.
+
+    A relative path is taken against the target's persistentDataPath, which is
+    where a project's own logs and saves live. An absolute path is used as
+    given, unless it is clearly one machine's copy of another's data directory
+    -- a path picked off a desktop for a file that is really on a phone. In that
+    case the tail after the product folder is re-anchored to the target."""
+    persistent = (info.get("persistentDataPath") or "").replace("\\", "/").rstrip("/")
+    product = info.get("productName") or ""
+    normalized = requested.replace("\\", "/")
+
+    if not PurePath(normalized).is_absolute():
+        if not persistent:
+            return normalized, "used as given (the target reports no persistentDataPath)"
+        return f"{persistent}/{normalized.lstrip('/')}", "relative to the target's persistentDataPath"
+
+    if persistent and normalized.lower().startswith(persistent.lower()):
+        return normalized, "absolute, already under the target's persistentDataPath"
+
+    if persistent and product:
+        marker = f"/{product}/"
+        cut = normalized.lower().rfind(marker.lower())
+        if cut >= 0:
+            tail = normalized[cut + len(marker):]
+            return f"{persistent}/{tail}", f"re-anchored on '{product}' to the target's persistentDataPath"
+
+    return normalized, "absolute, used as given"
+
+
+def cmd_pull(root, args, agent_root=None):
+    """Retrieve a file from the machine answering as the target."""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    if root is None:
+        print("Error: no Unity project found.", file=sys.stderr)
+        return 1
+    from cli.core_bridge import find_package_dir
+    pkg_dir = find_package_dir(root, agent_root)
+    if not pkg_dir:
+        print("Error: the C# Console package is not installed in this project.", file=sys.stderr)
+        return 1
+
+    session = _new_session(root, args, pkg_dir)
+    try:
+        info_result = session.request_wire_command("runtime", "info", None)
+    except Exception as e:
+        print(f"Error: could not ask the target where it keeps files: {e}", file=sys.stderr)
+        return 1
+    if not info_result.get("ok"):
+        print(f"Error: runtime/info failed: {info_result.get('summary', '')}", file=sys.stderr)
+        return 3
+
+    info = info_result.get("data") or {}
+    remote_path, how = _resolve_remote_path(args.path, info)
+
+    base = f"http://{args.ip}:{args.port}/CSharpConsole/download"
+    url = f"{base}?{urllib.parse.urlencode({'path': remote_path})}"
+
+    output = Path(args.output) if args.output else Path(PurePath(remote_path.replace('\\', '/')).name)
+    written = 0
+    total = None
+    try:
+        with output.open("wb") as sink:
+            while True:
+                request = urllib.request.Request(url)
+                # Ask for one bounded window at a time; the service refuses a
+                # whole-file response above its own cap.
+                request.add_header("Range", f"bytes={written}-{written + PULL_CHUNK_BYTES - 1}")
+                with urllib.request.urlopen(request, timeout=args.timeout) as response:
+                    chunk = response.read()
+                    content_range = response.headers.get("Content-Range") or ""
+                    if total is None and "/" in content_range:
+                        try:
+                            total = int(content_range.rsplit("/", 1)[1])
+                        except ValueError:
+                            total = None
+                sink.write(chunk)
+                written += len(chunk)
+                if not chunk or total is None or written >= total:
+                    break
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            payload = json.loads(e.read().decode("utf-8", "replace"))
+            detail = payload.get("summary") or ""
+        except Exception:
+            pass
+        output.unlink(missing_ok=True)
+        print(f"Error: {remote_path} could not be retrieved ({e.code}){': ' + detail if detail else ''}",
+              file=sys.stderr)
+        print(f"  path resolution: {how}", file=sys.stderr)
+        return 3
+    except OSError as e:
+        output.unlink(missing_ok=True)
+        print(f"Error: transport failure retrieving {remote_path}: {e}", file=sys.stderr)
+        return 1
+
+    if args.as_json:
+        json.dump(
+            {"ok": True, "remotePath": remote_path, "resolution": how,
+             "output": str(output), "bytes": written},
+            sys.stdout, ensure_ascii=False,
+        )
+        print()
+    else:
+        print(f"Retrieved {written} bytes to {output}")
+        print(f"  from {remote_path} ({how})")
+    return 0
 
 
 def _print_test_report(report, as_json):
@@ -2253,6 +2390,13 @@ def main():
     sp_wait.add_argument("--min-generation", dest="min_generation", type=int, default=None, metavar="N",
                          help="Only accept ready at or above this refresh generation")
 
+    sp_pull = sub.add_parser("pull", parents=[shared],
+                             help="Retrieve a file from the editor or player being addressed")
+    sp_pull.add_argument("path", metavar="PATH",
+                         help="Absolute path on the target, or one relative to its persistentDataPath")
+    sp_pull.add_argument("-o", "--output", default=None, metavar="FILE",
+                         help="Local destination (default: the remote file's name in the cwd)")
+
     sp_test = sub.add_parser("test", parents=[shared],
                              help="Run Unity Test Framework tests and wait for results")
     sp_test.add_argument("testmode", nargs="?", choices=["editmode", "playmode"],
@@ -2479,18 +2623,33 @@ def main():
     needs_detect = args.port is None or (args.mode == "runtime" and args.compile_port is None)
     if root and needs_detect:
         detected_editor_port = detect_port(root)
+    # Tracked so a command that needs the player can say it is missing rather
+    # than sending a request that is bound to time out. An explicit --port is
+    # taken at face value.
+    player_located = True
     if args.port is None:
         if args.mode == "runtime":
             # The player doesn't write refresh_state.json — probe the runtime range
             # (15500-15509) to find where the in-player service actually landed.
-            args.port = _probe_port(args.ip, DEFAULT_RUNTIME_PORT, 10) or DEFAULT_RUNTIME_PORT
+            probed = _probe_port(args.ip, DEFAULT_RUNTIME_PORT, 10)
+            player_located = probed is not None
+            args.port = probed or DEFAULT_RUNTIME_PORT
         elif detected_editor_port:
             args.port = detected_editor_port
         else:
             args.port = DEFAULT_EDITOR_PORT
-    # In runtime mode, compile/refresh/health still target the editor.
+    # In runtime mode, compiling still goes through the editor even though the
+    # command itself is answered by the player.
     if args.mode == "runtime" and args.compile_port is None:
         args.compile_port = detected_editor_port or DEFAULT_EDITOR_PORT
+
+    if args.mode == "runtime" and not player_located and args.cmd in PLAYER_TARGETED_COMMANDS:
+        print(
+            f"No player service found on {args.ip}:{DEFAULT_RUNTIME_PORT}-{DEFAULT_RUNTIME_PORT + 9}. "
+            "Start the player, or pass --port if its service listens elsewhere.",
+            file=sys.stderr,
+        )
+        sys.exit(3)
 
     # Validate --wait range
     if hasattr(args, "wait") and args.wait is not None:
@@ -2519,6 +2678,8 @@ def main():
         sys.exit(cmd_wait_ready(root, args, agent_root))
     if args.cmd == "test":
         sys.exit(cmd_test(root, args, agent_root))
+    if args.cmd == "pull":
+        sys.exit(cmd_pull(root, args, agent_root))
     if args.cmd == "catalog":
         if root is None:
             print("Error: no Unity project found.", file=sys.stderr)

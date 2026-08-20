@@ -25,7 +25,7 @@ sys.path.insert(0, str(SKILL_DIR / "scripts"))
 from cli.command_preflight import prepare_command  # noqa: E402
 
 ROUTE_IDS = {
-    *(f"r{index:02d}" for index in range(1, 65)),
+    *(f"r{index:02d}" for index in range(1, 66)),
     *(f"c{index:02d}" for index in range(1, 11)),
 }
 TRIGGER_IDS = {f"t{index:02d}" for index in range(1, 21)}
@@ -66,8 +66,8 @@ class RoutingEvalCoverageTests(unittest.TestCase):
         cases = self.route_cases["cases"]
         case_ids = [case["id"] for case in cases]
 
-        self.assertEqual(74, len(cases))
-        self.assertEqual(74, len(set(case_ids)), "route case IDs must be unique")
+        self.assertEqual(75, len(cases))
+        self.assertEqual(75, len(set(case_ids)), "route case IDs must be unique")
         self.assertEqual(ROUTE_IDS, set(case_ids))
 
     def test_route_oracle_records_use_one_closed_canonical_shape(self):
@@ -135,7 +135,7 @@ class RoutingEvalCoverageTests(unittest.TestCase):
             for command in self.registry["builtin"]["commands"]
         }
 
-        self.assertEqual(64, len(primary_cases))
+        self.assertEqual(65, len(primary_cases))
         self.assertEqual(
             {"editor/status": 2, "gameobject/get": 2},
             {command_id: count for command_id, count in counts.items() if count > 1},

@@ -10,8 +10,8 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 [![Codex](https://img.shields.io/badge/Codex-black.svg?logo=openai&logoColor=white)](https://github.com/openai/codex)
 
-61 package-owned built-ins: 56 authoring commands across six default domains and
-5 explicit control-plane commands.<br/>
+62 package-owned built-ins: 56 authoring commands across six default domains and
+6 explicit control-plane commands.<br/>
 Depends on **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — a Roslyn-powered interactive C# REPL for Unity.
 
 [Quick Start](#-quick-start) · [Usage](#-usage) · [Commands](#-commands) · [Custom Commands](#-custom-commands) · [Architecture](#️-architecture)
@@ -198,7 +198,7 @@ AI Agent
           ├─ progressive discovery + package-contract preflight
           └─ HTTP bridge
               └─ com.zh1zh1.csharpconsole in Unity Editor/Player
-                  ├─ package-owned registry (56 authoring + 5 control)
+                  ├─ package-owned registry (56 authoring + 6 control)
                   ├─ command handlers
                   └─ Roslyn compiler / REPL executor
 ```

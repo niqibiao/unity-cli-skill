@@ -880,7 +880,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
         ):
             discover(_snapshot(), overlay=overlay)
 
-    def test_agent_encoding_preserves_all_61_preflight_contracts(self):
+    def test_agent_encoding_preserves_all_62_preflight_contracts(self):
         def expected_schema(schema):
             result = {"kind": schema["kind"]}
             if schema.get("format"):
@@ -981,7 +981,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
                 domains=["control"],
             )["routes"]
         ]
-        self.assertEqual(61, len(authoring_ids) + len(control_ids))
+        self.assertEqual(62, len(authoring_ids) + len(control_ids))
 
         for view, command_ids in (
             ("authoring", authoring_ids),

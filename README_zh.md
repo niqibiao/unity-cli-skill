@@ -10,7 +10,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 [![Codex](https://img.shields.io/badge/Codex-black.svg?logo=openai&logoColor=white)](https://github.com/openai/codex)
 
-61 个由 Unity 包提供的内置命令：默认六个创作域包含 56 个，另有 5 个显式控制面命令。<br/>
+62 个由 Unity 包提供的内置命令：默认六个创作域包含 56 个，另有 6 个显式控制面命令。<br/>
 依赖 **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** —— 基于 Roslyn 的 Unity 交互式 C# REPL。
 
 [快速开始](#-快速开始) · [使用方式](#-使用方式) · [命令](#-命令) · [自定义命令](#-自定义命令) · [架构](#️-架构)
@@ -190,7 +190,7 @@ AI Agent
           ├─ 渐进发现 + package-contract preflight
           └─ HTTP bridge
               └─ Unity Editor/Player 中的 com.zh1zh1.csharpconsole
-                  ├─ package-owned registry（56 authoring + 5 control）
+                  ├─ package-owned registry（56 authoring + 6 control）
                   ├─ command handlers
                   └─ Roslyn compiler / REPL executor
 ```

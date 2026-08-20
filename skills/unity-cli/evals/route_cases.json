@@ -4,25 +4,41 @@
     {
       "id": "r01",
       "prompt": "检查当前 Unity Editor 的整体状态，包括是否正在编译、更新以及 Play Mode 信息。",
-      "expected": {"kind": "protocol", "commandId": "editor/status", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/status",
+        "args": {}
+      },
       "tier": "core"
     },
     {
       "id": "r02",
       "prompt": "只告诉我当前是否正在或暂停于 Play Mode，不要查询完整 Editor 状态。",
-      "expected": {"kind": "protocol", "commandId": "editor/status", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/status",
+        "args": {}
+      },
       "tier": "core"
     },
     {
       "id": "r03",
       "prompt": "让当前 Unity Editor 进入 Play Mode。",
-      "expected": {"kind": "protocol", "commandId": "editor/playmode.enter", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/playmode.enter",
+        "args": {}
+      },
       "tier": "core"
     },
     {
       "id": "r04",
       "prompt": "退出当前 Unity Editor 的 Play Mode。",
-      "expected": {"kind": "protocol", "commandId": "editor/playmode.exit", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/playmode.exit",
+        "args": {}
+      },
       "tier": "core"
     },
     {
@@ -52,7 +68,11 @@
     {
       "id": "r07",
       "prompt": "清空 Unity Editor Console。",
-      "expected": {"kind": "protocol", "commandId": "editor/console.clear", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/console.clear",
+        "args": {}
+      },
       "tier": "advanced"
     },
     {
@@ -61,14 +81,22 @@
       "expected": {
         "kind": "protocol",
         "commandId": "editor/console.mark",
-        "args": {"label": "benchmark-start"}
+        "args": {
+          "label": "benchmark-start"
+        }
       },
       "tier": "advanced"
     },
     {
       "id": "r09",
       "prompt": "在已加载场景中查找名称包含 Enemy 的 GameObject。",
-      "expected": {"kind": "protocol", "commandId": "gameobject/find", "args": {"name": "Enemy"}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/find",
+        "args": {
+          "name": "Enemy"
+        }
+      },
       "tier": "core"
     },
     {
@@ -77,7 +105,11 @@
       "expected": {
         "kind": "protocol",
         "commandId": "gameobject/create",
-        "args": {"name": "ArenaFloor", "primitiveType": "Cube", "parentPath": "Environment"}
+        "args": {
+          "name": "ArenaFloor",
+          "primitiveType": "Cube",
+          "parentPath": "Environment"
+        }
       },
       "tier": "core"
     },
@@ -87,14 +119,22 @@
       "expected": {
         "kind": "protocol",
         "commandId": "gameobject/destroy",
-        "args": {"path": "Enemies/ObsoleteEnemy"}
+        "args": {
+          "path": "Enemies/ObsoleteEnemy"
+        }
       },
       "tier": "advanced"
     },
     {
       "id": "r12",
       "prompt": "获取 Player GameObject 的名称、tag、layer、Transform 和组件列表等完整信息。",
-      "expected": {"kind": "protocol", "commandId": "gameobject/get", "args": {"path": "Player"}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/get",
+        "args": {
+          "path": "Player"
+        }
+      },
       "tier": "core"
     },
     {
@@ -103,7 +143,11 @@
       "expected": {
         "kind": "protocol",
         "commandId": "gameobject/modify",
-        "args": {"path": "Enemies/Boss", "name": "BossDisabled", "active": false}
+        "args": {
+          "path": "Enemies/Boss",
+          "name": "BossDisabled",
+          "active": false
+        }
       },
       "tier": "core"
     },
@@ -127,7 +171,10 @@
       "expected": {
         "kind": "protocol",
         "commandId": "gameobject/duplicate",
-        "args": {"path": "Enemies/Grunt", "newName": "Grunt_Copy"}
+        "args": {
+          "path": "Enemies/Grunt",
+          "newName": "Grunt_Copy"
+        }
       },
       "tier": "core"
     },
@@ -137,7 +184,10 @@
       "expected": {
         "kind": "protocol",
         "commandId": "component/add",
-        "args": {"typeName": "Rigidbody", "gameObjectPath": "Player"}
+        "args": {
+          "typeName": "Rigidbody",
+          "gameObjectPath": "Player"
+        }
       },
       "tier": "core"
     },
@@ -147,7 +197,11 @@
       "expected": {
         "kind": "protocol",
         "commandId": "component/remove",
-        "args": {"typeName": "BoxCollider", "gameObjectPath": "Player", "index": 1}
+        "args": {
+          "typeName": "BoxCollider",
+          "gameObjectPath": "Player",
+          "index": 1
+        }
       },
       "tier": "advanced"
     },
@@ -157,7 +211,11 @@
       "expected": {
         "kind": "protocol",
         "commandId": "component/get",
-        "args": {"typeName": "Light", "gameObjectPath": "Directional Light", "index": 0}
+        "args": {
+          "typeName": "Light",
+          "gameObjectPath": "Directional Light",
+          "index": 0
+        }
       },
       "tier": "core"
     },
@@ -170,7 +228,12 @@
         "args": {
           "typeName": "Health",
           "gameObjectPath": "Player",
-          "fields": [{"name": "maxHealth", "value": "200"}]
+          "fields": [
+            {
+              "name": "maxHealth",
+              "value": "200"
+            }
+          ]
         }
       },
       "tier": "core"
@@ -178,7 +241,13 @@
     {
       "id": "r20",
       "prompt": "只读取 Player 的位置、旋转和缩放，不需要 GameObject 的组件详情。",
-      "expected": {"kind": "protocol", "commandId": "gameobject/get", "args": {"path": "Player"}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/get",
+        "args": {
+          "path": "Player"
+        }
+      },
       "tier": "core"
     },
     {
@@ -189,9 +258,21 @@
         "commandId": "transform/set",
         "args": {
           "path": "Player",
-          "position": {"x": 1, "y": 2, "z": 3},
-          "rotation": {"x": 0, "y": 90, "z": 0},
-          "scale": {"x": 1, "y": 1, "z": 1},
+          "position": {
+            "x": 1,
+            "y": 2,
+            "z": 3
+          },
+          "rotation": {
+            "x": 0,
+            "y": 90,
+            "z": 0
+          },
+          "scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
           "local": true
         }
       },
@@ -203,7 +284,10 @@
       "expected": {
         "kind": "protocol",
         "commandId": "material/create",
-        "args": {"savePath": "Assets/Materials/Enemy.mat", "shaderName": "Standard"}
+        "args": {
+          "savePath": "Assets/Materials/Enemy.mat",
+          "shaderName": "Standard"
+        }
       },
       "tier": "core"
     },
@@ -213,7 +297,9 @@
       "expected": {
         "kind": "protocol",
         "commandId": "material/get",
-        "args": {"assetPath": "Assets/Materials/Enemy.mat"}
+        "args": {
+          "assetPath": "Assets/Materials/Enemy.mat"
+        }
       },
       "tier": "core"
     },
@@ -237,7 +323,10 @@
       "expected": {
         "kind": "protocol",
         "commandId": "prefab/create",
-        "args": {"savePath": "Assets/Prefabs/Player.prefab", "gameObjectPath": "Player"}
+        "args": {
+          "savePath": "Assets/Prefabs/Player.prefab",
+          "gameObjectPath": "Player"
+        }
       },
       "tier": "core"
     },
@@ -250,7 +339,11 @@
         "args": {
           "assetPath": "Assets/Prefabs/Enemy.prefab",
           "parentPath": "Environment",
-          "position": {"x": 5, "y": 0, "z": 2}
+          "position": {
+            "x": 5,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "tier": "core"
@@ -261,7 +354,10 @@
       "expected": {
         "kind": "protocol",
         "commandId": "prefab/unpack",
-        "args": {"gameObjectPath": "Environment/EnemyPrefab", "full": true}
+        "args": {
+          "gameObjectPath": "Environment/EnemyPrefab",
+          "full": true
+        }
       },
       "tier": "advanced"
     },
@@ -271,7 +367,10 @@
       "expected": {
         "kind": "protocol",
         "commandId": "prefab/asset_get",
-        "args": {"assetPath": "Assets/Prefabs/Player.prefab", "gameObjectPath": "Body"}
+        "args": {
+          "assetPath": "Assets/Prefabs/Player.prefab",
+          "gameObjectPath": "Body"
+        }
       },
       "tier": "advanced"
     },
@@ -328,7 +427,12 @@
           "assetPath": "Assets/Prefabs/Enemy.prefab",
           "typeName": "Health",
           "gameObjectPath": "",
-          "fields": [{"name": "maxHealth", "value": "300"}]
+          "fields": [
+            {
+              "name": "maxHealth",
+              "value": "300"
+            }
+          ]
         }
       },
       "tier": "advanced"
@@ -392,7 +496,11 @@
     {
       "id": "r37",
       "prompt": "列出这个 Unity 项目中的所有 Scene 资源。",
-      "expected": {"kind": "protocol", "commandId": "project/scene.list", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/scene.list",
+        "args": {}
+      },
       "tier": "core"
     },
     {
@@ -401,7 +509,10 @@
       "expected": {
         "kind": "protocol",
         "commandId": "project/scene.open",
-        "args": {"scenePath": "Assets/Scenes/UI.unity", "mode": "additive"}
+        "args": {
+          "scenePath": "Assets/Scenes/UI.unity",
+          "mode": "additive"
+        }
       },
       "tier": "core"
     },
@@ -411,14 +522,21 @@
       "expected": {
         "kind": "protocol",
         "commandId": "project/scene.save",
-        "args": {"scenePath": "Assets/Scenes/Arena.unity", "saveAsCopy": false}
+        "args": {
+          "scenePath": "Assets/Scenes/Arena.unity",
+          "saveAsCopy": false
+        }
       },
       "tier": "core"
     },
     {
       "id": "r40",
       "prompt": "获取 Unity Editor 当前选中的对象和资源。",
-      "expected": {"kind": "protocol", "commandId": "project/selection.get", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/selection.get",
+        "args": {}
+      },
       "tier": "advanced"
     },
     {
@@ -428,8 +546,13 @@
         "kind": "protocol",
         "commandId": "project/selection.set",
         "args": {
-          "instanceIds": [101, 202],
-          "assetPaths": ["Assets/Materials/Enemy.mat"]
+          "instanceIds": [
+            101,
+            202
+          ],
+          "assetPaths": [
+            "Assets/Materials/Enemy.mat"
+          ]
         }
       },
       "tier": "advanced"
@@ -440,7 +563,12 @@
       "expected": {
         "kind": "protocol",
         "commandId": "project/asset.list",
-        "args": {"filter": "t:Material", "folders": ["Assets/Art"]}
+        "args": {
+          "filter": "t:Material",
+          "folders": [
+            "Assets/Art"
+          ]
+        }
       },
       "tier": "core"
     },
@@ -502,7 +630,12 @@
       "expected": {
         "kind": "protocol",
         "commandId": "asset/delete",
-        "args": {"assetPaths": ["Assets/Temp/A.asset", "Assets/Temp/B.asset"]}
+        "args": {
+          "assetPaths": [
+            "Assets/Temp/A.asset",
+            "Assets/Temp/B.asset"
+          ]
+        }
       },
       "tier": "advanced"
     },
@@ -512,7 +645,9 @@
       "expected": {
         "kind": "protocol",
         "commandId": "asset/create_folder",
-        "args": {"folderPath": "Assets/Generated/Icons"}
+        "args": {
+          "folderPath": "Assets/Generated/Icons"
+        }
       },
       "tier": "advanced"
     },
@@ -522,7 +657,10 @@
       "expected": {
         "kind": "protocol",
         "commandId": "scene/hierarchy",
-        "args": {"depth": 3, "includeComponents": true}
+        "args": {
+          "depth": 3,
+          "includeComponents": true
+        }
       },
       "tier": "core"
     },
@@ -561,20 +699,31 @@
       "expected": {
         "kind": "protocol",
         "commandId": "profiler/start",
-        "args": {"deep": true, "logFile": "Temp/Profiler/deep.raw"}
+        "args": {
+          "deep": true,
+          "logFile": "Temp/Profiler/deep.raw"
+        }
       },
       "tier": "advanced"
     },
     {
       "id": "r53",
       "prompt": "停止当前 Unity Profiler 录制。",
-      "expected": {"kind": "protocol", "commandId": "profiler/stop", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "profiler/stop",
+        "args": {}
+      },
       "tier": "advanced"
     },
     {
       "id": "r54",
       "prompt": "查询 Unity Profiler 当前是否开启、是否深度采样以及帧范围。",
-      "expected": {"kind": "protocol", "commandId": "profiler/status", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "profiler/status",
+        "args": {}
+      },
       "tier": "advanced"
     },
     {
@@ -583,14 +732,20 @@
       "expected": {
         "kind": "protocol",
         "commandId": "profiler/save",
-        "args": {"savePath": "Temp/Profiler/capture.raw"}
+        "args": {
+          "savePath": "Temp/Profiler/capture.raw"
+        }
       },
       "tier": "advanced"
     },
     {
       "id": "r56",
       "prompt": "列出 C# Console 当前所有活跃 REPL sessions。",
-      "expected": {"kind": "protocol", "commandId": "session/list", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "session/list",
+        "args": {}
+      },
       "tier": "control-plane"
     },
     {
@@ -618,49 +773,96 @@
     {
       "id": "r59",
       "prompt": "明确通过 command protocol 的 command/list action 返回所有已注册命令。",
-      "expected": {"kind": "protocol", "commandId": "command/list", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "command/list",
+        "args": {}
+      },
       "tier": "control-plane"
     },
     {
       "id": "r60",
       "prompt": "运行项目的 PlayMode 测试并在结束后汇报结果。",
-      "expected": {"kind": "protocol", "commandId": "editor/test.run", "args": {"mode": "playMode"}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/test.run",
+        "args": {
+          "mode": "playMode"
+        }
+      },
       "tier": "core"
     },
     {
       "id": "r61",
       "prompt": "查询最近一次 Unity 测试运行的进度和结果。",
-      "expected": {"kind": "protocol", "commandId": "editor/test.status", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/test.status",
+        "args": {}
+      },
       "tier": "core"
     },
     {
       "id": "r62",
       "prompt": "在 Assets/Configs/GameSettings.asset 创建一个 GameSettings 类型的 ScriptableObject 资产。",
-      "expected": {"kind": "protocol", "commandId": "scriptableobject/create", "args": {"typeName": "GameSettings", "savePath": "Assets/Configs/GameSettings.asset"}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "scriptableobject/create",
+        "args": {
+          "typeName": "GameSettings",
+          "savePath": "Assets/Configs/GameSettings.asset"
+        }
+      },
       "tier": "core"
     },
     {
       "id": "r63",
       "prompt": "读取 Assets/Configs/GameSettings.asset 这个 ScriptableObject 的序列化字段。",
-      "expected": {"kind": "protocol", "commandId": "scriptableobject/get", "args": {"assetPath": "Assets/Configs/GameSettings.asset"}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "scriptableobject/get",
+        "args": {
+          "assetPath": "Assets/Configs/GameSettings.asset"
+        }
+      },
       "tier": "core"
     },
     {
       "id": "r64",
       "prompt": "把 Assets/Configs/GameSettings.asset 的 maxPlayers 字段改成 8。",
-      "expected": {"kind": "protocol", "commandId": "scriptableobject/modify", "args": {"assetPath": "Assets/Configs/GameSettings.asset", "fields": [{"name": "maxPlayers", "value": "8"}]}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "scriptableobject/modify",
+        "args": {
+          "assetPath": "Assets/Configs/GameSettings.asset",
+          "fields": [
+            {
+              "name": "maxPlayers",
+              "value": "8"
+            }
+          ]
+        }
+      },
       "tier": "core"
     },
     {
       "id": "c01",
       "prompt": "列出项目里的所有 .unity Scene 资源。",
-      "expected": {"kind": "protocol", "commandId": "project/scene.list", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "project/scene.list",
+        "args": {}
+      },
       "tier": "core"
     },
     {
       "id": "c02",
       "prompt": "列出当前打开 Scene 内的 GameObject 层级。",
-      "expected": {"kind": "protocol", "commandId": "scene/hierarchy", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "scene/hierarchy",
+        "args": {}
+      },
       "tier": "core"
     },
     {
@@ -669,7 +871,12 @@
       "expected": {
         "kind": "protocol",
         "commandId": "project/asset.list",
-        "args": {"filter": "t:Texture2D", "folders": ["Assets/Art"]}
+        "args": {
+          "filter": "t:Texture2D",
+          "folders": [
+            "Assets/Art"
+          ]
+        }
       },
       "tier": "core"
     },
@@ -689,25 +896,45 @@
     {
       "id": "c05",
       "prompt": "检查 Editor 是否正在编译或更新，并顺带返回 Play Mode 信息。",
-      "expected": {"kind": "protocol", "commandId": "editor/status", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/status",
+        "args": {}
+      },
       "tier": "core"
     },
     {
       "id": "c06",
       "prompt": "只检查是否正在 Play Mode 或暂停，不要完整 Editor 状态。",
-      "expected": {"kind": "protocol", "commandId": "editor/status", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "editor/status",
+        "args": {}
+      },
       "tier": "core"
     },
     {
       "id": "c07",
       "prompt": "获取 Player 的 tag、layer、组件清单和 Transform 摘要。",
-      "expected": {"kind": "protocol", "commandId": "gameobject/get", "args": {"path": "Player"}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/get",
+        "args": {
+          "path": "Player"
+        }
+      },
       "tier": "core"
     },
     {
       "id": "c08",
       "prompt": "只获取 Player 的位置、旋转和缩放。",
-      "expected": {"kind": "protocol", "commandId": "gameobject/get", "args": {"path": "Player"}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "gameobject/get",
+        "args": {
+          "path": "Player"
+        }
+      },
       "tier": "core"
     },
     {
@@ -716,7 +943,11 @@
       "expected": {
         "kind": "cli",
         "subcommand": "list-commands",
-        "argvContains": ["--view", "custom", "--json"],
+        "argvContains": [
+          "--view",
+          "custom",
+          "--json"
+        ],
         "usesInputFile": false
       },
       "tier": "control-plane"
@@ -724,7 +955,21 @@
     {
       "id": "c10",
       "prompt": "不要用 CLI discovery endpoint；通过 framework command 协议调用 command/list。",
-      "expected": {"kind": "protocol", "commandId": "command/list", "args": {}},
+      "expected": {
+        "kind": "protocol",
+        "commandId": "command/list",
+        "args": {}
+      },
+      "tier": "control-plane"
+    },
+    {
+      "id": "r65",
+      "prompt": "查一下现在连的这个 player 是什么设备，日志和存档目录在哪。",
+      "expected": {
+        "kind": "protocol",
+        "commandId": "runtime/info",
+        "args": {}
+      },
       "tier": "control-plane"
     }
   ]

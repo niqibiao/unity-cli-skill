@@ -11,6 +11,42 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-08-19
+
+### Fixed
+
+- **`--mode runtime` now addresses the player.** It only ever affected `cs exec`;
+  `health` and every canonical command went to the editor regardless. So
+  `cs health --mode runtime` called a dead player healthy, and
+  `cs command session/list --mode runtime` listed the editor's REPL sessions
+  rather than the ones `cs exec --mode runtime` had created in the player.
+  Commands whose contract does not require the editor now reach the player.
+  `command/list` and `command/registry.snapshot` deliberately stay with the
+  editor, which owns registry authority; answering them from a player would
+  overwrite the project's cached contracts with its shorter list.
+- When no player answers on 15500-15509, commands that need one exit 3 and say
+  so instead of falling back to the editor.
+
+### Added
+
+- **`cs pull`** retrieves a file from whichever process is being addressed. A
+  relative path resolves against the target's `persistentDataPath`; an absolute
+  path from another machine has its tail re-anchored there. Every pull reports
+  which rule applied. Large files are fetched as successive ranges.
+- **`references/player.md`** covers debugging a running player: what it answers,
+  why a device reports no `consoleLogPath`, and how to record a profiler capture
+  on a device and open it at home.
+- `runtime/info` routing: the device, build, and well-known paths of whichever
+  process replies.
+
+### Changed
+
+- The runtime port probe runs its ten candidates concurrently at 1s each rather
+  than one after another at 0.3s. Hosts that drop packets to closed ports made
+  the sequential form cost the full timeout per port, and the longer per-port
+  budget suits a player on another machine.
+- The package-owned registry grows to 62 (56 authoring + 6 control).
+
 ## [2.2.0] - 2026-08-16
 
 ### Added
