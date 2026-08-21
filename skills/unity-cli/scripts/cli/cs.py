@@ -605,7 +605,9 @@ def cmd_pull(root, args, agent_root=None):
         print(f"Error: runtime/info failed: {info_result.get('summary', '')}", file=sys.stderr)
         return 3
 
-    info = info_result.get("data") or {}
+    # Wire results keep the command's own payload under resultJson; only
+    # cs command normalizes that away.
+    info = (info_result.get("data") or {}).get("resultJson") or {}
     remote_path, how = _resolve_remote_path(args.path, info)
 
     base = f"http://{args.ip}:{args.port}/CSharpConsole/download"
