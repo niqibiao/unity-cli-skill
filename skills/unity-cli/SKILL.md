@@ -307,6 +307,7 @@ route those intents to snippets or raw `exec` as an automatic fallback.
 | Unity Test Framework runs | `cs test` | `references/tests.md` |
 | Editor log inspection | `editor/console.mark` + local read | `references/logs.md` |
 | A running player, and its files | `--mode runtime` / `cs pull` | `references/player.md` |
+| Watching a log as it is written | `cs logs` | `references/player.md` |
 | Custom-command catalog | `cs catalog sync` / `list` | `references/catalog.md` |
 | Package / connection state | `cs status` / `cs health` | `references/status.md` |
 | Package setup | `cs setup` | `references/setup.md` |

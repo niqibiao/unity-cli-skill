@@ -81,6 +81,45 @@ So on a device, ask the user where their project writes its own log, and pull
 that. Do not report "no logs available" — report that the platform keeps none of
 its own and ask what the project writes.
 
+To watch a log as it is written rather than fetching a snapshot:
+
+```bash
+cs logs --mode runtime                       # the target's own consoleLogPath
+cs logs logs/game.log --mode runtime --wait 120
+cs logs --since-start > player.log           # from the beginning of the file
+```
+
+`cs logs` prints new bytes as they appear and returns when `--wait` expires
+(default 60s, capped at 600s) — bound it deliberately, because an agent has no
+Ctrl+C to press. Without a path it follows `consoleLogPath`, and on a platform
+that reports none it says so instead of following nothing. When the file becomes
+shorter than the read position — Unity rotates `Player.log` to `Player-prev.log`
+at startup — it reports the restart on stderr and re-reads the new file from its
+beginning, so nothing is silently skipped. Like `cs pull`, it reads bytes rather
+than running a command, so it works with the editor closed.
+
+## Collecting in the background
+
+To keep watching while you carry on issuing commands:
+
+```bash
+cs logs --mode runtime --background     # prints the file it collects into
+cs command -i - --mode runtime          # …other work, unaffected
+cs logs --mode runtime --stop           # end it early
+```
+
+`--background` returns immediately with the path of a file under the system
+temp directory, and a detached follower keeps appending to it. Read that file
+whenever you want — it is an ordinary file. Collection runs until **the target
+goes away**, so a player that runs for hours is covered for all of them; there
+is no clock to re-arm. One dropped connection does not end it, because the
+service drops one occasionally; only being unable to reach the target for 15
+seconds straight does, and that is reported in the file.
+
+Starting it twice for the same target returns the collection already running
+rather than starting a second reader. Commands issued while it collects behave
+as they do with no collection running.
+
 ## Recording a profile on a device
 
 The one workflow that was previously impossible:

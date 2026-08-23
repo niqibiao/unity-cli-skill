@@ -4,6 +4,11 @@ Read the Editor log directly. `editor/console.mark` returns `logPath`, and the
 file stays readable while the Editor holds it open, so a local read is the whole
 mechanism. There is no command that fetches log text.
 
+That holds while the editor is on this machine. When it is not — a teammate's
+editor, or a player anywhere — the file cannot be opened locally, and `cs logs`
+follows it over the wire instead (`references/player.md`). Locally, prefer the
+direct read: it is an order of magnitude faster than a round trip.
+
 **These rules locate and label. They never decide what to read.** Read
 everything after your marker; use the rules to see the important part first, to
 avoid reading one record as two, and to avoid counting one compile error three

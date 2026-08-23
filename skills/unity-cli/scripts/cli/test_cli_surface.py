@@ -504,6 +504,294 @@ class CliSurfaceTests(unittest.TestCase):
         self.assertEqual(project, offline_handler.call_args.args[0])
 
 
+class PortProbeTests(unittest.TestCase):
+    """How the runtime port is located.
+
+    A bare TCP connect left the service cleaning up a connection that never
+    sent a request, and the call that followed was reset often enough to
+    measure. The probe asks a real question instead, and asks the usual port
+    alone before fanning out, because the service dispatches one request at a
+    time.
+    """
+
+    def test_the_first_port_is_tried_alone(self):
+        asked = []
+
+        def urlopen(request, timeout=None):
+            asked.append(request.full_url)
+            response = mock.MagicMock()
+            response.read.return_value = b"{}"
+            response.__enter__.return_value = response
+            return response
+
+        with mock.patch("urllib.request.urlopen", side_effect=urlopen):
+            found = CS._probe_port("127.0.0.1", 15500, 10)
+
+        self.assertEqual(15500, found)
+        self.assertEqual(1, len(asked), "the common path must not fan out")
+        self.assertIn("15500", asked[0])
+
+    def test_the_rest_of_the_range_is_tried_when_the_first_is_silent(self):
+        def urlopen(request, timeout=None):
+            if "15503" not in request.full_url:
+                raise OSError("refused")
+            response = mock.MagicMock()
+            response.read.return_value = b"{}"
+            response.__enter__.return_value = response
+            return response
+
+        with mock.patch("urllib.request.urlopen", side_effect=urlopen):
+            found = CS._probe_port("127.0.0.1", 15500, 10)
+
+        self.assertEqual(15503, found)
+
+    def test_a_port_answering_something_else_is_not_the_service(self):
+        import urllib.error
+
+        def urlopen(request, timeout=None):
+            raise urllib.error.HTTPError(request.full_url, 404, "nope", {}, io.BytesIO(b"{}"))
+
+        with mock.patch("urllib.request.urlopen", side_effect=urlopen):
+            self.assertIsNone(CS._probe_port("127.0.0.1", 15500, 10))
+
+    def test_nothing_listening_returns_none(self):
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("refused")):
+            self.assertIsNone(CS._probe_port("127.0.0.1", 15500, 10))
+
+
+class DownloadWindowTests(unittest.TestCase):
+    """The range reader that both `cs pull` and `cs logs` are built on.
+
+    A follower has to tell "no new bytes yet" from "the file was rotated and is
+    now shorter than where I was reading", and the service answers both with
+    416 -- the size it reports is the only thing that separates them.
+    """
+
+    def _http_error(self, code, body):
+        import urllib.error
+
+        return urllib.error.HTTPError(
+            "http://host/download", code, "range", {}, io.BytesIO(body)
+        )
+
+    def _envelope(self, file_size):
+        return json.dumps(
+            {"ok": False, "summary": "range", "dataJson": json.dumps({"fileSize": file_size})}
+        ).encode("utf-8")
+
+    def test_range_response_reports_chunk_and_total(self):
+        response = mock.MagicMock()
+        response.read.return_value = b"abc"
+        response.headers = {"Content-Range": "bytes 10-12/99"}
+        response.__enter__.return_value = response
+
+        with mock.patch("urllib.request.urlopen", return_value=response):
+            chunk, total = CS._download_window("http://host/download", 10, 3, 5)
+
+        self.assertEqual(b"abc", chunk)
+        self.assertEqual(99, total)
+
+    def test_whole_file_response_has_no_total(self):
+        # The service answers 200 without Content-Range when the range covers
+        # the entire file, so a caller must not assume a total is always there.
+        response = mock.MagicMock()
+        response.read.return_value = b"abc"
+        response.headers = {}
+        response.__enter__.return_value = response
+
+        with mock.patch("urllib.request.urlopen", return_value=response):
+            chunk, total = CS._download_window("http://host/download", 0, 99, 5)
+
+        self.assertEqual(b"abc", chunk)
+        self.assertIsNone(total)
+
+    def test_416_reports_the_size_the_service_saw(self):
+        error = self._http_error(416, self._envelope(42))
+
+        with mock.patch("urllib.request.urlopen", side_effect=error):
+            chunk, total = CS._download_window("http://host/download", 100, 10, 5)
+
+        self.assertIsNone(chunk)
+        self.assertEqual(42, total)
+
+    def test_416_with_an_unreadable_body_degrades_to_unknown_size(self):
+        error = self._http_error(416, b"not json")
+
+        with mock.patch("urllib.request.urlopen", side_effect=error):
+            chunk, total = CS._download_window("http://host/download", 100, 10, 5)
+
+        self.assertIsNone(chunk)
+        self.assertIsNone(total)
+
+    def test_other_http_errors_propagate(self):
+        error = self._http_error(404, b"{}")
+
+        with mock.patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(Exception):
+                CS._download_window("http://host/download", 0, 10, 5)
+
+
+class _StdoutWithBuffer:
+    def __init__(self):
+        self.buffer = io.BytesIO()
+
+
+class LogsFollowTests(unittest.TestCase):
+    def _args(self, **overrides):
+        base = {
+            "path": None,
+            "since_start": False,
+            "interval": 0.001,
+            "wait": 1,
+            "ip": "127.0.0.1",
+            "port": 15500,
+            "timeout": 5,
+            "background": False,
+            "stop": False,
+            "state_file": None,
+        }
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    @staticmethod
+    def _sequence(windows):
+        """Replay canned windows, then hold on the last one.
+
+        The follow loop polls until its deadline, so a fixed-length sequence
+        would run dry long before the run ends."""
+        if callable(windows):
+            return windows
+        remaining = list(windows)
+
+        def take(*_args):
+            return remaining.pop(0) if len(remaining) > 1 else remaining[0]
+
+        return take
+
+    @contextlib.contextmanager
+    def _target(self, info, windows):
+        """Run cmd_logs against a canned runtime/info and range sequence."""
+        session = mock.Mock()
+        session.request_wire_command.return_value = {
+            "ok": True,
+            "data": {"resultJson": info},
+        }
+        sink = _StdoutWithBuffer()
+        with (
+            mock.patch("cli.core_bridge.find_package_dir", return_value=Path("pkg")),
+            mock.patch.object(CS, "_new_session", return_value=session),
+            mock.patch.object(CS, "_download_window", side_effect=self._sequence(windows)),
+            mock.patch("sys.stdout", sink),
+            contextlib.redirect_stderr(io.StringIO()) as err,
+        ):
+            yield sink, err
+
+    def test_a_target_with_no_log_file_of_its_own_says_so(self):
+        # Android and iOS report an empty consoleLogPath because they write no
+        # log file. Defaulting to it would follow nothing forever.
+        info = {"platform": "Android", "persistentDataPath": "/data/files", "consoleLogPath": ""}
+
+        with self._target(info, []) as (_, err):
+            code = CS.cmd_logs(Path("proj"), self._args())
+
+        self.assertEqual(3, code)
+        self.assertIn("Android", err.getvalue())
+        self.assertIn("path your project logs to", err.getvalue())
+
+    def test_rotation_restarts_from_the_beginning_of_the_new_file(self):
+        info = {
+            "platform": "WindowsPlayer",
+            "persistentDataPath": "C:/data",
+            "consoleLogPath": "C:/data/Player.log",
+        }
+        windows = [
+            (None, 0),           # initial size probe: start at the end
+            (b"first\n", 6),     # new bytes appear
+            (None, 2),           # file is now shorter than our offset: rotated
+            (b"R\n", 2),         # re-read from zero
+            (None, 2),           # nothing further
+        ]
+
+        with self._target(info, windows) as (sink, err):
+            code = CS.cmd_logs(Path("proj"), self._args(wait=1))
+
+        self.assertEqual(0, code)
+        self.assertEqual(b"first\nR\n", sink.buffer.getvalue())
+        self.assertIn("restarted", err.getvalue())
+
+    def test_a_dropped_connection_is_not_a_disconnect(self):
+        # The service drops a connection occasionally under concurrent load --
+        # measured at roughly 1 in 18 calls. Treating one as "the player is
+        # gone" would end an unbounded follow at the first hiccup.
+        info = {
+            "platform": "WindowsPlayer",
+            "persistentDataPath": "C:/data",
+            "consoleLogPath": "C:/data/Player.log",
+        }
+        outcomes = [
+            (None, 0),                       # size probe
+            OSError("connection reset"),     # blip
+            (b"still here\n", 11),           # recovered
+        ]
+
+        def replay(*_args):
+            item = outcomes.pop(0) if outcomes else (None, 11)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        with self._target(info, replay) as (sink, err):
+            code = CS.cmd_logs(Path("proj"), self._args(wait=1))
+
+        self.assertEqual(0, code)
+        self.assertEqual(b"still here\n", sink.buffer.getvalue())
+        self.assertNotIn("gone", err.getvalue())
+
+    def test_staying_unreachable_ends_an_unbounded_follow(self):
+        info = {
+            "platform": "WindowsPlayer",
+            "persistentDataPath": "C:/data",
+            "consoleLogPath": "C:/data/Player.log",
+        }
+        calls = {"n": 0}
+
+        def replay(*_args):
+            # The probe succeeds -- the target was there when the follow began.
+            # Every read after it fails, as it would once the player exits.
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return (None, 0)
+            raise OSError("connection refused")
+
+        with self._target(info, replay) as (sink, err):
+            with mock.patch.object(CS, "LOGS_DISCONNECT_GRACE", 0.05):
+                code = CS.cmd_logs(Path("proj"), self._args(wait=0))
+
+        self.assertEqual(0, code)
+        self.assertIn("the target is gone", err.getvalue())
+        self.assertEqual(b"", sink.buffer.getvalue())
+
+    def test_since_start_reads_from_zero(self):
+        info = {
+            "platform": "WindowsPlayer",
+            "persistentDataPath": "C:/data",
+            "consoleLogPath": "C:/data/Player.log",
+        }
+        calls = []
+
+        def record(url, offset, length, timeout):
+            calls.append(offset)
+            return (b"body\n", 5) if len(calls) == 2 else (None, 5)
+
+        with self._target(info, record) as (sink, _):
+            CS.cmd_logs(Path("proj"), self._args(since_start=True, wait=1))
+
+        # The probe reads byte 0; the first real read must also start at 0
+        # rather than skipping to the current end.
+        self.assertEqual(0, calls[1])
+        self.assertEqual(b"body\n", sink.buffer.getvalue())
+
+
 class PullPathResolutionTests(unittest.TestCase):
     """Where `cs pull` decides a requested path lives on the target.
 
