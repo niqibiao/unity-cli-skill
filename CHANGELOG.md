@@ -11,6 +11,55 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-08-23
+
+### Added
+
+- **`cs logs [PATH]`** follows a log file on whichever process is being
+  addressed, printing new bytes as they are written. Without a path it follows
+  the target's own `consoleLogPath`; on Android and iOS, which write no log file
+  of their own, it says so and asks for the path the project logs to. Rotation
+  is detected — when the file becomes shorter than the read position, it
+  restarts from the beginning of the new file rather than silently skipping it.
+  `--since-start` reads from the beginning, `--interval` sets the poll period,
+  and `--wait` bounds a foreground run so it cannot hang an agent that has no
+  Ctrl+C.
+
+  It is built on the same download route as `cs pull`, so it needs no editor:
+  watching a player on another machine is the case it exists for.
+
+- **`cs logs --background`** collects into a file and prints its path, leaving
+  the terminal free. Other commands run against the same target meanwhile —
+  measured at the same failure rate as with no collection running. The detached
+  follower keeps going until the target it is watching goes away, so a player
+  that runs for hours is covered for all of them; a single dropped connection
+  is not mistaken for that, since the service drops one occasionally under
+  load. `--stop` ends it early, and starting it twice for the same target hands
+  back the collection already running rather than starting a rival reader.
+
+### Fixed
+
+- **`health` was resetting one call in five.** Requires package 2.3.1. The
+  service wrote the health response without ever reading the request body the
+  client had sent, and Windows tears down a response closed over an unread body
+  with RST rather than FIN — so the answer was written and the caller saw a
+  dropped connection instead. Measured at 8 failures in 40 calls against a
+  player and 2 in 40 against an editor; 0 in 40 after the package drains the
+  body first. `cs doctor` and `cs wait-ready` probe through `health`, so both
+  carried the same odds of failing at random. Every other route reads its body
+  and was never affected.
+
+- **The runtime port probe caused the failures it was blamed for.** It opened a
+  TCP connection to each candidate and closed it without sending a request,
+  which left the service cleaning up a half-started connection and reset the
+  request that followed — 4 failures in 30 calls, against none when the range
+  was not probed. Each candidate is now asked a real health question, which
+  also confirms that what answers is this service rather than an unrelated
+  process holding the port. The usual port is tried alone before fanning out,
+  because the service accepts and dispatches one request at a time and a
+  ten-way fan-out costs it more than it costs the client. Probing now measures
+  the same as not probing. Finding no player takes about a second longer.
+
 ## [2.3.0] - 2026-08-23
 
 ### Fixed

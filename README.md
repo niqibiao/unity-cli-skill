@@ -100,6 +100,7 @@ Everything ships in one skill (`unity-cli`):
 | `cs refresh` | Refresh assets and wait for compilation |
 | `cs test` | Run Unity Test Framework tests and wait for results |
 | `cs pull <path>` | Retrieve a file from the process being addressed |
+| `cs logs [path]` | Follow a log file on the process being addressed, foreground or detached |
 | `cs catalog sync` / `cs catalog list` | Maintain the shared custom-command shortlist |
 | `cs snippets …` | Browse and maintain reusable C# snippets |
 

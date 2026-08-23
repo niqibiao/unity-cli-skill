@@ -21,7 +21,7 @@ from cli.version_check import get_plugin_version, is_aligned, parse_semver
 # In runtime mode these are answered by the player itself, so they are the ones
 # that need a located player. Everything else -- refresh, doctor, wait-ready --
 # is about the editor's compile pipeline and is unaffected by --mode.
-PLAYER_TARGETED_COMMANDS = frozenset({"health", "exec", "command", "batch", "pull"})
+PLAYER_TARGETED_COMMANDS = frozenset({"health", "exec", "command", "batch", "pull", "logs"})
 
 
 def _is_unity_root(d):
@@ -95,32 +95,61 @@ def detect_port(project_root):
 
 
 def _probe_port(ip, start, count, timeout=1.0):
-    """Return the lowest TCP-reachable port in [start, start+count), or None.
+    """Return the lowest port in [start, start+count) answering as the console
+    service, or None.
 
     Runtime players don't write refresh_state.json, and the in-player console
     service advances past taken ports on startup, so when --port is omitted we
     probe the runtime range to find where it actually landed.
+
+    Each probe is a real health request rather than a bare TCP connect. Opening
+    a connection and closing it without sending a request left the service
+    cleaning up a half-started connection, and the request that followed was
+    reset often enough to measure -- 4 failures in 30 calls, against none when
+    the range was not probed. Asking the question properly also answers a
+    second one: that whatever is listening is this service, not some unrelated
+    process that happens to hold the port.
 
     The probes run at once. A closed port does not always refuse promptly --
     hosts that drop the SYN instead make each attempt wait out the timeout --
     and probing ten of those one after another would cost ten seconds on the
     common path where the player simply is not running. The timeout is
     generous enough for a player on another machine."""
-    import socket
+    import urllib.error
+    import urllib.request
     from concurrent.futures import ThreadPoolExecutor
 
-    def reachable(port):
+    def answers(port):
+        request = urllib.request.Request(
+            f"http://{ip}:{port}/CSharpConsole/health",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+        )
         try:
-            with socket.create_connection((ip, port), timeout=timeout):
-                return port
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                response.read()
+            return port
+        except urllib.error.HTTPError:
+            # Something is there and speaking HTTP on the console route but
+            # refused this request; it is not the service we are looking for.
+            return None
         except OSError:
             return None
 
-    ports = list(range(start, start + count))
+    # The service accepts and dispatches one request at a time, so a fan-out of
+    # ten costs it more than it costs us. The player is on the first port
+    # unless that one was taken, so ask there alone first: the common path then
+    # puts a single request on the service instead of ten at once.
+    if answers(start) is not None:
+        return start
+
+    ports = list(range(start + 1, start + count))
+    if not ports:
+        return None
     with ThreadPoolExecutor(max_workers=len(ports)) as pool:
         # map keeps input order, so this stays the lowest reachable port
         # rather than whichever probe happened to answer first.
-        for found in pool.map(reachable, ports):
+        for found in pool.map(answers, ports):
             if found is not None:
                 return found
     return None
@@ -548,6 +577,90 @@ def cmd_wait_ready(root, args, agent_root=None):
 
 
 PULL_CHUNK_BYTES = 32 * 1024 * 1024
+LOGS_POLL_SECONDS = 1.0
+LOGS_DEFAULT_WAIT = 60
+# A detached follower runs until the target it is watching goes away, which is
+# the event that makes further collection pointless. That is what bounds it --
+# not a clock -- so a long-lived player stays fully covered.
+LOGS_BACKGROUND_WAIT = 0
+# One dropped connection is not proof the target is gone; the service drops one
+# occasionally under concurrent load. Only being unable to reach it for this
+# long in a row counts as disconnection.
+LOGS_DISCONNECT_GRACE = 15.0
+
+
+def _logs_session_dir():
+    """Where a detached follower writes. The system temp directory, so a
+    collected log is never mistaken for project state and gets cleaned up by
+    the OS on its own schedule."""
+    import tempfile
+
+    return Path(tempfile.gettempdir()) / "unity-cli-logs"
+
+
+def _logs_session_key(root, args, remote_path):
+    """Identify one follower by what it is following, so a second --background
+    for the same target finds the first instead of racing it."""
+    from cli.paths import project_key
+
+    parts = [
+        project_key(root) if root else "no-project",
+        args.mode,
+        str(args.ip),
+        str(args.port),
+        PurePath(remote_path.replace("\\", "/")).name or "log",
+    ]
+    stamp = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:12]
+    return f"{parts[0]}-{parts[4]}-{stamp}"
+
+
+def _logs_follower_alive(state):
+    """Whether the follower recorded in *state* is still running.
+
+    Checked by heartbeat rather than by asking the OS about the pid: the
+    follower touches its state file every poll, and a stale pid can belong to
+    an unrelated process by the time anyone looks."""
+    beat = state.get("heartbeat")
+    interval = state.get("interval") or LOGS_POLL_SECONDS
+    if not isinstance(beat, (int, float)):
+        return False
+    # Two polls of slack, and never less than a few seconds, so a slow poll
+    # is not read as a dead follower.
+    return (time.time() - beat) < max(5.0, interval * 3)
+
+
+def _download_window(url, offset, length, timeout):
+    """Read [offset, offset+length) from the download route.
+
+    Returns (chunk, total). A chunk of None means the offset is at or past the
+    end: the service answers 416 and reports the size it saw, which is what
+    tells a follower "nothing new yet" apart from "the file was rotated and is
+    now shorter than where I was reading"."""
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(url)
+    request.add_header("Range", f"bytes={offset}-{offset + length - 1}")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            chunk = response.read()
+            content_range = response.headers.get("Content-Range") or ""
+            total = None
+            if "/" in content_range:
+                try:
+                    total = int(content_range.rsplit("/", 1)[1])
+                except ValueError:
+                    total = None
+            return chunk, total
+    except urllib.error.HTTPError as e:
+        if e.code != 416:
+            raise
+        try:
+            envelope = json.loads(e.read().decode("utf-8", "replace"))
+            data = json.loads(envelope.get("dataJson") or "{}")
+            return None, int(data["fileSize"])
+        except (ValueError, TypeError, KeyError):
+            return None, None
 
 
 def _is_absolute_on_target(path):
@@ -670,6 +783,271 @@ def cmd_pull(root, args, agent_root=None):
     else:
         print(f"Retrieved {written} bytes to {output}")
         print(f"  from {remote_path} ({how})")
+    return 0
+
+
+def _logs_spawn_follower(root, args, remote_path, how):
+    """Start a detached follower and report where it is writing.
+
+    The child is this same command without --background, with its stdout
+    pointed at the collected log, so both paths share one implementation of the
+    following itself."""
+    session_dir = _logs_session_dir()
+    try:
+        session_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"Error: could not create {session_dir}: {e}", file=sys.stderr)
+        return 1
+
+    key = _logs_session_key(root, args, remote_path)
+    state_path = session_dir / f"{key}.json"
+    output_path = session_dir / f"{key}.log"
+
+    existing = _logs_read_state(state_path)
+    if existing and _logs_follower_alive(existing):
+        # Idempotent: a second --background for the same target hands back the
+        # log already being collected rather than starting a rival reader.
+        print(existing.get("output", str(output_path)))
+        print(f"  already following {remote_path} ({how})", file=sys.stderr)
+        return 0
+
+    child = [sys.executable, "-B", str(Path(__file__).resolve()), "logs"]
+    if args.path:
+        child.append(args.path)
+    child += [
+        "--mode", args.mode,
+        "--ip", str(args.ip),
+        # The port is passed through because the parent already probed for it;
+        # the child must not repeat that and possibly land on another player.
+        "--port", str(args.port),
+        "--interval", str(args.interval),
+        "--wait", str(args.wait),
+        "--state-file", str(state_path),
+    ]
+    if args.since_start:
+        child.append("--since-start")
+    if args.project:
+        child += ["--project", str(args.project)]
+
+    detach = {}
+    if os.name == "nt":
+        detach["creationflags"] = (
+            getattr(subprocess, "DETACHED_PROCESS", 0)
+            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
+    else:
+        detach["start_new_session"] = True
+
+    try:
+        with output_path.open("ab") as sink:
+            process = subprocess.Popen(
+                child, stdout=sink, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL, **detach,
+            )
+    except OSError as e:
+        print(f"Error: could not start the follower: {e}", file=sys.stderr)
+        return 1
+
+    _logs_write_state(state_path, {
+        "pid": process.pid,
+        "output": str(output_path),
+        "remotePath": remote_path,
+        "resolution": how,
+        "interval": args.interval,
+        "wait": args.wait,
+        "heartbeat": time.time(),
+    })
+
+    if args.as_json:
+        json.dump(
+            {"ok": True, "output": str(output_path), "remotePath": remote_path,
+             "resolution": how, "pid": process.pid,
+             "stopsAfterSeconds": args.wait or None,
+             "stopsOnTargetExit": not args.wait},
+            sys.stdout, ensure_ascii=False,
+        )
+        print()
+    else:
+        print(output_path)
+        ends = f"after {args.wait}s" if args.wait else "when the target goes away"
+        print(f"  following {remote_path} ({how}); stops {ends} "
+              f"or on: cs logs --stop", file=sys.stderr)
+    return 0
+
+
+def _logs_read_state(state_path):
+    try:
+        return json.loads(state_path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _logs_write_state(state_path, state):
+    from cli.paths import atomic_write
+
+    try:
+        atomic_write(state_path, json.dumps(state, ensure_ascii=False))
+    except OSError:
+        pass
+
+
+def _logs_stop(root, args, remote_path, how):
+    """Stop the follower for this target, if one is running."""
+    import signal
+
+    state_path = _logs_session_dir() / f"{_logs_session_key(root, args, remote_path)}.json"
+    state = _logs_read_state(state_path)
+    if not state:
+        print(f"No follower is recorded for {remote_path}.", file=sys.stderr)
+        return 0
+
+    output = state.get("output", "")
+    if not _logs_follower_alive(state):
+        print(f"The follower for {remote_path} had already stopped.", file=sys.stderr)
+        if output:
+            print(output)
+        state_path.unlink(missing_ok=True)
+        return 0
+
+    pid = state.get("pid")
+    try:
+        os.kill(int(pid), signal.SIGTERM)
+    except (OSError, TypeError, ValueError) as e:
+        print(f"Warning: could not signal follower {pid}: {e}", file=sys.stderr)
+    state_path.unlink(missing_ok=True)
+    if output:
+        print(output)
+    print(f"  stopped following {remote_path}", file=sys.stderr)
+    return 0
+
+
+def cmd_logs(root, args, agent_root=None):
+    """Follow a log file on the machine answering as the target.
+
+    Built on the same download route as `cs pull`, so it needs no editor: the
+    point is watching a player that may be on another machine, and the registry
+    is not involved in reading bytes."""
+    import urllib.error
+    import urllib.parse
+
+    if root is None:
+        print("Error: no Unity project found.", file=sys.stderr)
+        return 1
+    from cli.core_bridge import find_package_dir
+    pkg_dir = find_package_dir(root, agent_root)
+    if not pkg_dir:
+        print("Error: the C# Console package is not installed in this project.", file=sys.stderr)
+        return 1
+
+    session = _new_session(root, args, pkg_dir)
+    try:
+        info_result = session.request_wire_command("runtime", "info", None)
+    except Exception as e:
+        print(f"Error: could not ask the target where it keeps files: {e}", file=sys.stderr)
+        return 1
+    if not info_result.get("ok"):
+        print(f"Error: runtime/info failed: {info_result.get('summary', '')}", file=sys.stderr)
+        return 3
+    info = (info_result.get("data") or {}).get("resultJson") or {}
+
+    requested = args.path
+    if not requested:
+        requested = (info.get("consoleLogPath") or "").strip()
+        if not requested:
+            print(
+                f"Error: {info.get('platform', 'this target')} writes no log file of its own, "
+                "so there is no default to follow. Pass the path your project logs to.",
+                file=sys.stderr,
+            )
+            return 3
+    remote_path, how = _resolve_remote_path(requested, info)
+
+    if args.stop:
+        return _logs_stop(root, args, remote_path, how)
+    if args.background:
+        return _logs_spawn_follower(root, args, remote_path, how)
+
+    base = f"http://{args.ip}:{args.port}/CSharpConsole/download"
+    url = f"{base}?{urllib.parse.urlencode({'path': remote_path})}"
+
+    try:
+        _, total = _download_window(url, 0, 1, args.timeout)
+    except urllib.error.HTTPError as e:
+        print(f"Error: {remote_path} could not be read ({e.code})", file=sys.stderr)
+        print(f"  path resolution: {how}", file=sys.stderr)
+        return 3
+    except OSError as e:
+        print(f"Error: transport failure reading {remote_path}: {e}", file=sys.stderr)
+        return 1
+
+    offset = 0 if args.since_start else (total or 0)
+    print(f"Following {remote_path} ({how}) from byte {offset}", file=sys.stderr)
+
+    # --wait 0 means "until the target goes away", which is the default for a
+    # detached follower: a player that runs for hours should be covered for all
+    # of them.
+    deadline = (time.time() + args.wait) if args.wait else None
+    interval = max(0.05, args.interval)
+    unreachable_since = None
+    sink = sys.stdout.buffer
+    # A detached follower reports that it is alive by touching its state file
+    # each poll, which is how --stop tells a running follower from a stale
+    # record whose pid may since have been reused.
+    state_path = Path(args.state_file) if getattr(args, "state_file", None) else None
+    state = _logs_read_state(state_path) if state_path else None
+    try:
+        while deadline is None or time.time() < deadline:
+            if state is not None:
+                state["heartbeat"] = time.time()
+                _logs_write_state(state_path, state)
+            try:
+                chunk, total = _download_window(url, offset, PULL_CHUNK_BYTES, args.timeout)
+            except urllib.error.HTTPError as e:
+                print(f"Error: {remote_path} could not be read ({e.code})", file=sys.stderr)
+                return 3
+            except OSError as e:
+                # The target going away is how an unbounded follow is meant to
+                # end. A single dropped connection is not that, so require the
+                # target to stay unreachable before believing it.
+                now = time.time()
+                if unreachable_since is None:
+                    unreachable_since = now
+                elif now - unreachable_since >= LOGS_DISCONNECT_GRACE:
+                    print(
+                        f"-- {remote_path} unreachable for {int(now - unreachable_since)}s "
+                        f"({e}); the target is gone, stopping --",
+                        file=sys.stderr,
+                    )
+                    return 0
+                time.sleep(interval)
+                continue
+            unreachable_since = None
+
+            if chunk:
+                sink.write(chunk)
+                sink.flush()
+                offset += len(chunk)
+                # A full window means more is already waiting; go straight back
+                # for it rather than sleeping through a backlog.
+                if len(chunk) == PULL_CHUNK_BYTES:
+                    continue
+            elif total is not None and total < offset:
+                # Unity rotates Player.log to Player-prev.log and starts a new
+                # one. Reading from the old offset would skip the new file's
+                # beginning, so start it over.
+                print(
+                    f"-- {remote_path} restarted ({total} bytes, was reading at {offset}) --",
+                    file=sys.stderr,
+                )
+                offset = 0
+                continue
+
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        print("", file=sys.stderr)
+    finally:
+        if state_path is not None:
+            state_path.unlink(missing_ok=True)
     return 0
 
 
@@ -2407,6 +2785,29 @@ def main():
     sp_pull.add_argument("-o", "--output", default=None, metavar="FILE",
                          help="Local destination (default: the remote file's name in the cwd)")
 
+    sp_logs = sub.add_parser("logs", parents=[shared],
+                             help="Follow a log file on the editor or player being addressed")
+    sp_logs.add_argument("path", metavar="PATH", nargs="?", default=None,
+                         help="Log file to follow (default: the target's own consoleLogPath). "
+                              "Absolute, or relative to the target's persistentDataPath")
+    sp_logs.add_argument("--since-start", action="store_true",
+                         help="Start from the beginning of the file instead of from its current end")
+    sp_logs.add_argument("--interval", type=float, default=LOGS_POLL_SECONDS, metavar="SECONDS",
+                         help=f"Seconds between polls (default: {LOGS_POLL_SECONDS})")
+    # Following forever would hang an agent that cannot press Ctrl+C, so the
+    # run is bounded like every other waiting subcommand.
+    sp_logs.add_argument("--wait", type=int, default=None, metavar="TIMEOUT",
+                         help=f"Seconds to keep following, or 0 to follow until the target goes "
+                              f"away (default: {LOGS_DEFAULT_WAIT} in the foreground, 0 detached; "
+                              f"a non-zero value is capped at 600)")
+    sp_logs.add_argument("--background", action="store_true",
+                         help="Collect into a file in the background and print its path, "
+                              "leaving the terminal free for other commands")
+    sp_logs.add_argument("--stop", action="store_true",
+                         help="Stop the background follower for this target")
+    sp_logs.add_argument("--state-file", default=None, metavar="FILE",
+                         help=argparse.SUPPRESS)
+
     sp_test = sub.add_parser("test", parents=[shared],
                              help="Run Unity Test Framework tests and wait for results")
     sp_test.add_argument("testmode", nargs="?", choices=["editmode", "playmode"],
@@ -2661,6 +3062,9 @@ def main():
         )
         sys.exit(3)
 
+    if args.cmd == "logs" and args.wait is None:
+        args.wait = LOGS_BACKGROUND_WAIT if args.background else LOGS_DEFAULT_WAIT
+
     # Validate --wait range
     if hasattr(args, "wait") and args.wait is not None:
         if args.wait < 0:
@@ -2690,6 +3094,8 @@ def main():
         sys.exit(cmd_test(root, args, agent_root))
     if args.cmd == "pull":
         sys.exit(cmd_pull(root, args, agent_root))
+    if args.cmd == "logs":
+        sys.exit(cmd_logs(root, args, agent_root))
     if args.cmd == "catalog":
         if root is None:
             print("Error: no Unity project found.", file=sys.stderr)
