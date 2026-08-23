@@ -10,7 +10,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 [![Codex](https://img.shields.io/badge/Codex-black.svg?logo=openai&logoColor=white)](https://github.com/openai/codex)
 
-61 个由 Unity 包提供的内置命令：默认六个创作域包含 56 个，另有 5 个显式控制面命令。<br/>
+62 个由 Unity 包提供的内置命令：默认六个创作域包含 56 个，另有 6 个显式控制面命令。<br/>
 依赖 **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** —— 基于 Roslyn 的 Unity 交互式 C# REPL。
 
 [快速开始](#-快速开始) · [使用方式](#-使用方式) · [命令](#-命令) · [自定义命令](#-自定义命令) · [架构](#️-架构)
@@ -39,6 +39,8 @@ CLI 命令通过 Agent 的 Skill 体系提供。
 - **无需 sidecar。** 服务直接运行在 Unity Editor 内。
 - **理解工作流。** 能处理 Unity 编译生命周期、Play Mode 和域重载。
 - **运行时 / IL2CPP 支持。** 可配合 HybridCLR 用于运行时构建。
+- **调试运行中的 player。** `--mode runtime` 寻址 player 而非编辑器——查看它的场景、
+  截图、录制 profiler——`cs pull` 则把它上面的任意文件取回本机，包括另一台机器上的。
 - **可演进 snippet 库。** 项目本地 C# snippet 带验证门、使用统计和老化机制。
 
 ### 🚀 快速开始
@@ -91,6 +93,7 @@ Agent 会发现最小相关 command contract，验证 mutation，只有结构化
 | `cs exec --file` | 以原始 C# 作为最终兜底 |
 | `cs refresh` | 刷新资产并等待编译 |
 | `cs test` | 运行 Unity Test Framework 测试并等待结果 |
+| `cs pull <path>` | 从当前寻址的进程取回一个文件 |
 | `cs catalog sync` / `cs catalog list` | 维护共享的自定义命令候选目录 |
 | `cs snippets …` | 发现和维护可复用 C# snippet |
 
@@ -190,7 +193,7 @@ AI Agent
           ├─ 渐进发现 + package-contract preflight
           └─ HTTP bridge
               └─ Unity Editor/Player 中的 com.zh1zh1.csharpconsole
-                  ├─ package-owned registry（56 authoring + 5 control）
+                  ├─ package-owned registry（56 authoring + 6 control）
                   ├─ command handlers
                   └─ Roslyn compiler / REPL executor
 ```

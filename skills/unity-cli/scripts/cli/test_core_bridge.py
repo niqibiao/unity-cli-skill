@@ -1208,5 +1208,148 @@ class CanonicalBatchBridgeTests(unittest.TestCase):
             self.assertIn("type", result["summary"])
 
 
+def _prepared(command_id, namespace, action):
+    return {
+        "id": command_id,
+        "partition": "builtin",
+        "wire": {"commandNamespace": namespace, "action": action},
+        "args": {},
+    }
+
+
+class _RuntimeState:
+    """A runtime-mode SharedConfigState stand-in."""
+
+    def __init__(self, runtime_mode=True):
+        self.runtime_mode = runtime_mode
+        self.runtime_ip = "10.0.0.5"
+        self.runtime_port = 15503
+
+    def current_server_base_url(self):
+        return "http://127.0.0.1:14501/CSharpConsole"
+
+
+class _RecordingTransport:
+    def __init__(self, response):
+        self.response = response
+        self.urls = []
+
+    def post_json(self, url_base, endpoint, payload, timeout):
+        self.urls.append(url_base)
+        return self.response
+
+
+class RuntimeAddressingTests(unittest.TestCase):
+    """Which process each call is addressed to in runtime mode.
+
+    csharpconsole_core sends every endpoint but execute to the compile server,
+    so a path that forgets to say "the player answers this" silently runs
+    against the editor instead -- returning the editor's answer to a question
+    asked about the player.
+    """
+
+    PLAYER_URL = "http://10.0.0.5:15503/CSharpConsole"
+    EDITOR_URL = "http://127.0.0.1:14501/CSharpConsole"
+
+    def _models(self):
+        module = types.ModuleType("csharpconsole_core.models")
+        module.make_result = lambda ok, kind, result_type, exit_code, summary, *rest: {
+            "ok": ok,
+            "exitCode": exit_code,
+            "summary": summary,
+            "data": rest[-1] if rest and isinstance(rest[-1], dict) else {},
+        }
+        module.new_run_id = lambda: "run-1"
+        package = types.ModuleType("csharpconsole_core")
+        package.models = module
+        return {"csharpconsole_core": package, "csharpconsole_core.models": module}
+
+    def _session(self, response, runtime_mode=True):
+        session = object.__new__(core_bridge.ConsoleSession)
+        session._session_id = "shared"
+        session._mode_name = lambda: "runtime" if runtime_mode else "editor"
+        session._timeout = 10
+        session._state = _RuntimeState(runtime_mode)
+        transport = _RecordingTransport(response)
+        session._post = core_bridge._make_post_with_retry(
+            transport, session._state, 10, session._base_url
+        )
+        return session, transport
+
+    def _batch_envelope(self, count):
+        results = [
+            {
+                "ok": True,
+                "type": "",
+                "summary": "done",
+                "sessionId": "shared",
+                "commandNamespace": "runtime",
+                "action": "info",
+                "resultJson": "{}",
+            }
+            for _ in range(count)
+        ]
+        return json.dumps(
+            {
+                "ok": True,
+                "type": "",
+                "summary": f"Batch: {count}/{count} succeeded",
+                "sessionId": "",
+                "dataJson": json.dumps(
+                    {
+                        "ok": True,
+                        "total": count,
+                        "succeeded": count,
+                        "failed": 0,
+                        "resultsJson": json.dumps(results),
+                    }
+                ),
+            }
+        )
+
+    def test_batch_is_addressed_to_the_player_in_runtime_mode(self):
+        session, transport = self._session(self._batch_envelope(1))
+        prepared = [_prepared("runtime/info", "runtime", "info")]
+
+        with mock.patch.dict(sys.modules, self._models()):
+            session.batch(prepared)
+
+        self.assertEqual([self.PLAYER_URL], transport.urls)
+
+    def test_batch_stays_with_the_editor_outside_runtime_mode(self):
+        session, transport = self._session(self._batch_envelope(1), runtime_mode=False)
+        prepared = [_prepared("runtime/info", "runtime", "info")]
+
+        with mock.patch.dict(sys.modules, self._models()):
+            session.batch(prepared)
+
+        self.assertEqual([self.EDITOR_URL], transport.urls)
+
+    def test_batch_refuses_registry_owning_commands_in_runtime_mode(self):
+        session, transport = self._session(self._batch_envelope(2))
+        prepared = [
+            _prepared("runtime/info", "runtime", "info"),
+            _prepared("command/list", "command", "list"),
+        ]
+
+        with mock.patch.dict(sys.modules, self._models()):
+            result = session.batch(prepared)
+
+        self.assertFalse(result["ok"])
+        self.assertIn("command/list", result["summary"])
+        self.assertEqual([], transport.urls)
+
+    def test_batch_clears_the_player_flag_when_the_post_fails(self):
+        session, transport = self._session(self._batch_envelope(1))
+        session._post = mock.Mock(side_effect=RuntimeError("boom"))
+        prepared = [_prepared("runtime/info", "runtime", "info")]
+
+        with mock.patch.dict(sys.modules, self._models()):
+            session.batch(prepared)
+
+        self.assertFalse(session._answered_by_player)
+        self.assertEqual(self.EDITOR_URL, session._base_url())
+
+
 if __name__ == "__main__":
     unittest.main()

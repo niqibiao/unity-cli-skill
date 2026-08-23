@@ -10,8 +10,8 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-blueviolet.svg?logo=anthropic)](https://claude.ai/code)
 [![Codex](https://img.shields.io/badge/Codex-black.svg?logo=openai&logoColor=white)](https://github.com/openai/codex)
 
-61 package-owned built-ins: 56 authoring commands across six default domains and
-5 explicit control-plane commands.<br/>
+62 package-owned built-ins: 56 authoring commands across six default domains and
+6 explicit control-plane commands.<br/>
 Depends on **[unity-csharpconsole](https://github.com/niqibiao/unity-csharpconsole)** — a Roslyn-powered interactive C# REPL for Unity.
 
 [Quick Start](#-quick-start) · [Usage](#-usage) · [Commands](#-commands) · [Custom Commands](#-custom-commands) · [Architecture](#️-architecture)
@@ -42,6 +42,9 @@ CLI commands are exposed through the agent's skill system.
 - **Workflow-aware.** Understands Unity's compile lifecycle, play mode, and domain
   reload.
 - **Runtime / IL2CPP support.** Works with HybridCLR for runtime builds.
+- **Debug a running player.** `--mode runtime` addresses the player instead of
+  the editor — inspect its scene, screenshot it, record a profiler capture — and
+  `cs pull` brings any file back from it, including one on another machine.
 - **Self-evolving snippet library.** Project-local C# snippets have a validation
   gate, usage tracking, and aging.
 
@@ -96,6 +99,7 @@ Everything ships in one skill (`unity-cli`):
 | `cs exec --file` | Run raw C# as the final fallback |
 | `cs refresh` | Refresh assets and wait for compilation |
 | `cs test` | Run Unity Test Framework tests and wait for results |
+| `cs pull <path>` | Retrieve a file from the process being addressed |
 | `cs catalog sync` / `cs catalog list` | Maintain the shared custom-command shortlist |
 | `cs snippets …` | Browse and maintain reusable C# snippets |
 
@@ -198,7 +202,7 @@ AI Agent
           ├─ progressive discovery + package-contract preflight
           └─ HTTP bridge
               └─ com.zh1zh1.csharpconsole in Unity Editor/Player
-                  ├─ package-owned registry (56 authoring + 5 control)
+                  ├─ package-owned registry (56 authoring + 6 control)
                   ├─ command handlers
                   └─ Roslyn compiler / REPL executor
 ```

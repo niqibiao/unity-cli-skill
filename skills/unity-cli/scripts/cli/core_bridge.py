@@ -133,8 +133,11 @@ def _ensure_path(core_path):
         sys.path.insert(0, sp)
 
 
-def _make_post_with_retry(transport_http, state, default_timeout):
-    """Create a POST function that retries one refused connection."""
+def _make_post_with_retry(transport_http, state, default_timeout, base_url=None):
+    """Create a POST function that retries one refused connection.
+
+    *base_url* names the service each call is addressed to; without it the
+    core's own mode-based choice applies."""
     # The urllib-based core raises TransportError for every transport failure
     # (connection refused, timeout, non-2xx). Older requests-based cores raised
     # OSError subclasses instead. Catch both so the domain-reload retry survives
@@ -149,7 +152,7 @@ def _make_post_with_retry(transport_http, state, default_timeout):
 
     def _post(endpoint, payload, timeout=None):
         t = timeout if timeout is not None else default_timeout
-        url_base = state.current_server_base_url()
+        url_base = base_url() if base_url is not None else state.current_server_base_url()
         try:
             return transport_http.post_json(url_base, endpoint, payload, t)
         except transport_failures as error:
@@ -461,6 +464,11 @@ def _normalize_command_result(result, command_id, namespace, action):
 class ConsoleSession:
     """Pre-wired facade over csharpconsole_core. One-liner per command."""
 
+    # Class-level defaults so a session assembled piecemeal -- as tests do when
+    # they exercise one seam -- still answers the routing question.
+    _state = None
+    _answered_by_player = False
+
     def __init__(self, project_root, ip="127.0.0.1", port=DEFAULT_EDITOR_PORT, mode="editor", timeout=30,
                  agent_root=None, pkg_dir=None,
                  compile_ip=None, compile_port=None, session_id=None):
@@ -491,7 +499,12 @@ class ConsoleSession:
 
         self._session_id = client_base.generate_session_id(session_id)
         self._timeout = timeout
-        self._post = _make_post_with_retry(transport_http, state, timeout)
+        # csharpconsole_core sends every endpoint except execute to the compile
+        # server, which is the editor. That is right for refresh and compiling,
+        # but health and commands are about the process being addressed, so in
+        # runtime mode they have to reach the player instead. Set per call.
+        self._answered_by_player = False
+        self._post = _make_post_with_retry(transport_http, state, timeout, self._base_url)
         self._mode_name = lambda: state.current_mode_name()
         # Placeholders required by csharpconsole_core API for persistent
         # using/define directives. Empty for CLI usage; the interactive REPL
@@ -517,7 +530,21 @@ class ConsoleSession:
             self._define, self._using, code, self._session_id, reset,
         )
 
+    # Registry discovery stays with the editor even in runtime mode. A player
+    # registers a subset, and the per-project cache is keyed by project alone,
+    # so answering these from the player would overwrite the editor's contracts
+    # with a shorter list and make later preflight reject valid commands.
+    EDITOR_OWNED_COMMANDS = frozenset({"command/list", "command/registry.snapshot"})
+
     def _request_command(self, namespace, action, args=None):
+        # Preflight has already refused anything marked editor-only in runtime
+        # mode, so whatever reaches here is answerable by the player.
+        self._answered_by_player = bool(
+            self._state is not None
+            and self._state.runtime_mode
+            and f"{namespace}/{action}" not in self.EDITOR_OWNED_COMMANDS
+        )
+
         def parse_strict(raw, session_id, mode, run_id, duration_ms):
             return _parse_command_http_response_strict(
                 self._parser.parse_command_http_response,
@@ -531,11 +558,14 @@ class ConsoleSession:
                 expected_session_id=self._session_id,
             )
 
-        return self._cmd.request_command(
-            self._post, parse_strict,
-            self._mode_name, namespace, action, self._session_id, args,
-            timeout_seconds=self._timeout,
-        )
+        try:
+            return self._cmd.request_command(
+                self._post, parse_strict,
+                self._mode_name, namespace, action, self._session_id, args,
+                timeout_seconds=self._timeout,
+            )
+        finally:
+            self._answered_by_player = False
 
     def command(self, prepared):
         """Execute one preflighted canonical command."""
@@ -548,10 +578,22 @@ class ConsoleSession:
             action,
         )
 
+    def _base_url(self):
+        if self._answered_by_player:
+            return f"http://{self._state.runtime_ip}:{self._state.runtime_port}/CSharpConsole"
+        return self._state.current_server_base_url()
+
     def health(self):
-        return self._client.request_health(
-            self._post, self._parser.parse_health_http_response, self._mode_name,
-        )
+        # "Is the service I am addressing alive?" -- in runtime mode that is the
+        # player, not the editor. Reporting the editor's health here would call
+        # a dead player healthy.
+        self._answered_by_player = bool(self._state is not None and self._state.runtime_mode)
+        try:
+            return self._client.request_health(
+                self._post, self._parser.parse_health_http_response, self._mode_name,
+            )
+        finally:
+            self._answered_by_player = False
 
     def refresh(self, exit_playmode=False, changed_files=None):
         payload = {}
@@ -651,9 +693,35 @@ class ConsoleSession:
         except ValueError as exc:
             return failure(f"Invalid prepared batch command: {exc}")
 
+        # A batch is one roundtrip, so the whole of it is answered by whichever
+        # process it is sent to. The registry-owning commands cannot be split
+        # out of it, and answering them from a player would report its shorter
+        # list under the same command id that the editor answers differently.
+        if self._state is not None and self._state.runtime_mode:
+            editor_owned = [
+                command_id
+                for command_id, namespace, action in canonical
+                if f"{namespace}/{action}" in self.EDITOR_OWNED_COMMANDS
+            ]
+            if editor_owned:
+                return failure(
+                    f"{', '.join(editor_owned)} is answered by the editor, which owns "
+                    "the registry, so it cannot travel in a runtime-mode batch. "
+                    "Request it separately without --mode runtime."
+                )
+
         payload = {"commands": items, "stopOnError": stop_on_error}
+        # Same rule as _request_command: in runtime mode the player answers.
+        # Without this the batch would go to the compile server -- the editor --
+        # and silently run against the wrong process.
+        self._answered_by_player = bool(
+            self._state is not None and self._state.runtime_mode
+        )
         try:
-            raw = self._post("batch", payload)
+            try:
+                raw = self._post("batch", payload)
+            finally:
+                self._answered_by_player = False
             envelope = _load_json_strict(raw, "batch response")
             _validate_envelope(envelope, "batch envelope")
             if envelope["sessionId"]:
