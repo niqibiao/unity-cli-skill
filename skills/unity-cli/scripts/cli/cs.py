@@ -554,12 +554,13 @@ def _resolve_remote_path(requested, info):
     """Return the path to fetch on the target, and how it was arrived at.
 
     A relative path is taken against the target's persistentDataPath, which is
-    where a project's own logs and saves live. An absolute path is used as
-    given, unless it is clearly one machine's copy of another's data directory
-    -- a path picked off a desktop for a file that is really on a phone. In that
-    case the tail after the product folder is re-anchored to the target."""
+    where a project's own logs and saves live, and is the form to use for a
+    target on another machine: on Android and iOS there is no absolute path a
+    user could hold in the first place. An absolute path is therefore taken to
+    name a file on the target itself and is used as given -- deriving one
+    machine's path from another's would mis-resolve any path that merely
+    contains the product name, such as the player's own install directory."""
     persistent = (info.get("persistentDataPath") or "").replace("\\", "/").rstrip("/")
-    product = info.get("productName") or ""
     normalized = requested.replace("\\", "/")
 
     if not PurePath(normalized).is_absolute():
@@ -569,13 +570,6 @@ def _resolve_remote_path(requested, info):
 
     if persistent and normalized.lower().startswith(persistent.lower()):
         return normalized, "absolute, already under the target's persistentDataPath"
-
-    if persistent and product:
-        marker = f"/{product}/"
-        cut = normalized.lower().rfind(marker.lower())
-        if cut >= 0:
-            tail = normalized[cut + len(marker):]
-            return f"{persistent}/{tail}", f"re-anchored on '{product}' to the target's persistentDataPath"
 
     return normalized, "absolute, used as given"
 

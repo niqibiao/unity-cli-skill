@@ -16,6 +16,12 @@ probes 15500-15509 (all at once, 1s each) because a player writes no port file.
 If nothing answers there, commands that need the player exit 3 and say so rather
 than falling back to the editor.
 
+**The editor has to be running too**, except for `cs health` and `cs pull`.
+Every canonical command is checked against the package-owned registry before it
+is sent, and the editor is the registry's authority — with it closed, `cs
+command` and `cs batch` refuse rather than dispatch against an unverifiable
+contract. So debugging a player still means a live editor on the project.
+
 ## What the player answers
 
 23 of the 62 commands. The rest need the editor and say so if asked:
@@ -33,6 +39,10 @@ or `Renderer` keep their state in native properties rather than serialized
 fields, so the player refuses them instead of reporting a different shape than
 the editor does.
 
+`cs batch --mode runtime` reaches the player as a single roundtrip, so
+`command/list` and `command/registry.snapshot` — which the editor owns — are
+refused inside one. Request those separately without `--mode runtime`.
+
 `cs refresh`, `cs doctor`, `cs wait-ready` and `cs test` always target the
 editor; `--mode runtime` does not change them, because compilation is the
 editor's job. `cs exec --mode runtime` still compiles in the editor and executes
@@ -46,16 +56,16 @@ under `--mode runtime`, otherwise the editor.
 ```bash
 cs command -i - --mode runtime          # {"id":"runtime/info","args":{}}
 cs pull logs/game.log --mode runtime -o game.log
-cs pull "C:/Users/me/AppData/LocalLow/Studio/Game/logs/game.log" --mode runtime
 ```
 
 Path resolution, reported on every successful pull so it is never a guess:
 
-- **relative** — resolved against the target's `persistentDataPath`
-- **absolute, already under that directory** — used as given
-- **absolute from a different machine** — the tail after the product folder is
-  re-anchored to the target's `persistentDataPath`. This is the case where a
-  path was read off a desktop for a file that actually lives on a phone.
+- **relative** — resolved against the target's `persistentDataPath`. Use this
+  form for a target on another machine or a device; on Android and iOS there is
+  no absolute path to hold in the first place.
+- **absolute** — a path on the target itself, used as given. It is never
+  rewritten to point somewhere else, so a path under the player's own install
+  directory works even when that directory is named after the product.
 
 One response is capped at 32MB; `cs pull` requests successive ranges on its own,
 so file size is not a limit.

@@ -11,7 +11,7 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
-## [2.3.0] - 2026-08-19
+## [2.3.0] - 2026-08-23
 
 ### Fixed
 
@@ -26,13 +26,21 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   overwrite the project's cached contracts with its shorter list.
 - When no player answers on 15500-15509, commands that need one exit 3 and say
   so instead of falling back to the editor.
+- `cs batch --mode runtime` sent the whole batch to the editor while `cs command`
+  reached the player, so the same command id answered from a different process
+  depending on how it was invoked — and a batch of mutations applied to the
+  editor. A batch is one roundtrip, so `command/list` and
+  `command/registry.snapshot` cannot be split out of it and are refused there
+  instead; request them separately without `--mode runtime`.
 
 ### Added
 
 - **`cs pull`** retrieves a file from whichever process is being addressed. A
-  relative path resolves against the target's `persistentDataPath`; an absolute
-  path from another machine has its tail re-anchored there. Every pull reports
-  which rule applied. Large files are fetched as successive ranges.
+  relative path resolves against the target's `persistentDataPath` — the form to
+  use against another machine, since Android and iOS give a user no absolute
+  path to hold. An absolute path names a file on the target and is used as
+  given. Every pull reports which rule applied. Large files are fetched as
+  successive ranges.
 - **`references/player.md`** covers debugging a running player: what it answers,
   why a device reports no `consoleLogPath`, and how to record a profiler capture
   on a device and open it at home.

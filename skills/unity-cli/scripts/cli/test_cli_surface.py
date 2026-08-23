@@ -504,5 +504,62 @@ class CliSurfaceTests(unittest.TestCase):
         self.assertEqual(project, offline_handler.call_args.args[0])
 
 
+class PullPathResolutionTests(unittest.TestCase):
+    """Where `cs pull` decides a requested path lives on the target.
+
+    A target on another machine is addressed with a relative path -- on Android
+    and iOS the user has no absolute path to give. So an absolute path names a
+    file on the target itself and is taken literally; inferring one machine's
+    layout from another's would mis-resolve any path that merely contains the
+    product name, the player's own install directory among them.
+    """
+
+    INFO = {
+        "persistentDataPath": "C:/Users/me/AppData/LocalLow/Studio/Game",
+        "productName": "Game",
+        "companyName": "Studio",
+    }
+
+    def test_relative_path_resolves_against_persistent_data_path(self):
+        path, how = CS._resolve_remote_path("logs/game.log", self.INFO)
+
+        self.assertEqual(
+            "C:/Users/me/AppData/LocalLow/Studio/Game/logs/game.log", path
+        )
+        self.assertIn("persistentDataPath", how)
+
+    def test_absolute_path_under_persistent_data_path_is_kept(self):
+        requested = "C:/Users/me/AppData/LocalLow/Studio/Game/logs/game.log"
+
+        path, how = CS._resolve_remote_path(requested, self.INFO)
+
+        self.assertEqual(requested, path)
+        self.assertIn("already under", how)
+
+    def test_absolute_path_containing_the_product_name_is_not_re_anchored(self):
+        # The player's own install directory sits under a folder named for the
+        # product. Re-anchoring it onto persistentDataPath produced a 404 for a
+        # file that exists exactly where it was asked for.
+        requested = "E:/Projects/Game/Build/Dev/Game_Data/boot.config"
+
+        path, how = CS._resolve_remote_path(requested, self.INFO)
+
+        self.assertEqual(requested, path)
+        self.assertIn("used as given", how)
+
+    def test_backslash_paths_are_normalized(self):
+        path, _ = CS._resolve_remote_path(r"logs\game.log", self.INFO)
+
+        self.assertEqual(
+            "C:/Users/me/AppData/LocalLow/Studio/Game/logs/game.log", path
+        )
+
+    def test_relative_path_survives_a_target_without_persistent_data_path(self):
+        path, how = CS._resolve_remote_path("logs/game.log", {})
+
+        self.assertEqual("logs/game.log", path)
+        self.assertIn("no persistentDataPath", how)
+
+
 if __name__ == "__main__":
     unittest.main()

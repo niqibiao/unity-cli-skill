@@ -77,6 +77,7 @@ missing explicit session ids fail without executing Unity.
 | `cs wait-ready [--timeout N]` | pre/post | Wait until the service is genuinely ready |
 | `cs refresh [--wait TIMEOUT] [--exit-playmode]` | post | Refresh assets and compile |
 | `cs test [playmode] [--filter NAME] [--wait TIMEOUT]` | post | Run Unity Test Framework tests and wait for results |
+| `cs pull PATH [--mode runtime] [-o FILE]` | post | Retrieve a file from the process being addressed |
 | `cs list-commands --offline … --json` | pre/post | Discover the validated cache or generated built-in fallback |
 | `cs list-commands … --json` | post | Compare and progressively inspect the installed package registry |
 | `cs catalog sync` / `cs catalog list` | post | Maintain the custom-command catalog |

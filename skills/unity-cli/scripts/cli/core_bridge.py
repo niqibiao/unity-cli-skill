@@ -693,9 +693,35 @@ class ConsoleSession:
         except ValueError as exc:
             return failure(f"Invalid prepared batch command: {exc}")
 
+        # A batch is one roundtrip, so the whole of it is answered by whichever
+        # process it is sent to. The registry-owning commands cannot be split
+        # out of it, and answering them from a player would report its shorter
+        # list under the same command id that the editor answers differently.
+        if self._state is not None and self._state.runtime_mode:
+            editor_owned = [
+                command_id
+                for command_id, namespace, action in canonical
+                if f"{namespace}/{action}" in self.EDITOR_OWNED_COMMANDS
+            ]
+            if editor_owned:
+                return failure(
+                    f"{', '.join(editor_owned)} is answered by the editor, which owns "
+                    "the registry, so it cannot travel in a runtime-mode batch. "
+                    "Request it separately without --mode runtime."
+                )
+
         payload = {"commands": items, "stopOnError": stop_on_error}
+        # Same rule as _request_command: in runtime mode the player answers.
+        # Without this the batch would go to the compile server -- the editor --
+        # and silently run against the wrong process.
+        self._answered_by_player = bool(
+            self._state is not None and self._state.runtime_mode
+        )
         try:
-            raw = self._post("batch", payload)
+            try:
+                raw = self._post("batch", payload)
+            finally:
+                self._answered_by_player = False
             envelope = _load_json_strict(raw, "batch response")
             _validate_envelope(envelope, "batch envelope")
             if envelope["sessionId"]:
