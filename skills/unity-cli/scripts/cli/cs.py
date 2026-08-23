@@ -550,6 +550,20 @@ def cmd_wait_ready(root, args, agent_root=None):
 PULL_CHUNK_BYTES = 32 * 1024 * 1024
 
 
+def _is_absolute_on_target(path):
+    """Whether *path* is absolute on the machine that owns the file.
+
+    PurePath would answer for the platform running the CLI, which is the wrong
+    question: a POSIX CLI reads a player's `C:/Users/...` as relative, and a
+    Windows CLI reads a device's `/storage/emulated/0/...` the same way. Both
+    are absolute where the file actually lives, and driving one platform from
+    another is the case this exists for. Backslashes are already normalized to
+    forward slashes by the caller."""
+    if path.startswith("/"):
+        return True
+    return len(path) >= 3 and path[0].isalpha() and path[1] == ":" and path[2] == "/"
+
+
 def _resolve_remote_path(requested, info):
     """Return the path to fetch on the target, and how it was arrived at.
 
@@ -563,10 +577,10 @@ def _resolve_remote_path(requested, info):
     persistent = (info.get("persistentDataPath") or "").replace("\\", "/").rstrip("/")
     normalized = requested.replace("\\", "/")
 
-    if not PurePath(normalized).is_absolute():
+    if not _is_absolute_on_target(normalized):
         if not persistent:
             return normalized, "used as given (the target reports no persistentDataPath)"
-        return f"{persistent}/{normalized.lstrip('/')}", "relative to the target's persistentDataPath"
+        return f"{persistent}/{normalized}", "relative to the target's persistentDataPath"
 
     if persistent and normalized.lower().startswith(persistent.lower()):
         return normalized, "absolute, already under the target's persistentDataPath"

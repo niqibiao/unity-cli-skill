@@ -560,6 +560,49 @@ class PullPathResolutionTests(unittest.TestCase):
         self.assertEqual("logs/game.log", path)
         self.assertIn("no persistentDataPath", how)
 
+    def test_absoluteness_is_judged_for_the_target_not_the_local_platform(self):
+        # Driving a Windows player from a POSIX host, or an Android device from
+        # Windows, is the case this feature exists for. PurePath would answer
+        # for whichever platform runs the CLI and mangle the other one.
+        for path in (
+            "C:/Users/me/AppData/LocalLow/Studio/Game/logs/game.log",
+            r"D:\Games\Build\Game_Data\boot.config".replace("\\", "/"),
+            "/storage/emulated/0/Android/data/com.studio.game/files/run.log",
+            "/var/mobile/Containers/Data/Application/ABC/Documents/run.log",
+            "//buildserver/share/Game/logs/game.log",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(CS._is_absolute_on_target(path))
+
+        for path in ("logs/game.log", "run.log", "a/b/c.txt", "C:relative.txt"):
+            with self.subTest(path=path):
+                self.assertFalse(CS._is_absolute_on_target(path))
+
+    def test_android_target_takes_a_posix_absolute_path_as_given(self):
+        android = {
+            "persistentDataPath": "/storage/emulated/0/Android/data/com.studio.game/files",
+            "productName": "Game",
+            "companyName": "Studio",
+        }
+        requested = "/storage/emulated/0/Android/data/com.studio.game/files/logs/run.log"
+
+        path, how = CS._resolve_remote_path(requested, android)
+
+        self.assertEqual(requested, path)
+        self.assertIn("already under", how)
+
+    def test_windows_path_is_not_glued_onto_a_posix_persistent_data_path(self):
+        android = {
+            "persistentDataPath": "/storage/emulated/0/Android/data/com.studio.game/files",
+            "productName": "Game",
+            "companyName": "Studio",
+        }
+
+        path, how = CS._resolve_remote_path("C:/Users/me/notes.txt", android)
+
+        self.assertEqual("C:/Users/me/notes.txt", path)
+        self.assertIn("used as given", how)
+
 
 if __name__ == "__main__":
     unittest.main()
