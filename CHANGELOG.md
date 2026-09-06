@@ -11,6 +11,21 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-09-06
+
+### Changed
+
+- **`exec-code.md` now documents two Roslyn REPL statement-form pitfalls** that
+  make otherwise-correct C# fail to compile in a raw `cs exec` fallback.
+  Expression auto-return applies only to the final expression and only when it
+  has no trailing `;` — a trailing semicolon (or the same expression placed
+  mid-script) makes it a statement, and a member access, comparison, or ternary
+  in statement position is `CS0201`; drop the `;` or write `return <expr>;`.
+  Separately, top-level code is not inside a class instance, so members inherited
+  from `object` are out of unqualified scope — call `object.Equals(a, b)`, not a
+  bare `Equals(a, b)` (a bare call is `CS0103`). Both were verified against the
+  live REPL.
+
 ## [2.3.1] - 2026-08-23
 
 ### Added

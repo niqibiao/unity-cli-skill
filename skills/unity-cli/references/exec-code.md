@@ -38,8 +38,20 @@ The examples below show only the C# code — put it in the `.cs` file.
 
 This is a Roslyn REPL, not a simple eval. Non-obvious capabilities and limits:
 
-- **Top-level syntax** — no `class`/`Main` boilerplate; write statements directly
-- **Expression auto-return** — the last expression value is returned in the result; prefer over `Debug.Log`
+- **Top-level syntax** — no `class`/`Main` boilerplate; write statements directly.
+  Top-level code is not inside a class instance, so members inherited from
+  `object` are not in unqualified scope: call `object.Equals(a, b)` /
+  `object.ReferenceEquals(a, b)`, not a bare `Equals(a, b)` (a bare call is
+  `CS0103: The name 'Equals' does not exist`)
+- **Expression auto-return** — the value of the final expression is returned in
+  the result; prefer over `Debug.Log`. Auto-return applies **only** to the last
+  expression and **only when it has no trailing `;`** — a trailing semicolon (or
+  the same expression placed mid-script) makes it a statement, and a member
+  access, comparison, or ternary in statement position is
+  `CS0201: Only assignment, call, increment, decrement, await, and new object
+  expressions can be used as a statement`. Either drop the trailing `;`
+  (`cam.fieldOfView`) or write it as `return cam.fieldOfView;`. `return <expr>;`
+  is always safe and is the robust choice for a conditional/ternary result
 - **Opt-in cross-call state** — without `--session`, each CLI invocation gets a
   fresh session. Reuse the same explicit `--session <id>` only when later calls
   intentionally depend on variables, `using`s, types, or helpers from earlier calls
