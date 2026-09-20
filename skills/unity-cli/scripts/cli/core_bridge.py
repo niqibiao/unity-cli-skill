@@ -505,14 +505,16 @@ def _with_alignment_guidance(result, state):
         "Ask the user for this build's compile-set ZIP (CSharpConsoleCompileSet.zip "
         "by default). It is exported on the build machine beside the build output, "
         "unless Project Settings > C# Console changes its path or disables export. "
-        "Ask whoever built it rather than searching this project. A file path "
+        "Ask whoever built it for the matching ZIP. If a candidate is already "
+        "available, its build GUID can be checked before asking for a decision. A file path "
         "and a URL both work, and the editor rejects a zip naming a different build. "
         "Skipping alignment instead is the user's decision; do not make it on their "
         "behalf. Then run one of:\n"
         f"  cs compile-set <zip|URL> {target}\n"
         f"  cs compile-set --skip {target}\n"
         "The editor keeps the decision per build, so it is answered once. Until it is, "
-        "runtime execution is unavailable; inspecting files does not substitute for it."
+        "runtime execution is unavailable; file inspection can provide supporting "
+        "evidence but does not bypass this gate."
     )
     result["summary"] = f"{result['summary']}\n{guidance}"
     data = result.get("data")

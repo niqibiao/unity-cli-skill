@@ -71,6 +71,17 @@ was compared during that invocation.
 
 ## Verification and retry policy
 
+`scene/hierarchy` and `prefab/asset_hierarchy` return `nodeCount`, `truncated`,
+and `truncationReasons`. `requested_depth` means the supplied depth omitted
+descendants; `node_limit` means the 5000-node budget was exhausted; `depth_limit`
+means the safety depth of 128 (root depth 0) was reached. Never treat a truncated
+tree as a complete inventory. `depth=-1` removes the requested depth limit while
+retaining these safety limits.
+
+Component type names returned by hierarchy, GameObject, and component commands
+are namespace-qualified. Pass them unchanged as `typeName`; project type short
+names such as `GameEntry` do not imply a namespace.
+
 A successful transport response is not by itself proof that the intended Unity
 state was reached.
 

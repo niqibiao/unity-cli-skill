@@ -302,19 +302,20 @@ before investigating anything else. `cs health --mode runtime` names the process
 that answers. Follow the command-first routing order for state inspection; use
 `cs exec --mode runtime --file <file>` for state the available commands cannot read.
 
-**Ask the process, not the files.** Once the runtime channel answers, settle every
-question about runtime state through it. Grepping the player's binaries, comparing
-build-directory timestamps, and inferring which executable is running are indirect
-evidence and a far longer path to the same answer. File-side forensics is for when
-nothing answers.
+Use the running process as the primary source for runtime state. If execution is
+unavailable or the question concerns which code a build contains, inspect logs,
+source and build artifacts as supporting evidence. Match build GUIDs where
+available, distinguish current source from shipped code, and label inferences.
+A substring hit or file timestamp alone does not establish which code executed.
 
 A runtime submission is refused with `[REPL ALIGNMENT REQUIRED]` when the editor
 holds no compile set for the build the player reports. Ask the user for that
 build's compile-set ZIP at once, naming the build. By default it is exported as
 `CSharpConsoleCompileSet.zip` beside the build output on the build machine;
 Project Settings > C# Console can change its path or disable export. Ask whoever
-built it for the matching ZIP rather than searching this project. Do not route
-around the refusal: until it is answered, runtime execution stays unavailable.
+built it for the matching ZIP. If a candidate is already available, checking its
+build GUID is useful evidence; do not register it or choose skip without the
+user's decision. File inspection does not bypass the runtime execution gate.
 
 Read a player log by collecting it first: `cs logs --mode runtime --background`
 returns the path of the file it writes, which can then be searched locally.

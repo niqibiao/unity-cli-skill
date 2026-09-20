@@ -1539,10 +1539,11 @@ class AlignmentGuidanceTests(unittest.TestCase):
             self.assertIn("b1ab0ce5", channel)
             self.assertIn(f"cs compile-set <zip|URL> {self.ADDRESS}", channel)
             self.assertIn(f"cs compile-set --skip {self.ADDRESS}", channel)
-        # Skipping stays the user's call, and the zip is asked for rather than
-        # hunted for locally: a remote player's build set was exported elsewhere.
+        # Skipping stays the user's call; a local candidate can be verified
+        # without treating file inspection as permission to bypass the gate.
         self.assertIn("on their behalf", result["summary"])
-        self.assertIn("rather than searching this project", result["summary"])
+        self.assertIn("build GUID can be checked", result["summary"])
+        self.assertIn("does not bypass this gate", result["summary"])
 
     def test_the_editor_is_named_even_when_it_was_never_stated(self):
         # ConsoleSession normalizes an unset --compile-ip to the local editor

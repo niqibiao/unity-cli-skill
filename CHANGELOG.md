@@ -11,6 +11,8 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-09-20
+
 ### Added
 
 - **`cs compile-set <zip|URL>` and `cs compile-set --skip`** answer the editor's
@@ -36,6 +38,16 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   update the package.
 
 ### Changed
+
+- Hierarchy responses now preserve deep trees and report `nodeCount`, `truncated`,
+  and `truncationReasons` (`requested_depth`, `node_limit`, or `depth_limit`).
+  Responses are bounded to 5000 nodes and depth 128 for JSON client safety. Component type names
+  are namespace-qualified so inspection output can be reused as `typeName`.
+  The pinned contract fixture is updated to match package 2.4.0.
+
+- Runtime debugging guidance permits supporting file evidence when execution is
+  unavailable or build contents need verification. File inspection does not
+  authorize registering a compile set or bypassing the alignment gate.
 
 - Text `cs health` output now identifies the answering process and its build.
   Failed runtime submissions include guidance for possible stripping, and an
@@ -72,8 +84,8 @@ the section matching the pushed tag (without the leading `v`) as release notes.
   The service used to classify any response text containing `exception` as
   `runtime_error` (exit 2), so an evaluation that returned such a word failed a
   command that had in fact succeeded. Classification now matches only the
-  failure text the service writes itself, and those results exit 0. Requires a
-  package with the narrowed classifier.
+  failure text the service writes itself, and those results exit 0. This is
+  included in package 2.4.0.
 
 ## [2.3.2] - 2026-09-06
 
