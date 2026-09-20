@@ -253,6 +253,53 @@ class CatalogV2Tests(unittest.TestCase):
             self.assertFalse(result["ok"])
             self.assertIn("preserved", result["summary"])
 
+    def test_sync_preserves_the_catalog_when_the_registry_cannot_be_read(self):
+        """A service whose answer will not parse must not cost the catalog.
+
+        The stale-registry case above is a registry the resolver understood and
+        distrusted. This is one it could not read at all -- the failure arrives
+        as an exception rather than a resolution, and takes a different exit
+        out of sync.
+        """
+
+        class _FailingResolver:
+            def __init__(self, root, *, session=None):
+                pass
+
+            def resolve(self):
+                raise registry_resolver.RegistryResolutionError(
+                    "registry payload is not valid JSON"
+                )
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            catalog_path = root / "catalog.json"
+            original = '{"doNotOverwrite":true}\n'
+            catalog_path.write_text(original, "utf-8")
+            args = SimpleNamespace(catalog_path=str(catalog_path), as_json=True)
+            stdout = io.StringIO()
+
+            with (
+                mock.patch.object(core_bridge, "find_package_dir", return_value=root),
+                mock.patch.object(CS, "_new_session", return_value=object()),
+                mock.patch.object(
+                    registry_resolver, "RegistryResolver", _FailingResolver,
+                ),
+                mock.patch.object(paths, "cache_root", return_value=root / "cache"),
+                contextlib.redirect_stdout(stdout),
+            ):
+                status = CS.cmd_catalog_sync(root, args, root)
+
+            self.assertEqual(1, status)
+            self.assertEqual(original, catalog_path.read_text("utf-8"))
+            result = json.loads(stdout.getvalue())
+            self.assertFalse(result["ok"])
+            # "Existing catalog preserved" alone would also pass on the four
+            # other exits from sync; the resolver's own words pin it to this one.
+            self.assertIn("Unable to resolve the current command registry", result["summary"])
+            self.assertIn("registry payload is not valid JSON", result["summary"])
+            self.assertIn("Existing catalog preserved", result["summary"])
+
     def test_sync_accepts_verified_empty_custom_partition(self):
         empty = _resolution(source="live")
         empty.snapshot["custom"] = {
