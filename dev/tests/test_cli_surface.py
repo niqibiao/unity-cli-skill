@@ -271,6 +271,40 @@ class CliSurfaceTests(unittest.TestCase):
         self.assertNotIn("buildGuid", health("")["data"])
         self.assertEqual("b1ab0ce5", health("b1ab0ce5")["data"]["buildGuid"])
 
+    def test_health_text_names_the_answering_process_without_changing_json(self):
+        for as_json in (False, True):
+            with self.subTest(as_json=as_json):
+                result = {"ok": True, "exitCode": 0, "summary": "Service is healthy",
+                          "data": {"initialized": True, "isEditor": False,
+                                   "buildGuid": "b1ab0ce5", "unityVersion": "2022.3",
+                                   "packageVersion": "2.3.1", "port": 15503}}
+                session = mock.Mock()
+                session.health.return_value = result
+                argv = [str(CLI), "health", "--mode", "runtime", "--port", "15503"]
+                if as_json:
+                    argv.append("--json")
+                with (
+                    mock.patch.object(sys, "argv", argv),
+                    mock.patch.object(CS, "find_project_root", return_value=Path("/project")),
+                    mock.patch.object(CS, "detect_port", return_value=14501),
+                    mock.patch("cli.core_bridge.find_package_dir", return_value=Path("/package")),
+                    mock.patch.object(CS, "_new_session", return_value=session),
+                    contextlib.redirect_stdout(io.StringIO()) as output,
+                    self.assertRaises(SystemExit) as exit_status,
+                ):
+                    CS.main()
+                self.assertEqual(0, exit_status.exception.code)
+                if as_json:
+                    payload = json.loads(output.getvalue())
+                    self.assertEqual("Service is healthy", payload["summary"])
+                    self.assertEqual("b1ab0ce5", payload["data"]["buildGuid"])
+                    session.emit.assert_not_called()
+                else:
+                    summary = session.emit.call_args.args[0]["summary"]
+                    self.assertIn("player", summary)
+                    self.assertIn("build b1ab0ce5", summary)
+                    self.assertIn("port 15503", summary)
+
     def test_compact_command_output_does_not_treat_business_data_as_health(self):
         business_data = {
             "initialized": True,

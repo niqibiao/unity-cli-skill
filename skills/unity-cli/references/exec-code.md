@@ -55,9 +55,9 @@ This is a Roslyn REPL, not a simple eval. Non-obvious capabilities and limits:
 - **Opt-in cross-call state** — without `--session`, each CLI invocation gets a
   fresh session. Reuse the same explicit `--session <id>` only when later calls
   intentionally depend on variables, `using`s, types, or helpers from earlier calls
-- **Private member access** — the compiler normally bypasses
-  `private`/`protected`/`internal` at compile time. A submission that triggers the
-  visibility fallback described below uses standard C# accessibility instead
+- **Private member access** — the compiler normally disables accessibility
+  checks, so access `private`/`protected`/`internal` members directly rather than
+  through reflection. The visibility fallback below uses standard C# access rules
 - **Pre-loaded usings** — `System` and `UnityEngine` are available by default. Add
   `using System.Linq;` or `using System.Collections.Generic;` explicitly when
   needed; a named session retains successfully compiled usings until that session
@@ -94,10 +94,19 @@ cs exec --session agent-a1b2c3 --file "<project-root>/Temp/CSharpConsole/AgentSc
 The second file may refer to variables or helpers declared by the first. Omit
 `--session` again when the dependency ends; unrelated work should get a fresh context.
 
-### Private member access and visibility fallback
+### Private member access, and the fallback that suspends it
 
 ```csharp
 var go = GameObject.Find("Main Camera"); go.m_InstanceID
+```
+
+A submission's top-level variables become fields of its script class, so a
+value whose **type** is non-public cannot be bound to one even though reading
+it is allowed. Use it inside an expression instead:
+
+```csharp
+var f = Service.s_InternalFactory;        // CS0052: Inconsistent accessibility
+return Service.s_InternalFactory != null; // the same read, accepted
 ```
 
 The REPL first compiles with accessibility checks disabled. If internal compatibility

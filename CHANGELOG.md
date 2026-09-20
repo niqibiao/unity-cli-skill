@@ -15,8 +15,9 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 - **`cs compile-set <zip|URL>` and `cs compile-set --skip`** answer the editor's
   one question about a running player: should code submitted to it be compiled
-  against the build it is actually running? Every player build now writes a
-  `CSharpConsoleCompileSet.zip` beside its output; hand that file — a path or an
+  against the build it is actually running? By default, player builds export
+  `CSharpConsoleCompileSet.zip` beside their output; Project Settings > C# Console
+  can disable export or override the path. Hand that file — a path or an
   http(s) URL — to `cs compile-set`, or decide with `--skip` that this build is
   compiled for without alignment. Like `cs exec --mode runtime`, `--ip`/`--port`
   name the player and the 15500-15509 range is probed when no `--port` is given;
@@ -36,13 +37,20 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ### Changed
 
+- Text `cs health` output now identifies the answering process and its build.
+  Failed runtime submissions include guidance for possible stripping, and an
+  exact command lookup in the wrong view names the view to query.
+
+- Developer tests, routing evaluations, and fixtures now live under `dev/` so
+  skill installation copies only the files needed at runtime.
+
 - **`cs exec --mode runtime` against a player that reports its build is refused
   until that build has a decision**, with exit code 1 and a summary beginning
   `[REPL ALIGNMENT REQUIRED]`. The CLI appends the `cs compile-set` command to
   run — with this call's own `--ip`/`--port` — to both the text summary and the
   `--json` envelope. Ask the user for the zip or for an explicit decision to
-  skip; skipping is not the agent's call to make. Players built before the
-  package reported a build GUID are unaffected and compile as they always did.
+  skip; skipping is not the agent's call to make. Players must report a valid
+  build GUID; older players must be rebuilt with the matching package version.
 
 - **`cs health --mode runtime` reports `buildGuid`**, the build the player came
   from — the same value `cs compile-set` registers against. The editor never has

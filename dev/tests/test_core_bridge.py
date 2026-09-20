@@ -1539,7 +1539,10 @@ class AlignmentGuidanceTests(unittest.TestCase):
             self.assertIn("b1ab0ce5", channel)
             self.assertIn(f"cs compile-set <zip|URL> {self.ADDRESS}", channel)
             self.assertIn(f"cs compile-set --skip {self.ADDRESS}", channel)
-        self.assertIn("skip on their behalf", result["summary"])
+        # Skipping stays the user's call, and the zip is asked for rather than
+        # hunted for locally: a remote player's build set was exported elsewhere.
+        self.assertIn("on their behalf", result["summary"])
+        self.assertIn("rather than searching this project", result["summary"])
 
     def test_the_editor_is_named_even_when_it_was_never_stated(self):
         # ConsoleSession normalizes an unset --compile-ip to the local editor
@@ -1576,6 +1579,55 @@ class AlignmentGuidanceTests(unittest.TestCase):
         )
 
         self.assertEqual(refusal["summary"], session.exec("1+1")["summary"])
+
+
+class StrippingGuidanceTests(unittest.TestCase):
+    def _exec(self, text, *, runtime=True, ok=False):
+        result = {"ok": ok, "exitCode": 0 if ok else 2,
+                  "summary": text, "data": {"text": text}}
+        session = object.__new__(core_bridge.ConsoleSession)
+        session._state = _RuntimeState(runtime_mode=runtime)
+        session._state.runtime_dll_path = ""
+        session._session_id = "stripping-test"
+        session._post = None
+        session._define = session._using = lambda: ""
+        session._parser = types.SimpleNamespace(parse_text_http_response=None)
+        session._client = types.SimpleNamespace(
+            execute_editor_request=lambda *a, **k: result,
+            execute_runtime_request=lambda *a, **k: result,
+        )
+        return session.exec("probe")
+
+    def test_runtime_missing_members_keep_the_error_and_guide_both_channels(self):
+        for text in (
+            "[C#Console] Execution error: MethodNotFind Foo.Bar",
+            "Compile failed: (1,1): error CS0117: 'Foo' has no member 'Bar'",
+            "Could not load type 'System.Reflection.MethodBody'",
+        ):
+            with self.subTest(text=text):
+                result = self._exec(text)
+                self.assertFalse(result["ok"])
+                self.assertEqual(2, result["exitCode"])
+                self.assertTrue(result["summary"].startswith(text + "\n"))
+                self.assertIn("cannot restore stripped code", result["summary"])
+                self.assertEqual(result["summary"], result["data"]["text"])
+
+    def test_editor_success_and_unrelated_failures_get_no_stripping_hint(self):
+        for text, runtime, ok in (
+            ("Compile failed: error CS0117", False, False),
+            ("MethodNotFind in a successful string result", True, True),
+            ("C# Exception: an unrelated failure", True, False),
+            ("Compile failed: error CS0103: unknown variable", True, False),
+        ):
+            with self.subTest(text=text):
+                result = self._exec(text, runtime=runtime, ok=ok)
+                self.assertEqual(text, result["summary"])
+                self.assertEqual(text, result["data"]["text"])
+
+    def test_alignment_refusal_never_suggests_working_around_stripping(self):
+        result = self._exec(core_bridge.ALIGNMENT_REQUIRED_MARKER + "\nMethodNotFind test")
+        self.assertIn("cs compile-set", result["summary"])
+        self.assertNotIn("retained API", result["summary"])
 
 
 if __name__ == "__main__":

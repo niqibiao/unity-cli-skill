@@ -295,6 +295,31 @@ executable contracts. An explicit `list-commands --id` lookup reports them under
 `denied` with `invoke=false`; classify that result as blocked and stop. Never
 route those intents to snippets or raw `exec` as an automatic fallback.
 
+### Debugging a running player
+
+When the question is about what a player actually does, open the runtime channel
+before investigating anything else. `cs health --mode runtime` names the process
+that answers. Follow the command-first routing order for state inspection; use
+`cs exec --mode runtime --file <file>` for state the available commands cannot read.
+
+**Ask the process, not the files.** Once the runtime channel answers, settle every
+question about runtime state through it. Grepping the player's binaries, comparing
+build-directory timestamps, and inferring which executable is running are indirect
+evidence and a far longer path to the same answer. File-side forensics is for when
+nothing answers.
+
+A runtime submission is refused with `[REPL ALIGNMENT REQUIRED]` when the editor
+holds no compile set for the build the player reports. Ask the user for that
+build's compile-set ZIP at once, naming the build. By default it is exported as
+`CSharpConsoleCompileSet.zip` beside the build output on the build machine;
+Project Settings > C# Console can change its path or disable export. Ask whoever
+built it for the matching ZIP rather than searching this project. Do not route
+around the refusal: until it is answered, runtime execution stays unavailable.
+
+Read a player log by collecting it first: `cs logs --mode runtime --background`
+returns the path of the file it writes, which can then be searched locally.
+A foreground follow streams the whole log, shader chatter included.
+
 ### Other subcommands
 
 | Task | Subcommand | Detail |

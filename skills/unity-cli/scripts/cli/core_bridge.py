@@ -502,14 +502,56 @@ def _with_alignment_guidance(result, state):
     target = (f"--ip {state.runtime_ip} --port {state.runtime_port} "
               f"--compile-ip {state.compile_ip} --compile-port {state.compile_port}")
     guidance = (
-        "Ask the user for this build's CSharpConsoleCompileSet.zip — the file beside the "
-        "build output, or a URL — or for an explicit decision to skip alignment; do not "
-        "decide to skip on their behalf. Then run one of:\n"
+        "Ask the user for this build's compile-set ZIP (CSharpConsoleCompileSet.zip "
+        "by default). It is exported on the build machine beside the build output, "
+        "unless Project Settings > C# Console changes its path or disables export. "
+        "Ask whoever built it rather than searching this project. A file path "
+        "and a URL both work, and the editor rejects a zip naming a different build. "
+        "Skipping alignment instead is the user's decision; do not make it on their "
+        "behalf. Then run one of:\n"
         f"  cs compile-set <zip|URL> {target}\n"
         f"  cs compile-set --skip {target}\n"
-        "The editor keeps the decision per build, so it is answered once."
+        "The editor keeps the decision per build, so it is answered once. Until it is, "
+        "runtime execution is unavailable; inspecting files does not substitute for it."
     )
     result["summary"] = f"{result['summary']}\n{guidance}"
+    data = result.get("data")
+    if isinstance(data, dict) and isinstance(data.get("text"), str):
+        data["text"] = f"{data['text']}\n{guidance}"
+    return result
+
+
+# Missing members in a player may have been stripped. Keep this a diagnostic
+# possibility: the same errors also result from a typo or a mismatched API.
+_STRIPPING_SYMPTOMS = ("MethodNotFind ", "Could not load type 'System.Reflection.")
+_STRIPPING_COMPILE_IDS = ("CS0117", "CS1061", "CS0308")
+
+
+def _looks_stripped(text):
+    """Whether a failed runtime submission reads like a member the build lacks."""
+    if any(symptom in text for symptom in _STRIPPING_SYMPTOMS):
+        return True
+    return "Compile failed" in text and any(
+        error_id in text for error_id in _STRIPPING_COMPILE_IDS
+    )
+
+
+def _with_stripping_guidance(result):
+    """Suggest stripping as one cause of missing members in runtime submissions."""
+    if result.get("ok"):
+        return result
+    summary = result.get("summary") or ""
+    if summary.startswith(ALIGNMENT_REQUIRED_MARKER) or not _looks_stripped(summary):
+        return result
+    guidance = (
+        "Check the member name and target type. This may also be managed code "
+        "stripping: player builds can remove unused members. Use a retained API or "
+        "rebuild with the required member preserved. For an existing non-public "
+        "member, direct access normally avoids reflection because submissions disable "
+        "accessibility checks; it cannot restore stripped code. See "
+        "references/player.md."
+    )
+    result["summary"] = f"{summary}\n{guidance}"
     data = result.get("data")
     if isinstance(data, dict) and isinstance(data.get("text"), str):
         data["text"] = f"{data['text']}\n{guidance}"
@@ -573,13 +615,14 @@ class ConsoleSession:
         # "compile" endpoint with targetIP/targetPort. Without this branch
         # we'd POST to "editor" and silently run in the local editor.
         if self._state.runtime_mode:
-            return _with_alignment_guidance(self._client.execute_runtime_request(
+            result = self._client.execute_runtime_request(
                 self._post, self._parser.parse_text_http_response,
                 self._define, self._using,
                 self._state.runtime_ip, self._state.runtime_port,
                 self._state.runtime_dll_path,
                 code, self._session_id, reset,
-            ), self._state)
+            )
+            return _with_stripping_guidance(_with_alignment_guidance(result, self._state))
         return self._client.execute_editor_request(
             self._post, self._parser.parse_text_http_response,
             self._define, self._using, code, self._session_id, reset,

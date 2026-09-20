@@ -6,9 +6,9 @@ or on a device — rather than about the editor.
 
 ```bash
 cs health --mode runtime               # is the player's service alive?
-cs command -i - --mode runtime         # any command the player answers
+cs command --input "<project-root>/Temp/CSharpConsole/AgentScratch/request.json" --mode runtime --json
 cs pull <path> --mode runtime -o out   # retrieve a file from the player
-cs exec --mode runtime --code "..."    # compile in the editor, run in the player
+cs exec --mode runtime --file "<project-root>/Temp/CSharpConsole/AgentScratch/inspect-player.cs"
 cs compile-set <zip|URL>               # what to compile that player's build against
 ```
 
@@ -49,13 +49,53 @@ editor; `--mode runtime` does not change them, because compilation is the
 editor's job. `cs exec --mode runtime` still compiles in the editor and executes
 the result in the player, so both must be reachable.
 
+## Reading state the player does not expose
+
+`component/get` reports serialized fields of project components. Other state --
+a nonserialized private field, a static manager, the value a system holds -- is
+reached with `cs exec --mode runtime`. The compiler normally disables
+accessibility checks, so access existing non-public members directly:
+
+```csharp
+Game.InventorySystem.s_Instance.m_Slots.Count
+((PlayerController)go.GetComponent(typeof(PlayerController))).m_State
+```
+
+Prefer this to reflection when only accessibility is the obstacle. Player builds
+can strip unused APIs, and IL2CPP limits some reflection operations. Direct access
+avoids depending on reflection APIs, but cannot restore a stripped member.
+An aligned compile set catches many missing members during compilation; its
+unstripped `mscorlib` replacement is needed by Roslyn and can still hide BCL
+stripping until execution. When a submission fails with `MethodNotFind` or a
+missing-member compiler error, check the member name and target type, then consider
+stripping. Use an API the build retained, or rebuild with the required member
+preserved. These limits depend on the build's backend and stripping settings.
+
+One trap. A submission's top-level variables become fields of its script class,
+so binding a value whose **type** is non-public fails even though reading it is
+allowed:
+
+```csharp
+var f = ConsoleHttpService.s_EnvelopeFactory;   // CS0052: Inconsistent accessibility
+```
+
+Use it inside an expression, or return a projection of it, and the same read
+compiles:
+
+```csharp
+return ConsoleHttpService.s_EnvelopeFactory != null;
+```
+
+See `exec-code.md` for the visibility fallback that a symbol collision triggers.
+
 ## Compiling for the player's build
 
 `cs exec --mode runtime` compiles in the editor and runs the result in the
 player, so the editor has to compile against the same assemblies and defines the
-build was made with. Each player build writes a `CSharpConsoleCompileSet.zip`
-beside its output for exactly that, and the editor asks once per build which way
-to go:
+build was made with. By default, a player build exports
+`CSharpConsoleCompileSet.zip` beside its output. Project Settings > C# Console
+can disable export or override the ZIP path; ask the build producer for the
+matching file. The editor asks once per build which way to go:
 
 ```bash
 cs compile-set /path/to/CSharpConsoleCompileSet.zip   # or an http(s) URL
@@ -86,11 +126,11 @@ build GUID. So it is answered once per build for every agent and client, it
 survives an editor restart, and re-registering or re-skipping overwrites it.
 Deleting `Library` forgets it, and the build is asked about again.
 
-Two things it does not cover. Code hot-reloaded into a running player after the
-build is not in that build's compile set, so a submission compiled against the
-set will not see it. And a player built before the package reported a build GUID
-has nothing to key a decision on; it compiles as it always did, with no question
-asked. `cs health --mode runtime` shows the `buildGuid` when there is one.
+Code hot-reloaded into a running player after the build is not in that build's
+compile set; update and re-register the set to expose those changes. A player
+must report a valid build GUID. Rebuild older players with the matching package
+version instead of silently compiling against the editor. `cs health --mode runtime`
+shows the `buildGuid`.
 
 `cs command` and `cs batch` are unaffected — they are dispatched, not compiled.
 
@@ -100,7 +140,7 @@ asked. `cs health --mode runtime` shows the `buildGuid` when there is one.
 under `--mode runtime`, otherwise the editor.
 
 ```bash
-cs command -i - --mode runtime          # {"id":"runtime/info","args":{}}
+cs command --input "<project-root>/Temp/CSharpConsole/AgentScratch/runtime-info.json" --mode runtime --json
 cs pull logs/game.log --mode runtime -o game.log
 ```
 

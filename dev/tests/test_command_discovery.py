@@ -409,6 +409,28 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
             denied["denied"],
         )
 
+    def test_wrong_view_error_names_the_retry_and_valid_requested_ids(self):
+        with self.assertRaises(DiscoveryError) as caught:
+            discover(
+                _snapshot(), overlay=_overlay(),
+                command_ids=["command/list", "object/read", "missing/command"],
+            )
+        message = str(caught.exception)
+        self.assertEqual("unknown_command", caught.exception.code)
+        self.assertIn("command/list is in the control view", message)
+        self.assertIn("--view control", message)
+        self.assertIn("resolve in the authoring view: object/read", message)
+        self.assertNotIn("missing/command", message)
+
+    def test_unknown_id_does_not_invent_a_view(self):
+        with self.assertRaises(DiscoveryError) as caught:
+            discover(
+                _snapshot(), overlay=_overlay(),
+                command_ids=["missing/command", "object/read"],
+            )
+        self.assertNotIn("--view", str(caught.exception))
+        self.assertIn("object/read", str(caught.exception))
+
     def test_overlay_command_missing_from_snapshot_is_registry_incomplete(self):
         snapshot = _snapshot()
         snapshot["builtin"]["commands"] = [

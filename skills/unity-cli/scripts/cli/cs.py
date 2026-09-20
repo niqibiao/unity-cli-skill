@@ -209,6 +209,32 @@ _DISCOVERY_DIAGNOSTIC_DROP = {
 }
 
 
+def _health_identity_line(data):
+    """Name the process that answered a health check, for the text form.
+
+    The JSON form has always carried these fields; the text form said only that
+    the service was healthy, leaving "which build am I talking to" to be
+    reconstructed from the filesystem."""
+    if not isinstance(data, dict):
+        return ""
+    parts = []
+    if "isEditor" in data:
+        parts.append("editor" if data["isEditor"] else "player")
+    if data.get("buildGuid"):
+        parts.append("build " + data["buildGuid"])
+    if data.get("unityVersion"):
+        parts.append("Unity " + data["unityVersion"])
+    if data.get("packageVersion"):
+        parts.append("package " + data["packageVersion"])
+    if data.get("editorState"):
+        parts.append(str(data["editorState"]))
+    if data.get("isPlaying"):
+        parts.append("playing")
+    if data.get("port"):
+        parts.append("port " + str(data["port"]))
+    return "  ".join(parts)
+
+
 def _slim_result(result):
     """Strip diagnostic fields from a result dict for compact agent output."""
     out = {k: v for k, v in result.items() if k not in _SLIM_DROP}
@@ -3273,6 +3299,13 @@ def main():
             "refresh":  _refresh,
         }
         result = dispatch[args.cmd]()
+
+    # Text form only: the JSON form already carries these fields, and an agent
+    # that cannot see them here goes looking for the same facts on disk.
+    if args.cmd == "health" and not args.as_json and result.get("ok"):
+        identity = _health_identity_line(result.get("data"))
+        if identity:
+            result["summary"] = (result.get("summary") or "") + "\n" + identity
 
     exit_code = result.get("exitCode", 0)
     if args.as_json:

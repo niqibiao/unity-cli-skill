@@ -565,6 +565,41 @@ def _deny_item(policy: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _unknown_command_message(
+    command_id: str,
+    view: str,
+    route: Mapping[str, Any] | None,
+    requested_ids: Sequence[str],
+    routes: Mapping[str, Mapping[str, Any]],
+) -> str:
+    """Say where a miss actually lives, so the retry is a lookup and not a guess.
+
+    The route table spans every view, so a command that exists in another one is
+    identifiable here; without saying so, the caller learns only that this view
+    does not have it. Naming the ids that would have resolved keeps the corrected
+    request from dropping them."""
+    message = f"unknown command for {view} view: {command_id}"
+    if route is not None:
+        other_view = route["view"]
+        message += (
+            f"\n{command_id} is in the {other_view} view; "
+            f"query it with --view {other_view}"
+        )
+    resolvable = []
+    for other_id in requested_ids:
+        if other_id == command_id:
+            continue
+        other_route = routes.get(other_id)
+        if other_route is not None and other_route["view"] == view:
+            resolvable.append(other_id)
+    if resolvable:
+        message += (
+            f"\nthese requested commands resolve in the {view} view: "
+            + ", ".join(resolvable)
+        )
+    return message
+
+
 def _contract_bundle(
     *,
     command_ids: Sequence[str],
@@ -584,7 +619,7 @@ def _contract_bundle(
                 denied_ids.append(command_id)
                 continue
             raise DiscoveryError(
-                f"unknown command for {view} view: {command_id}",
+                _unknown_command_message(command_id, view, route, command_ids, routes),
                 code="unknown_command",
             )
         selected_ids.append(command_id)
