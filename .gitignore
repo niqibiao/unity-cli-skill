@@ -6,7 +6,7 @@ __pycache__/
 skills/unity-cli-command/dynamic-commands.md
 docs/
 CONTEXT.md
-tests/
+/tests/
 cc-codex-discussion-history/
 /adr/
 .scratch/
