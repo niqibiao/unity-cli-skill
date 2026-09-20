@@ -18,10 +18,15 @@ if os.path.dirname(_CLI_DIR) not in sys.path:
 from cli import PACKAGE_NAME, DEFAULT_SOURCE, DEFAULT_EDITOR_PORT, DEFAULT_RUNTIME_PORT
 from cli.version_check import get_plugin_version, is_aligned, parse_semver
 
-# In runtime mode these are answered by the player itself, so they are the ones
-# that need a located player. Everything else -- refresh, doctor, wait-ready --
-# is about the editor's compile pipeline and is unaffected by --mode.
-PLAYER_TARGETED_COMMANDS = frozenset({"health", "exec", "command", "batch", "pull", "logs"})
+# These need a located player: the player answers them itself, or -- compile-set
+# -- the editor answers but the request has to name the player. Everything else
+# -- refresh, doctor, wait-ready -- is about the editor's compile pipeline and is
+# unaffected by --mode.
+PLAYER_TARGETED_COMMANDS = frozenset({"health", "exec", "command", "batch", "pull", "logs",
+                                      "compile-set"})
+# setup fixes a mismatch and status reports one, so both stay usable when the
+# package is on another compatibility line. Every other command is refused.
+VERSION_GATE_EXEMPT = frozenset({"setup", "status"})
 
 
 def _is_unity_root(d):
@@ -275,7 +280,13 @@ def _slim_result(result):
             "id" not in out
             and ("initialized" in data or "accepted" in data)
         ):
-            trimmed = {k: v for k, v in data.items() if k not in _HEALTH_DROP}
+            # The editor always reports an empty buildGuid, and so does a player
+            # built before the package reported one. Only show it when there is
+            # a build to name; other falsy health fields still carry meaning.
+            trimmed = {
+                k: v for k, v in data.items()
+                if k not in _HEALTH_DROP and (v or k != "buildGuid")
+            }
             out["data"] = trimmed if trimmed else None
     # drop empty/redundant summary/data
     if out.get("summary") in ("", "OK"):
@@ -305,6 +316,29 @@ def _print_envelope(result, as_json):
 _PROGRESS_RE = re.compile(r"^(.+?):\s+(\d+)%\s+\((\d+)/(\d+)\)")
 
 
+def _exit_on_version_mismatch(pkg_dir):
+    """Refuse to drive Unity through a package on another compatibility line.
+
+    Client and service are released together, so a mismatched pair can disagree
+    about the wire without saying so. Stop here rather than let Unity report a
+    failure that is really a version problem. A version that cannot be read is
+    never treated as a mismatch."""
+    try:
+        from cli.version_check import get_plugin_version, get_package_version, is_aligned
+        plugin_ver = get_plugin_version()
+        package_ver = get_package_version(pkg_dir)
+        mismatched = bool(package_ver) and not is_aligned(plugin_ver, package_ver)
+    except Exception:
+        return
+    if mismatched:
+        print(
+            f"Error: unity-cli {plugin_ver} does not match package {package_ver}. "
+            "Align the package, then run `cs setup`.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def _warn_version_mismatch(pkg_dir):
     """Print a warning if plugin and package versions are misaligned."""
     try:
@@ -330,6 +364,8 @@ def _unity_version_label(value):
 
 
 def _new_session(root, args, pkg_dir):
+    if args.cmd not in VERSION_GATE_EXEMPT:
+        _exit_on_version_mismatch(pkg_dir)
     from cli.core_bridge import ConsoleSession
     return ConsoleSession(root, args.ip, args.port, args.mode, args.timeout,
                           pkg_dir=pkg_dir,
@@ -699,6 +735,22 @@ def _resolve_remote_path(requested, info):
         return normalized, "absolute, already under the target's persistentDataPath"
 
     return normalized, "absolute, used as given"
+
+
+def cmd_compile_set(root, args, agent_root=None):
+    """Register a player build's compile set with the editor, or skip alignment for it."""
+    if root is None:
+        print("Error: no Unity project found.", file=sys.stderr)
+        return 1
+    from cli.core_bridge import find_package_dir
+    pkg_dir = find_package_dir(root, agent_root)
+    if not pkg_dir:
+        print("Error: the C# Console package is not installed in this project.", file=sys.stderr)
+        return 1
+
+    result = _new_session(root, args, pkg_dir).compile_set(args.source, skip=args.skip)
+    _print_envelope(result, args.as_json)
+    return result.get("exitCode", 0)
 
 
 def cmd_pull(root, args, agent_root=None):
@@ -2808,6 +2860,15 @@ def main():
     sp_logs.add_argument("--state-file", default=None, metavar="FILE",
                          help=argparse.SUPPRESS)
 
+    sp_cset = sub.add_parser("compile-set", parents=[shared],
+                             help="Register a player build's compile set with the editor, "
+                                  "or skip alignment for that build")
+    sp_cset.add_argument("source", metavar="ZIP", nargs="?", default=None,
+                         help="The CSharpConsoleCompileSet.zip exported beside the build: "
+                              "a local path or an http(s) URL")
+    sp_cset.add_argument("--skip", action="store_true",
+                         help="Record that this build is compiled for without alignment")
+
     sp_test = sub.add_parser("test", parents=[shared],
                              help="Run Unity Test Framework tests and wait for results")
     sp_test.add_argument("testmode", nargs="?", choices=["editmode", "playmode"],
@@ -2975,6 +3036,11 @@ def main():
     wait_ready_timeout = (
         getattr(args, "timeout", None) if args.cmd == "wait-ready" else None
     )
+    # Read before the defaults below fill "mode" in, so an explicit
+    # --mode can be told apart from an unpassed one.
+    compile_set_mode = (
+        getattr(args, "mode", None) if args.cmd == "compile-set" else None
+    )
 
     # Apply defaults for any shared arg the user didn't pass (SUPPRESS leaves
     # attr unset).  This restores the original UX while preventing subparser
@@ -2999,6 +3065,16 @@ def main():
                 p.error(f"--file: {file} is empty")
         elif getattr(args, "code", None) is None:
             p.error('exec requires --input <file> (JSON {"code":..}) or --file <path>')
+
+    if args.cmd == "compile-set":
+        if bool(args.source) == args.skip:   # both given, or neither
+            p.error("compile-set takes either a zip path/URL or --skip, not both and not neither")
+        # It is always a player's build being decided, so --ip/--port name the
+        # player exactly as in runtime mode; the registration itself still goes
+        # to the editor, which is what holds the decision.
+        if compile_set_mode == "editor":
+            p.error("compile-set decides a player build; drop --mode editor")
+        args.mode = "runtime"
 
     if (
         args.cmd == "list-commands"
@@ -3092,6 +3168,8 @@ def main():
         sys.exit(cmd_wait_ready(root, args, agent_root))
     if args.cmd == "test":
         sys.exit(cmd_test(root, args, agent_root))
+    if args.cmd == "compile-set":
+        sys.exit(cmd_compile_set(root, args, agent_root))
     if args.cmd == "pull":
         sys.exit(cmd_pull(root, args, agent_root))
     if args.cmd == "logs":

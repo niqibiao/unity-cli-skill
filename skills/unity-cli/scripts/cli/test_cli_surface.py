@@ -41,6 +41,7 @@ class CliSurfaceTests(unittest.TestCase):
             "status",
             "exec",
             "command",
+            "compile-set",
             "health",
             "refresh",
             "list-commands",
@@ -252,6 +253,27 @@ class CliSurfaceTests(unittest.TestCase):
                 self.assertEqual("public/read", compact["id"])
                 self.assertIn("data", compact)
                 self.assertEqual(value, compact["data"])
+
+    def test_compact_health_reports_a_build_guid_only_when_there_is_one(self):
+        def health(build_guid):
+            return CS._slim_result(
+                {
+                    "ok": True,
+                    "exitCode": 0,
+                    "stage": "bootstrap",
+                    "data": {
+                        "initialized": True,
+                        "port": 15503,
+                        "isPlaying": True,
+                        "buildGuid": build_guid,
+                    },
+                }
+            )
+
+        # The editor never has one, and neither does a player built before the
+        # package reported it; showing an empty field would invite asking why.
+        self.assertNotIn("buildGuid", health("")["data"])
+        self.assertEqual("b1ab0ce5", health("b1ab0ce5")["data"]["buildGuid"])
 
     def test_compact_command_output_does_not_treat_business_data_as_health(self):
         business_data = {
@@ -502,6 +524,149 @@ class CliSurfaceTests(unittest.TestCase):
         find_project.assert_called_once()
         offline_handler.assert_called_once()
         self.assertEqual(project, offline_handler.call_args.args[0])
+
+
+class CompileSetSurfaceTests(unittest.TestCase):
+    """`cs compile-set` answers the editor's one question about a player build.
+
+    It is the only subcommand whose target is a player without being told so:
+    the decision is always about a build, so --ip/--port name the player and
+    the registration itself still goes to the editor.
+    """
+
+    def _run(self, *argv, probed=15503):
+        seen = {}
+
+        def record(root, args, agent_root=None):
+            seen.update(vars(args))
+            return 0
+
+        with (
+            mock.patch.object(sys, "argv", [str(CLI), *argv]),
+            mock.patch.object(CS, "find_project_root", return_value=Path("/project")),
+            mock.patch.object(CS, "detect_port", return_value=14501),
+            mock.patch.object(CS, "_probe_port", return_value=probed) as probe,
+            mock.patch.object(CS, "cmd_compile_set", side_effect=record),
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()) as err,
+            self.assertRaises(SystemExit) as exit_status,
+        ):
+            CS.main()
+        return seen, probe, err.getvalue(), exit_status.exception.code
+
+    def test_the_player_is_located_and_the_editor_keeps_the_decision(self):
+        seen, probe, _, code = self._run("compile-set", "set.zip")
+
+        self.assertEqual(0, code)
+        probe.assert_called_once_with("127.0.0.1", CS.DEFAULT_RUNTIME_PORT, 10)
+        self.assertEqual("runtime", seen["mode"])
+        self.assertEqual(15503, seen["port"])
+        self.assertEqual(14501, seen["compile_port"])
+        self.assertEqual("set.zip", seen["source"])
+        self.assertFalse(seen["skip"])
+
+    def test_skipping_alignment_is_its_own_decision(self):
+        seen, _, _, code = self._run("compile-set", "--skip")
+
+        self.assertEqual(0, code)
+        self.assertIsNone(seen["source"])
+        self.assertTrue(seen["skip"])
+
+    def test_no_player_refuses_rather_than_registering_against_nothing(self):
+        seen, _, err, code = self._run("compile-set", "set.zip", probed=None)
+
+        self.assertEqual({}, seen, "registered a compile set with no player located")
+        self.assertEqual(3, code)
+        self.assertIn("No player service found", err)
+
+    def test_a_decision_must_be_a_zip_or_a_skip_but_not_both(self):
+        for argv in (["compile-set"], ["compile-set", "set.zip", "--skip"]):
+            with self.subTest(argv=argv):
+                completed = subprocess.run(
+                    [sys.executable, "-B", str(CLI), *argv],
+                    capture_output=True,
+                    text=True,
+                    timeout=20,
+                    check=False,
+                )
+                self.assertEqual(2, completed.returncode)
+                self.assertIn("either a zip path/URL or --skip", completed.stderr)
+
+    def test_an_explicit_editor_mode_is_refused_rather_than_rewritten(self):
+        """--mode is a shared flag, so compile-set advertises a value it
+        cannot honour. Say so instead of silently deciding otherwise."""
+        completed = subprocess.run(
+            [sys.executable, "-B", str(CLI), "compile-set", "set.zip",
+             "--mode", "editor"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("drop --mode editor", completed.stderr)
+
+
+class VersionGateTests(unittest.TestCase):
+    """A package on another compatibility line is refused, not warned about.
+
+    Client and service ship together, so a mismatched pair can disagree about
+    the wire without either side saying so."""
+
+    def _gate(self, plugin, package):
+        from cli import version_check
+        with mock.patch.object(version_check, "get_plugin_version", lambda *a, **k: plugin),              mock.patch.object(version_check, "get_package_version", lambda *a, **k: package):
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                try:
+                    CS._exit_on_version_mismatch(Path("pkg"))
+                except SystemExit as exit_:
+                    return exit_.code, err.getvalue()
+            return None, err.getvalue()
+
+    def test_a_different_minor_is_refused(self):
+        code, err = self._gate("2.4.0", "2.3.1")
+
+        self.assertEqual(1, code)
+        self.assertIn("unity-cli 2.4.0 does not match package 2.3.1", err)
+        self.assertIn("cs setup", err)
+
+    def test_a_different_major_is_refused(self):
+        code, _ = self._gate("3.0.0", "2.4.0")
+
+        self.assertEqual(1, code)
+
+    def test_a_different_patch_still_runs(self):
+        """Only major.minor is the compatibility line."""
+        code, err = self._gate("2.4.0", "2.4.9")
+
+        self.assertIsNone(code)
+        self.assertEqual("", err)
+
+    def test_an_unreadable_package_version_does_not_block(self):
+        code, _ = self._gate("2.4.0", None)
+
+        self.assertIsNone(code)
+
+    def test_setup_and_status_stay_usable_when_mismatched(self):
+        """They are the two ways out of a mismatch, so they must not be gated."""
+        built = []
+        args = SimpleNamespace(
+            ip="127.0.0.1", port=14501, mode="editor", timeout=30,
+            compile_ip=None, compile_port=None, session=None, cmd=None,
+        )
+        with mock.patch.object(CS, "_exit_on_version_mismatch") as gate,              mock.patch("cli.core_bridge.ConsoleSession", lambda *a, **k: built.append(1)):
+            for name in ("setup", "status"):
+                args.cmd = name
+                CS._new_session(Path("root"), args, Path("pkg"))
+            gate.assert_not_called()
+
+            args.cmd = "exec"
+            CS._new_session(Path("root"), args, Path("pkg"))
+            self.assertEqual(1, gate.call_count)
+
+        self.assertEqual(3, len(built))
 
 
 class PortProbeTests(unittest.TestCase):

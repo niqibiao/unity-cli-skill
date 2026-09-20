@@ -93,6 +93,7 @@ Agent 会发现最小相关 command contract，验证 mutation，只有结构化
 | `cs exec --file` | 以原始 C# 作为最终兜底 |
 | `cs refresh` | 刷新资产并等待编译 |
 | `cs test` | 运行 Unity Test Framework 测试并等待结果 |
+| `cs compile-set <zip\|URL>` | 决定提交到某个 player 构建的代码按什么编译 |
 | `cs pull <path>` | 从当前寻址的进程取回一个文件 |
 | `cs logs [path]` | 持续跟随当前寻址进程的日志文件，可前台或后台收集 |
 | `cs catalog sync` / `cs catalog list` | 维护共享的自定义命令候选目录 |

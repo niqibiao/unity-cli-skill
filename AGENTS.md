@@ -77,6 +77,7 @@ missing explicit session ids fail without executing Unity.
 | `cs wait-ready [--timeout N]` | pre/post | Wait until the service is genuinely ready |
 | `cs refresh [--wait TIMEOUT] [--exit-playmode]` | post | Refresh assets and compile |
 | `cs test [playmode] [--filter NAME] [--wait TIMEOUT]` | post | Run Unity Test Framework tests and wait for results |
+| `cs compile-set <ZIP\|URL>` / `--skip` | post | Decide what a player build's submissions compile against |
 | `cs pull PATH [--mode runtime] [-o FILE]` | post | Retrieve a file from the process being addressed |
 | `cs logs [PATH] [--mode runtime] [--background]` | post | Follow a log file on the process being addressed; `--background` collects to a file until the target exits |
 | `cs list-commands --offline … --json` | pre/post | Discover the validated cache or generated built-in fallback |
@@ -151,6 +152,15 @@ python -B -m unittest discover -s skills/unity-cli/scripts/cli -p "test_*.py" -v
 ```
 
 There is no build or dependency-install step.
+
+The suite stubs `csharpconsole_core`, so it cannot see the package's API move.
+`test_core_contract.py` closes that seam by binding every call `core_bridge.py`
+makes against a real core, and skips when it cannot find one. Point it at a
+package to keep the gate live while working on both repositories:
+
+```bash
+export UNITY_CLI_CORE_DIR=/path/to/com.zh1zh1.csharpconsole/Editor/ExternalTool~/console-client
+```
 
 ## Release process
 

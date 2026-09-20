@@ -1220,13 +1220,31 @@ def _prepared(command_id, namespace, action):
 class _RuntimeState:
     """A runtime-mode SharedConfigState stand-in."""
 
-    def __init__(self, runtime_mode=True):
+    def __init__(self, runtime_mode=True, compile_ip="127.0.0.1", compile_port=14501):
         self.runtime_mode = runtime_mode
         self.runtime_ip = "10.0.0.5"
         self.runtime_port = 15503
+        # Normalized by ConsoleSession.__init__ before anything reads them, so
+        # a stand-in that left them unset would be a shape the code never sees.
+        self.compile_ip = compile_ip
+        self.compile_port = compile_port
 
     def current_server_base_url(self):
         return "http://127.0.0.1:14501/CSharpConsole"
+
+
+def _core_models():
+    """The csharpconsole_core.models stand-in every bridge test builds on."""
+    module = types.ModuleType("csharpconsole_core.models")
+    module.make_result = lambda ok, stage, result_type, exit_code, summary, *rest: {
+        "ok": ok,
+        "type": result_type,
+        "exitCode": exit_code,
+        "summary": summary,
+        "data": rest[-1] if rest and isinstance(rest[-1], dict) else {},
+    }
+    module.new_run_id = lambda: "run-1"
+    return module
 
 
 class _RecordingTransport:
@@ -1252,14 +1270,7 @@ class RuntimeAddressingTests(unittest.TestCase):
     EDITOR_URL = "http://127.0.0.1:14501/CSharpConsole"
 
     def _models(self):
-        module = types.ModuleType("csharpconsole_core.models")
-        module.make_result = lambda ok, kind, result_type, exit_code, summary, *rest: {
-            "ok": ok,
-            "exitCode": exit_code,
-            "summary": summary,
-            "data": rest[-1] if rest and isinstance(rest[-1], dict) else {},
-        }
-        module.new_run_id = lambda: "run-1"
+        module = _core_models()
         package = types.ModuleType("csharpconsole_core")
         package.models = module
         return {"csharpconsole_core": package, "csharpconsole_core.models": module}
@@ -1349,6 +1360,224 @@ class RuntimeAddressingTests(unittest.TestCase):
 
         self.assertFalse(session._answered_by_player)
         self.assertEqual(self.EDITOR_URL, session._base_url())
+
+
+class _CompileSetClient:
+    """A client_base stand-in recording what the bridge hands the core."""
+
+    TIMEOUT_ZIP_TRANSFER = 600
+
+    def __init__(self, response=None):
+        self.calls = []
+        self.response = response or {
+            "ok": True, "exitCode": 0, "summary": "Registered", "data": {},
+        }
+
+    def request_compile_set(self, post_binary, parse, base_url, ip, port, zip_bytes):
+        self.calls.append({
+            "base_url": base_url,
+            "ip": ip,
+            "port": port,
+            "zip_bytes": zip_bytes,
+            # The core reads a skip off zip_bytes being None; there is no
+            # separate flag to record.
+            "skip": zip_bytes is None,
+        })
+        return self.response
+
+
+class CompileSetBridgeTests(unittest.TestCase):
+    """Reading the compile set is ours; the core only ever sees bytes.
+
+    So a zip that is not there, or a URL that will not download, has to become
+    a result here rather than an exception escaping into the CLI.
+    """
+
+    def _session(self, response=None):
+        session = object.__new__(core_bridge.ConsoleSession)
+        session._state = _RuntimeState()
+        session._client = _CompileSetClient(response)
+        session._mode_name = lambda: "runtime"
+        session._parser = types.SimpleNamespace(
+            parse_compile_set_http_response=lambda *a: None
+        )
+        return session
+
+    def _modules(self, read_compile_set, get_bytes=None):
+        artifacts = types.ModuleType("csharpconsole_core.runtime_artifacts_base")
+        artifacts.read_compile_set = read_compile_set
+        transport = types.ModuleType("csharpconsole_core.transport_http")
+        transport.get_bytes = get_bytes or (lambda url, timeout: b"")
+        transport.post_binary = lambda url, body, timeout: ""
+        models = _core_models()
+        package = types.ModuleType("csharpconsole_core")
+        package.runtime_artifacts_base = artifacts
+        package.transport_http = transport
+        package.models = models
+        return {
+            "csharpconsole_core": package,
+            "csharpconsole_core.runtime_artifacts_base": artifacts,
+            "csharpconsole_core.transport_http": transport,
+            "csharpconsole_core.models": models,
+        }
+
+    def test_the_zip_goes_to_the_editor_naming_the_player(self):
+        session = self._session()
+        modules = self._modules(lambda source, fetch: b"ZIPBYTES")
+
+        with mock.patch.dict(sys.modules, modules):
+            result = session.compile_set("set.zip")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(
+            [{
+                "base_url": "http://127.0.0.1:14501/CSharpConsole",
+                "ip": "10.0.0.5",
+                "port": 15503,
+                "zip_bytes": b"ZIPBYTES",
+                "skip": False,
+            }],
+            session._client.calls,
+        )
+
+    def test_a_url_is_downloaded_on_the_compile_set_budget(self):
+        downloads = []
+        session = self._session()
+
+        def get_bytes(url, timeout):
+            downloads.append((url, timeout))
+            return b"ZIP"
+
+        modules = self._modules(lambda source, fetch: fetch(source), get_bytes=get_bytes)
+
+        with mock.patch.dict(sys.modules, modules):
+            session.compile_set("https://example.test/set.zip")
+
+        self.assertEqual([("https://example.test/set.zip", 600)], downloads)
+        self.assertEqual(b"ZIP", session._client.calls[0]["zip_bytes"])
+
+    def test_skipping_sends_no_zip_and_reads_nothing(self):
+        session = self._session()
+
+        def unreadable(source, fetch):
+            raise AssertionError("skip must not read a compile set")
+
+        with mock.patch.dict(sys.modules, self._modules(unreadable)):
+            session.compile_set(None, skip=True)
+
+        call = session._client.calls[0]
+        self.assertIsNone(call["zip_bytes"])
+        self.assertTrue(call["skip"])
+
+    def test_a_missing_zip_is_the_callers_error_and_never_posts(self):
+        session = self._session()
+
+        def missing(source, fetch):
+            raise FileNotFoundError(f"Compile set zip not found: {source}")
+
+        with mock.patch.dict(sys.modules, self._modules(missing)):
+            result = session.compile_set("nope.zip")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("validation_error", result["type"])
+        self.assertEqual(1, result["exitCode"])
+        self.assertIn("nope.zip", result["summary"])
+        self.assertEqual([], session._client.calls)
+
+    def test_a_failed_download_is_a_system_error_and_never_posts(self):
+        session = self._session()
+
+        def refused(source, fetch):
+            raise _Transport.TransportError("HTTP 404 Not Found")
+
+        with mock.patch.dict(sys.modules, self._modules(refused)):
+            result = session.compile_set("https://example.test/set.zip")
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("system_error", result["type"])
+        self.assertEqual(3, result["exitCode"])
+        self.assertIn("HTTP 404 Not Found", result["summary"])
+        self.assertEqual([], session._client.calls)
+        # A 404 from the URL the user gave is not the editor missing an
+        # endpoint, and must not be answered with "align the package".
+        self.assertNotIn("/compile-set endpoint", result["summary"])
+
+    def test_a_404_from_the_editor_names_the_endpoint_it_lacks(self):
+        session = self._session({
+            "ok": False, "exitCode": 3, "data": {},
+            "summary": "Compile set request failed: HTTP 404 Not Found",
+        })
+
+        with mock.patch.dict(sys.modules, self._modules(lambda source, fetch: b"ZIP")):
+            result = session.compile_set("set.zip")
+
+        self.assertIn("cs setup --update", result["summary"])
+
+
+class AlignmentGuidanceTests(unittest.TestCase):
+    """What an agent is told when a player build has no compile-set decision.
+
+    The service names the build it is asking about but cannot know how this
+    caller reached the player, so the bridge supplies the runnable command —
+    and says whose decision skipping is. It hangs off exec's runtime branch,
+    so every caller of session.exec gets it, not just `cs exec`.
+    """
+
+    STATE = _RuntimeState(compile_ip="10.0.0.9", compile_port=14502)
+
+    def _refusal(self):
+        text = f"{core_bridge.ALIGNMENT_REQUIRED_MARKER}\nThis player is build b1ab0ce5."
+        return {"ok": False, "exitCode": 1, "summary": text, "data": {"text": text}}
+
+    # Both halves of the address: registering with a re-detected local editor
+    # instead of the one this call compiled against changes nothing, and the
+    # next submission is refused again.
+    ADDRESS = "--ip 10.0.0.5 --port 15503 --compile-ip 10.0.0.9 --compile-port 14502"
+
+    def test_both_channels_carry_the_command_that_answers_it(self):
+        result = core_bridge._with_alignment_guidance(self._refusal(), self.STATE)
+
+        for channel in (result["summary"], result["data"]["text"]):
+            self.assertIn("b1ab0ce5", channel)
+            self.assertIn(f"cs compile-set <zip|URL> {self.ADDRESS}", channel)
+            self.assertIn(f"cs compile-set --skip {self.ADDRESS}", channel)
+        self.assertIn("skip on their behalf", result["summary"])
+
+    def test_the_editor_is_named_even_when_it_was_never_stated(self):
+        # ConsoleSession normalizes an unset --compile-ip to the local editor
+        # before anything reads it, so the printed command is runnable rather
+        # than carrying a None where the address belongs.
+        result = core_bridge._with_alignment_guidance(self._refusal(), _RuntimeState())
+
+        self.assertIn("--compile-ip 127.0.0.1 --compile-port 14501", result["summary"])
+        self.assertNotIn("None", result["summary"])
+
+    def test_every_other_outcome_is_left_alone(self):
+        untouched = (
+            {"ok": False, "exitCode": 2, "summary": "C# Exception: boom", "data": {"text": "x"}},
+            {"ok": True, "exitCode": 0, "summary": "42", "data": {"text": "42"}},
+        )
+        for result in untouched:
+            with self.subTest(summary=result["summary"]):
+                guided = core_bridge._with_alignment_guidance(result, self.STATE)
+                self.assertEqual(result["summary"], guided["summary"])
+                self.assertEqual(result["data"]["text"], guided["data"]["text"])
+
+    def test_an_editor_submission_never_reaches_it(self):
+        # Editor mode has no player and no compile target, so a command naming
+        # one would address the wrong process. exec's editor branch skips it.
+        session = object.__new__(core_bridge.ConsoleSession)
+        session._state = _RuntimeState(runtime_mode=False)
+        session._session_id = "s"
+        session._post = None
+        session._define = session._using = lambda: ""
+        refusal = self._refusal()
+        session._parser = types.SimpleNamespace(parse_text_http_response=None)
+        session._client = types.SimpleNamespace(
+            execute_editor_request=lambda *a, **k: refusal,
+        )
+
+        self.assertEqual(refusal["summary"], session.exec("1+1")["summary"])
 
 
 if __name__ == "__main__":

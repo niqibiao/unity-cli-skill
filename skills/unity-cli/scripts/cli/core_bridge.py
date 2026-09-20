@@ -133,22 +133,42 @@ def _ensure_path(core_path):
         sys.path.insert(0, sp)
 
 
-def _make_post_with_retry(transport_http, state, default_timeout, base_url=None):
-    """Create a POST function that retries one refused connection.
-
-    *base_url* names the service each call is addressed to; without it the
-    core's own mode-based choice applies."""
+def _transport_failure_types(transport_http):
+    """Return the exception types that mean a request failed in transport."""
     # The urllib-based core raises TransportError for every transport failure
     # (connection refused, timeout, non-2xx). Older requests-based cores raised
     # OSError subclasses instead. Catch both so the domain-reload retry survives
     # whichever core version is resolved; fall back to OSError only against a
     # core that predates TransportError.
     transport_error = getattr(transport_http, "TransportError", None)
-    transport_failures = (
-        (OSError, transport_error)
-        if transport_error is not None
-        else (OSError,)
-    )
+    return (OSError, transport_error) if transport_error is not None else (OSError,)
+
+
+def _make_post_binary_with_retry(transport_http):
+    """Wrap post_binary so one refused connection is retried.
+
+    Registering a compile set is when a domain reload is most likely, and a
+    refused connection means the bytes never reached the editor."""
+    transport_failures = _transport_failure_types(transport_http)
+
+    def _post_binary(url, body, timeout):
+        try:
+            return transport_http.post_binary(url, body, timeout)
+        except transport_failures as error:
+            if not _is_connection_refused(error):
+                raise
+            time.sleep(_RETRY_DELAY_S)
+            return transport_http.post_binary(url, body, timeout)
+
+    return _post_binary
+
+
+def _make_post_with_retry(transport_http, state, default_timeout, base_url=None):
+    """Create a POST function that retries one refused connection.
+
+    *base_url* names the service each call is addressed to; without it the
+    core's own mode-based choice applies."""
+    transport_failures = _transport_failure_types(transport_http)
 
     def _post(endpoint, payload, timeout=None):
         t = timeout if timeout is not None else default_timeout
@@ -461,6 +481,41 @@ def _normalize_command_result(result, command_id, namespace, action):
     return normalized
 
 
+# A player reports the build it came from, and the editor refuses to compile for
+# a build it has no compile-set decision for. The refusal says so in its first
+# line; the package's own REPL client recognises the same prefix.
+ALIGNMENT_REQUIRED_MARKER = "[REPL ALIGNMENT REQUIRED]"
+
+
+def _with_alignment_guidance(result, state):
+    """Append the follow-up command to an alignment refusal.
+
+    The refusal names the build; what the service cannot know is how this caller
+    reached the player, so spell that back out as a command that can be run.
+    Runtime submissions only -- an editor submission is never refused this way,
+    which is why this lives in exec's runtime branch."""
+    if result.get("ok") or not (result.get("summary") or "").startswith(ALIGNMENT_REQUIRED_MARKER):
+        return result
+    # Spell out the editor as well as the player: a colleague's editor was
+    # reached by an explicit --compile-ip, and re-detecting would quietly
+    # register the decision with the local one, where it changes nothing.
+    target = (f"--ip {state.runtime_ip} --port {state.runtime_port} "
+              f"--compile-ip {state.compile_ip} --compile-port {state.compile_port}")
+    guidance = (
+        "Ask the user for this build's CSharpConsoleCompileSet.zip — the file beside the "
+        "build output, or a URL — or for an explicit decision to skip alignment; do not "
+        "decide to skip on their behalf. Then run one of:\n"
+        f"  cs compile-set <zip|URL> {target}\n"
+        f"  cs compile-set --skip {target}\n"
+        "The editor keeps the decision per build, so it is answered once."
+    )
+    result["summary"] = f"{result['summary']}\n{guidance}"
+    data = result.get("data")
+    if isinstance(data, dict) and isinstance(data.get("text"), str):
+        data["text"] = f"{data['text']}\n{guidance}"
+    return result
+
+
 class ConsoleSession:
     """Pre-wired facade over csharpconsole_core. One-liner per command."""
 
@@ -518,17 +573,69 @@ class ConsoleSession:
         # "compile" endpoint with targetIP/targetPort. Without this branch
         # we'd POST to "editor" and silently run in the local editor.
         if self._state.runtime_mode:
-            return self._client.execute_runtime_request(
+            return _with_alignment_guidance(self._client.execute_runtime_request(
                 self._post, self._parser.parse_text_http_response,
                 self._define, self._using,
                 self._state.runtime_ip, self._state.runtime_port,
                 self._state.runtime_dll_path,
                 code, self._session_id, reset,
-            )
+            ), self._state)
         return self._client.execute_editor_request(
             self._post, self._parser.parse_text_http_response,
             self._define, self._using, code, self._session_id, reset,
         )
+
+    def compile_set(self, source=None, skip=False):
+        """Register the compile set for the player's build, or skip alignment for it.
+
+        The zip goes to the editor, which keys the decision by the build the
+        player reports, so it is made once per build rather than once per
+        caller. Reading the zip is ours -- request_compile_set only sees bytes."""
+        from csharpconsole_core import runtime_artifacts_base, transport_http
+        from csharpconsole_core.models import make_result, new_run_id
+
+        zip_bytes = None
+        if not skip:
+            start = time.time()
+            run_id = new_run_id()
+
+            def failed(result_type, exit_code, summary):
+                return make_result(
+                    False, "bootstrap", result_type, exit_code, summary, "",
+                    self._mode_name(), run_id, (time.time() - start) * 1000,
+                )
+
+            try:
+                zip_bytes = runtime_artifacts_base.read_compile_set(
+                    source,
+                    lambda url: transport_http.get_bytes(
+                        url, self._client.TIMEOUT_ZIP_TRANSFER,
+                    ),
+                )
+            except FileNotFoundError as e:
+                # A zip that isn't where the caller said is the caller's error,
+                # not the service's.
+                return failed("validation_error", 1, str(e))
+            except Exception as e:
+                return failed("system_error", 3, f"Compile set could not be read: {e}")
+
+        result = self._client.request_compile_set(
+            _make_post_binary_with_retry(transport_http),
+            self._parser.parse_compile_set_http_response,
+            self._state.current_server_base_url(),
+            self._state.runtime_ip,
+            self._state.runtime_port,
+            zip_bytes,
+        )
+        # Said here rather than by the caller: only a result that came back
+        # from the POST can mean "this editor has no such endpoint". A 404
+        # while downloading the zip is the URL's, and returned above. Match
+        # the transport's own "HTTP 404 <reason>" so a build GUID that happens
+        # to contain those digits is not read as a missing endpoint.
+        if not result.get("ok") and "HTTP 404" in (result.get("summary") or ""):
+            result["summary"] += ("\nThis editor's package has no /compile-set endpoint; "
+                                  "align it with 'cs setup --update'.")
+        return result
 
     # Registry discovery stays with the editor even in runtime mode. A player
     # registers a subset, and the per-project cache is keyed by project alone,

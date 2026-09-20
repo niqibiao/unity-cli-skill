@@ -47,7 +47,8 @@ choice between the two source shapes setup can write:
    a `#fragment` are written as-is; if the tag query fails (offline), setup falls back to
    the unpinned URL with a warning.
 3. If the package is **already present**, setup is a no-op that warns when the CLI and
-   the installed package are on different `major.minor` lines.
+   the installed package are on different `major.minor` lines. setup keeps working in
+   that state on purpose — it is how the mismatch gets fixed.
 
 ```bash
 cs setup
@@ -74,3 +75,8 @@ for the user to type; that's agent-internal.
   `cs status`.
 
 Keep the package on the same `major.minor` as this skill's CLI (see `scripts/cli/VERSION`).
+Until they agree, every command that drives Unity fails with
+`Error: unity-cli X.Y.Z does not match package A.B.C` (exit 1). `cs setup` and
+`cs status` are exempt, because they are how the mismatch is fixed and seen, and
+commands that never reach Unity — `cs doctor`, `cs wait-ready`, offline listings —
+are unaffected. The patch digit is not part of the line: 2.4.0 and 2.4.9 match.

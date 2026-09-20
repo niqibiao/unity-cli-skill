@@ -99,6 +99,7 @@ Everything ships in one skill (`unity-cli`):
 | `cs exec --file` | Run raw C# as the final fallback |
 | `cs refresh` | Refresh assets and wait for compilation |
 | `cs test` | Run Unity Test Framework tests and wait for results |
+| `cs compile-set <zip\|URL>` | Decide what a player build's submissions compile against |
 | `cs pull <path>` | Retrieve a file from the process being addressed |
 | `cs logs [path]` | Follow a log file on the process being addressed, foreground or detached |
 | `cs catalog sync` / `cs catalog list` | Maintain the shared custom-command shortlist |

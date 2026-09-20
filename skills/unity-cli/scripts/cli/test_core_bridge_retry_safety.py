@@ -34,6 +34,22 @@ class _Transport:
         return outcome
 
 
+class _BinaryTransport:
+    class TransportError(Exception):
+        pass
+
+    def __init__(self, *outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = []
+
+    def post_binary(self, url, body, timeout):
+        self.calls.append((url, body, timeout))
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
 def _wrapped_transport_error(cause):
     error = _Transport.TransportError(str(cause))
     error.__cause__ = cause
@@ -225,6 +241,47 @@ class PostRetrySafetyTests(unittest.TestCase):
                 self.assertIs(error, raised.exception)
                 self.assertEqual(1, len(transport.calls))
                 sleep.assert_not_called()
+
+
+
+class PostBinaryRetrySafetyTests(unittest.TestCase):
+    """Registering a compile set runs when a domain reload is most likely."""
+
+    def _error(self, cause):
+        error = _BinaryTransport.TransportError(str(cause))
+        error.__cause__ = cause
+        return error
+
+    def test_refused_connection_retries_once_with_the_same_bytes(self):
+        transport = _BinaryTransport(
+            self._error(ConnectionRefusedError("domain reload")), "ok",
+        )
+        post = core_bridge._make_post_binary_with_retry(transport)
+
+        with mock.patch.object(core_bridge.time, "sleep") as sleep:
+            self.assertEqual("ok", post("http://127.0.0.1:14501", b"zip", 30))
+
+        self.assertEqual(
+            [
+                ("http://127.0.0.1:14501", b"zip", 30),
+                ("http://127.0.0.1:14501", b"zip", 30),
+            ],
+            transport.calls,
+        )
+        sleep.assert_called_once_with(core_bridge._RETRY_DELAY_S)
+
+    def test_timeout_does_not_repeat_the_upload(self):
+        error = self._error(TimeoutError("response timed out"))
+        transport = _BinaryTransport(error, "unexpected retry")
+        post = core_bridge._make_post_binary_with_retry(transport)
+
+        with mock.patch.object(core_bridge.time, "sleep") as sleep:
+            with self.assertRaises(_BinaryTransport.TransportError) as raised:
+                post("http://127.0.0.1:14501", b"zip", 30)
+
+        self.assertIs(error, raised.exception)
+        self.assertEqual(1, len(transport.calls))
+        sleep.assert_not_called()
 
 
 if __name__ == "__main__":

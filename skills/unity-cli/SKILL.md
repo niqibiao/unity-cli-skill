@@ -307,6 +307,7 @@ route those intents to snippets or raw `exec` as an automatic fallback.
 | Unity Test Framework runs | `cs test` | `references/tests.md` |
 | Editor log inspection | `editor/console.mark` + local read | `references/logs.md` |
 | A running player, and its files | `--mode runtime` / `cs pull` | `references/player.md` |
+| Compiling for a player's build | `cs compile-set` | `references/player.md` |
 | Watching a log as it is written | `cs logs` | `references/player.md` |
 | Custom-command catalog | `cs catalog sync` / `list` | `references/catalog.md` |
 | Package / connection state | `cs status` / `cs health` | `references/status.md` |
@@ -320,9 +321,11 @@ route those intents to snippets or raw `exec` as an automatic fallback.
   the process status.
 - Other subcommands print a cheaper text form. Add `--json` to `exec` only when
   its structured envelope is specifically needed.
-- A version-mismatch warning means the installed package and CLI use different
-  `major.minor` lines. Follow `references/setup.md`; the warning does not itself
-  block execution.
+- A version mismatch means the installed package and CLI are on different
+  `major.minor` lines, and every command that drives Unity is refused (exit 1)
+  until they agree. `cs setup` and `cs status` are exempt so the mismatch can be
+  fixed and seen; commands that never reach Unity — `cs doctor`, `cs wait-ready`,
+  offline listings — are unaffected. Follow `references/setup.md`.
 - Expanded CLI commands and JSON payloads are agent-internal. When Unity must be
   opened or focused, tell the user what action is needed in plain language, then
   run `cs status` yourself to verify the result.

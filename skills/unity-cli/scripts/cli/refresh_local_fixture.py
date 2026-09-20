@@ -12,7 +12,8 @@ descriptions) cannot silently diverge between the two implementations.
 
     python refresh_local_fixture.py [--port 14500]
 
-This file is intentionally untracked and must not be committed.
+The snapshot it writes is committed, so the unit suite runs offline and in CI;
+re-run this whenever the package's contracts change, and review the diff.
 """
 
 import argparse

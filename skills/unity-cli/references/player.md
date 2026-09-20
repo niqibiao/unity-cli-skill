@@ -9,6 +9,7 @@ cs health --mode runtime               # is the player's service alive?
 cs command -i - --mode runtime         # any command the player answers
 cs pull <path> --mode runtime -o out   # retrieve a file from the player
 cs exec --mode runtime --code "..."    # compile in the editor, run in the player
+cs compile-set <zip|URL>               # what to compile that player's build against
 ```
 
 Add `--ip <address>` for a player on another machine. Without `--port`, the CLI
@@ -47,6 +48,51 @@ refused inside one. Request those separately without `--mode runtime`.
 editor; `--mode runtime` does not change them, because compilation is the
 editor's job. `cs exec --mode runtime` still compiles in the editor and executes
 the result in the player, so both must be reachable.
+
+## Compiling for the player's build
+
+`cs exec --mode runtime` compiles in the editor and runs the result in the
+player, so the editor has to compile against the same assemblies and defines the
+build was made with. Each player build writes a `CSharpConsoleCompileSet.zip`
+beside its output for exactly that, and the editor asks once per build which way
+to go:
+
+```bash
+cs compile-set /path/to/CSharpConsoleCompileSet.zip   # or an http(s) URL
+cs compile-set --skip                                 # compile without aligning
+```
+
+It takes the same `--ip`/`--port` as any other player command and probes the
+same range; `--mode runtime` is implied, because a compile set is always about a
+build, and an explicit `--mode editor` is refused rather than reinterpreted. The
+zip goes to the editor, which keeps the decision, so `--compile-ip` and
+`--compile-port` name that editor exactly as for `cs exec --mode runtime`.
+
+It runs against the local Unity project and its installed package, and fails
+without either (exit 1). A zip that isn't where you said is exit 1; one that
+cannot be read, a URL that cannot be fetched, and no player found to name are
+exit 3. A zip the editor rejects — wrong build, no build GUID inside, the
+player unreachable from the editor — is exit 1.
+
+Until a build has a decision, `cs exec --mode runtime` against it is refused
+(exit 1) with a summary starting `[REPL ALIGNMENT REQUIRED]` and the command to
+run. **Ask the user for the zip, or for an explicit decision to skip — never
+choose `--skip` for them.** Skipping is the right answer when the build is close
+enough to the editor's own assemblies, and the wrong one when it is not; only
+the user knows which.
+
+The decision lives under the editor project's `Library/CSharpConsole/`, keyed by
+build GUID. So it is answered once per build for every agent and client, it
+survives an editor restart, and re-registering or re-skipping overwrites it.
+Deleting `Library` forgets it, and the build is asked about again.
+
+Two things it does not cover. Code hot-reloaded into a running player after the
+build is not in that build's compile set, so a submission compiled against the
+set will not see it. And a player built before the package reported a build GUID
+has nothing to key a decision on; it compiles as it always did, with no question
+asked. `cs health --mode runtime` shows the `buildGuid` when there is one.
+
+`cs command` and `cs batch` are unaffected — they are dispatched, not compiled.
 
 ## Retrieving files
 

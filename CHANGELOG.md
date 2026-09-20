@@ -11,6 +11,62 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+### Added
+
+- **`cs compile-set <zip|URL>` and `cs compile-set --skip`** answer the editor's
+  one question about a running player: should code submitted to it be compiled
+  against the build it is actually running? Every player build now writes a
+  `CSharpConsoleCompileSet.zip` beside its output; hand that file — a path or an
+  http(s) URL — to `cs compile-set`, or decide with `--skip` that this build is
+  compiled for without alignment. Like `cs exec --mode runtime`, `--ip`/`--port`
+  name the player and the 15500-15509 range is probed when no `--port` is given;
+  the registration itself goes to the editor, which is what keeps the decision.
+
+  The decision is stored per build GUID under the editor project's
+  `Library/CSharpConsole/`, so it is made **once per build** and shared by every
+  agent and client. It survives an editor restart and can be overwritten at any
+  time by registering or skipping again.
+
+  A missing zip fails as a validation error (exit 1); a download failure, a zip
+  that cannot be read, and no player found to name fail as system errors (exit
+  3); a zip the editor itself rejects — wrong build, no build GUID inside, the
+  player unreachable *from the editor* — as a validation error (exit 1). An
+  editor whose package predates the endpoint answers 404, and the CLI says to
+  update the package.
+
+### Changed
+
+- **`cs exec --mode runtime` against a player that reports its build is refused
+  until that build has a decision**, with exit code 1 and a summary beginning
+  `[REPL ALIGNMENT REQUIRED]`. The CLI appends the `cs compile-set` command to
+  run — with this call's own `--ip`/`--port` — to both the text summary and the
+  `--json` envelope. Ask the user for the zip or for an explicit decision to
+  skip; skipping is not the agent's call to make. Players built before the
+  package reported a build GUID are unaffected and compile as they always did.
+
+- **`cs health --mode runtime` reports `buildGuid`**, the build the player came
+  from — the same value `cs compile-set` registers against. The editor never has
+  one, so the compact `--json` form omits the field when it is empty rather than
+  showing a blank.
+
+- **A package on another `major.minor` line is now refused, not warned about.**
+  The CLI and the package are released together, so a mismatched pair can
+  disagree about the wire without either side saying so — and the warning that
+  said as much only ever appeared in `cs setup`, never on the path that actually
+  drives Unity. Every command that reaches Unity now fails with
+  `Error: unity-cli X.Y.Z does not match package A.B.C` (exit 1). `cs setup` and
+  `cs status` stay usable, because they are how the mismatch is fixed and seen,
+  and commands that never reach Unity — `cs doctor`, `cs wait-ready`, offline
+  listings — are unaffected. The patch digit is not part of the line, and a
+  version that cannot be read is never treated as a mismatch.
+
+- **A result that merely mentions an exception is no longer a runtime error.**
+  The service used to classify any response text containing `exception` as
+  `runtime_error` (exit 2), so an evaluation that returned such a word failed a
+  command that had in fact succeeded. Classification now matches only the
+  failure text the service writes itself, and those results exit 0. Requires a
+  package with the narrowed classifier.
+
 ## [2.3.2] - 2026-09-06
 
 ### Changed
