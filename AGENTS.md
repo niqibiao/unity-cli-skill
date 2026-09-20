@@ -136,19 +136,26 @@ skills/unity-cli/scripts/cli/routing_overlay.json
 skills/unity-cli/scripts/cli/core_bridge.py
 skills/unity-cli/scripts/cli/paths.py     Per-project cache paths
 skills/unity-cli/scripts/cli/VERSION      Release version
-skills/unity-cli/scripts/cli/test_*.py    Unit suite
-skills/unity-cli/scripts/cli/local_fixtures/  Pinned registry snapshot the suite reads
-skills/unity-cli/evals/                   Routing eval harness and oracles
+
+dev/tests/*.py                            Unit suite
+dev/tests/_paths.py                       Where the skill sits, stated once
+dev/evals/                                Routing eval harness and oracles
+dev/fixtures/                             Pinned registry snapshot the suite reads
+dev/refresh_local_fixture.py              Regenerates that snapshot
 ```
 
-Everything ships in this one skill; there are no slash commands.
+Everything under `skills/unity-cli/` ships; there are no slash commands.
+`npx skills add` copies that directory verbatim and honours no ignore file, so
+the suite, the evals and their fixtures live in `dev/` instead, and nothing
+shipped may name them -- `dev/tests/test_shipped_tree_is_self_contained.py`
+holds that line.
 
 ## Testing
 
 Run the pure-stdlib unit suite after CLI changes:
 
 ```bash
-python -B -m unittest discover -s skills/unity-cli/scripts/cli -p "test_*.py" -v
+python -B -m unittest discover -s dev/tests -p "test_*.py" -v
 ```
 
 There is no build or dependency-install step.

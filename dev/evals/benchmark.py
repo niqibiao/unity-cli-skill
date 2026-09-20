@@ -17,17 +17,12 @@ from pathlib import Path
 
 
 HERE = Path(__file__).resolve().parent
-SKILL_DIR = HERE.parent
+REPO_ROOT = HERE.parents[1]
+SKILL_DIR = REPO_ROOT / "skills" / "unity-cli"
 ROUTE_CASES_PATH = HERE / "route_cases.json"
 TRIGGER_QUERIES_PATH = HERE / "trigger_queries.json"
 EVALS_PATH = HERE / "evals.json"
-REGISTRY_SNAPSHOT_PATH = (
-    SKILL_DIR
-    / "scripts"
-    / "cli"
-    / "local_fixtures"
-    / "builtin_registry_snapshot.v1.json"
-)
+REGISTRY_SNAPSHOT_PATH = HERE.parent / "fixtures" / "builtin_registry_snapshot.v1.json"
 CONFIG_DIRS = ("old_skill", "new_skill")
 CONFIG_NAMES = {"old_skill": "without_skill", "new_skill": "with_skill"}
 _CASE_INSENSITIVE_ENUMS = None

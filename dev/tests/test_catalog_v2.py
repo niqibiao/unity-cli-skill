@@ -12,12 +12,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 
-CLI_DIR = Path(__file__).resolve().parent
-SCRIPTS_DIR = CLI_DIR.parent
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+from _paths import CLI, CLI_DIR, SCRIPTS_DIR  # noqa: F401
 
-CLI = CLI_DIR / "cs.py"
 SPEC = importlib.util.spec_from_file_location("unity_cli_catalog_v2", CLI)
 CS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CS)

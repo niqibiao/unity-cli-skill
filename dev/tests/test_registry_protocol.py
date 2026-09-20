@@ -7,10 +7,7 @@ import unittest
 from pathlib import Path
 
 
-CLI_DIR = Path(__file__).resolve().parent
-SCRIPTS_DIR = CLI_DIR.parent
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+from _paths import CLI_DIR, FIXTURE, SCRIPTS_DIR  # noqa: F401
 
 from cli.registry_protocol import (  # noqa: E402
     RegistryProtocolError,
@@ -22,7 +19,7 @@ from cli.registry_protocol import (  # noqa: E402
 )
 
 
-FIXTURE = CLI_DIR / "local_fixtures" / "builtin_registry_snapshot.v1.json"
+FIXTURE = FIXTURE
 
 
 class RegistryProtocolTests(unittest.TestCase):

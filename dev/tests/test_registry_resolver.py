@@ -13,10 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 
-CLI_DIR = Path(__file__).resolve().parent
-SCRIPTS_DIR = CLI_DIR.parent
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+from _paths import CLI_DIR, SCRIPTS_DIR  # noqa: F401
 
 from cli import paths  # noqa: E402
 from cli.registry_cache import (  # noqa: E402

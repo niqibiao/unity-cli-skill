@@ -11,9 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1]
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+from _paths import SCRIPTS_DIR  # noqa: F401
 
 from cli import core_bridge
 

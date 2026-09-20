@@ -12,12 +12,8 @@ from pathlib import Path
 from unittest import mock
 
 
-CLI_DIR = Path(__file__).resolve().parent
-SCRIPTS_DIR = CLI_DIR.parent
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+from _paths import CLI, CLI_DIR, FIXTURE, SCRIPTS_DIR  # noqa: F401
 
-CLI = CLI_DIR / "cs.py"
 SPEC = importlib.util.spec_from_file_location("unity_cli_registry_acceptance", CLI)
 CS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CS)
@@ -64,7 +60,7 @@ class _FailingGateway:
 class RegistryCliAcceptanceTests(unittest.TestCase):
     def test_top_level_live_then_cache_hit_preserves_json_contract_and_call_sequence(self):
         fallback = json.loads(
-            (CLI_DIR / "local_fixtures" / "builtin_registry_snapshot.v1.json").read_text(
+            (FIXTURE).read_text(
                 "utf-8"
             )
         )
@@ -155,7 +151,7 @@ class RegistryCliAcceptanceTests(unittest.TestCase):
 
     def test_stale_cache_missing_exact_id_is_unverified_not_unknown(self):
         fallback = json.loads(
-            (CLI_DIR / "local_fixtures" / "builtin_registry_snapshot.v1.json").read_text(
+            (FIXTURE).read_text(
                 "utf-8"
             )
         )
@@ -202,7 +198,7 @@ class RegistryCliAcceptanceTests(unittest.TestCase):
 
     def test_live_missing_exact_id_remains_authoritative_unknown(self):
         live = json.loads(
-            (CLI_DIR / "local_fixtures" / "builtin_registry_snapshot.v1.json").read_text(
+            (FIXTURE).read_text(
                 "utf-8"
             )
         )

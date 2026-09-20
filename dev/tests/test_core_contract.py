@@ -21,10 +21,7 @@ import unittest
 from inspect import signature
 from pathlib import Path
 
-CLI_DIR = Path(__file__).resolve().parent
-SCRIPTS_DIR = CLI_DIR.parent
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+from _paths import CLI_DIR, SCRIPTS_DIR  # noqa: F401
 
 BRIDGE = CLI_DIR / "core_bridge.py"
 

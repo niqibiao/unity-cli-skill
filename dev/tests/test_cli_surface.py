@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 
-CLI = Path(__file__).resolve().with_name("cs.py")
+from _paths import CLI, FIXTURE  # noqa: F401
 SPEC = importlib.util.spec_from_file_location("unity_cli_cs_surface", CLI)
 CS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CS)
@@ -140,9 +140,7 @@ class CliSurfaceTests(unittest.TestCase):
 
         snapshot = json.loads(
             (
-                CLI.parent
-                / "local_fixtures"
-                / "builtin_registry_snapshot.v1.json"
+                FIXTURE
             ).read_text("utf-8")
         )
         snapshot["custom"]["included"] = True
@@ -196,9 +194,7 @@ class CliSurfaceTests(unittest.TestCase):
     def test_old_offline_cache_domain_error_requires_live_discovery(self):
         snapshot = json.loads(
             (
-                CLI.parent
-                / "local_fixtures"
-                / "builtin_registry_snapshot.v1.json"
+                FIXTURE
             ).read_text("utf-8")
         )
         snapshot["builtin"]["commands"] = [

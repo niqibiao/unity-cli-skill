@@ -1,7 +1,7 @@
 """Refresh the local builtin-snapshot test fixture from a live editor service.
 
 The offline builtin snapshot is no longer a checked-in artifact.  Local tests
-that need real contracts read ``local_fixtures/builtin_registry_snapshot.v1.json``,
+that need real contracts read ``dev/fixtures/builtin_registry_snapshot.v1.json``,
 and this script regenerates that file from the live registry: fetch, validate,
 verify serializer parity, project to builtin-only, and write atomically.
 
@@ -23,8 +23,8 @@ import urllib.request
 from pathlib import Path
 
 
-CLI_DIR = Path(__file__).resolve().parent
-SCRIPTS_DIR = CLI_DIR.parent
+DEV_DIR = Path(__file__).resolve().parent
+SCRIPTS_DIR = DEV_DIR.parent / "skills" / "unity-cli" / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
@@ -34,7 +34,7 @@ from cli.registry_protocol import (  # noqa: E402
     validate_snapshot,
 )
 
-TARGET = CLI_DIR / "local_fixtures" / "builtin_registry_snapshot.v1.json"
+TARGET = DEV_DIR / "fixtures" / "builtin_registry_snapshot.v1.json"
 
 
 def _fetch_live_snapshot(port):

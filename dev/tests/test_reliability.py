@@ -6,9 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1]
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+from _paths import SCRIPTS_DIR  # noqa: F401
 
 from cli.reliability import (  # noqa: E402
     PLAY_MODE_DEBOUNCE_POLLS,

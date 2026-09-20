@@ -8,10 +8,8 @@ import unittest
 from pathlib import Path
 
 
-CLI_DIR = Path(__file__).resolve().parent
-SKILL_DIR = CLI_DIR.parent.parent
-EVALS_DIR = SKILL_DIR / "evals"
-REPO_DIR = SKILL_DIR.parents[1]
+from _paths import CLI_DIR, EVALS_DIR, SKILL_DIR  # noqa: F401
+from _paths import REPO_ROOT as REPO_DIR  # noqa: F401
 
 SPEC = importlib.util.spec_from_file_location(
     "unity_cli_routing_runner",

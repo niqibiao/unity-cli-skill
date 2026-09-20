@@ -6,10 +6,7 @@ import unittest
 from pathlib import Path
 
 
-CLI_DIR = Path(__file__).resolve().parent
-SCRIPTS_DIR = CLI_DIR.parent
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+from _paths import CLI_DIR, FIXTURE, SCRIPTS_DIR, SKILL_DIR  # noqa: F401
 
 from cli.command_discovery import DiscoveryError, discover  # noqa: E402
 from cli import registry_protocol as REGISTRY_PROTOCOL  # noqa: E402
@@ -957,9 +954,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
 
         snapshot = json.loads(
             (
-                CLI_DIR
-                / "local_fixtures"
-                / "builtin_registry_snapshot.v1.json"
+                FIXTURE
             ).read_text("utf-8")
         )
         authoring_index = discover(snapshot)
@@ -1041,9 +1036,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
     def test_real_overlay_exposes_exact_final_56_authoring_commands(self):
         snapshot = json.loads(
             (
-                CLI_DIR
-                / "local_fixtures"
-                / "builtin_registry_snapshot.v1.json"
+                FIXTURE
             ).read_text("utf-8")
         )
         index = discover(snapshot)
@@ -1211,9 +1204,7 @@ class ProgressiveDiscoveryTests(unittest.TestCase):
     def test_scene_save_contract_exposes_new_scene_preconditions(self):
         snapshot = json.loads(
             (
-                CLI_DIR
-                / "local_fixtures"
-                / "builtin_registry_snapshot.v1.json"
+                FIXTURE
             ).read_text("utf-8")
         )
         bundle = discover(

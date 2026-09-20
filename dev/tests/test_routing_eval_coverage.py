@@ -6,12 +6,10 @@ from collections import Counter
 from pathlib import Path
 
 
-CLI_DIR = Path(__file__).resolve().parent
-SKILL_DIR = CLI_DIR.parent.parent
-EVALS_DIR = SKILL_DIR / "evals"
+from _paths import CLI_DIR, EVALS_DIR, FIXTURE, SKILL_DIR  # noqa: F401
 
 REGISTRY_SNAPSHOT_PATH = (
-    CLI_DIR / "local_fixtures" / "builtin_registry_snapshot.v1.json"
+    FIXTURE
 )
 ROUTING_OVERLAY_PATH = CLI_DIR / "routing_overlay.json"
 ROUTE_CASES_PATH = EVALS_DIR / "route_cases.json"
@@ -20,7 +18,6 @@ EVALS_PATH = EVALS_DIR / "evals.json"
 ROUTING_SCHEMA_PATH = EVALS_DIR / "routing-output.schema.json"
 TRIGGER_SCHEMA_PATH = EVALS_DIR / "routing-trigger-output.schema.json"
 
-sys.path.insert(0, str(SKILL_DIR / "scripts"))
 
 from cli.command_preflight import prepare_command  # noqa: E402
 

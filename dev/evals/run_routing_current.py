@@ -24,7 +24,8 @@ from pathlib import Path, PureWindowsPath
 
 
 HERE = Path(__file__).resolve().parent
-SKILL_DIR = HERE.parent
+REPO_ROOT = HERE.parents[1]
+SKILL_DIR = REPO_ROOT / "skills" / "unity-cli"
 CLI_DIR = SKILL_DIR / "scripts" / "cli"
 EVALS_PATH = HERE / "evals.json"
 ROUTE_ORACLE_PATH = HERE / "route_cases.json"
@@ -32,10 +33,9 @@ TRIGGER_ORACLE_PATH = HERE / "trigger_queries.json"
 ROUTE_SCHEMA_PATH = HERE / "routing-output.schema.json"
 TRIGGER_SCHEMA_PATH = HERE / "routing-trigger-output.schema.json"
 GRADER_PATH = HERE / "benchmark.py"
-REGISTRY_SNAPSHOT_PATH = CLI_DIR / "local_fixtures" / "builtin_registry_snapshot.v1.json"
+REGISTRY_SNAPSHOT_PATH = HERE.parent / "fixtures" / "builtin_registry_snapshot.v1.json"
 ROUTING_OVERLAY_PATH = CLI_DIR / "routing_overlay.json"
 
-REPO_ROOT = SKILL_DIR.parent.parent
 
 DEFAULT_CANDIDATE = Path(os.environ.get("ROUTING_EVAL_CANDIDATE", REPO_ROOT))
 DEFAULT_PACKAGE_REPO = Path(
@@ -351,16 +351,11 @@ def candidate_skill_inputs(candidate):
 
 
 def candidate_contract_inputs(candidate):
-    cli_dir = (
-        Path(candidate).resolve()
-        / "skills"
-        / "unity-cli"
-        / "scripts"
-        / "cli"
-    )
+    root = Path(candidate).resolve()
+    cli_dir = root / "skills" / "unity-cli" / "scripts" / "cli"
     paths = {
         "registry_snapshot": (
-            cli_dir / "local_fixtures" / "builtin_registry_snapshot.v1.json"
+            root / "dev" / "fixtures" / "builtin_registry_snapshot.v1.json"
         ),
         "routing_overlay": cli_dir / "routing_overlay.json",
     }
