@@ -136,7 +136,7 @@ Agent 会话中的第一次 live discovery 只比较一次 fingerprint。后续�
 | `prefabs` | Prefab 创建、实例化、检查与直接编辑 |
 | `capture` | Scene/Game View 截图与 Profiler 录制 |
 
-五个 registry/session 机制只在显式 control view 中出现：
+六个 registry/session 命令只在显式 control view 中出现：
 
 ```bash
 cs list-commands --offline \
@@ -152,6 +152,10 @@ cs list-commands --offline \
 通过 `cs command --json --input <file>` 传入 JSON。内置与自定义命令使用同一套
 package-owned preflight。Unity 执行前，CLI 会拒绝过期 execution contract、未知
 参数、错误类型/范围、歧义 selector 和不安全的空 mutation。
+
+2.4.0 的场景和 Prefab 层级结果会报告节点数与截断原因，包括 5000 个节点和
+深度 128 的安全上限。返回的组件类型名包含命名空间，可直接复用于 `typeName`。
+详见[命令参考](skills/unity-cli/references/commands.md)。
 
 `editor/menu.open` 与 `editor/window.open` 只是 deny-policy intent，不是可执行
 contract。精确 ID 发现会把它们作为不可执行的 `denied` 决策返回；skill 不会用

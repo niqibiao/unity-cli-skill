@@ -143,7 +143,7 @@ complete snapshot only when the user explicitly asks to update the command list.
 | `prefabs` | Prefab creation, instantiation, inspection, and direct editing |
 | `capture` | Scene/Game View capture and Profiler recording |
 
-The five registry/session mechanics are visible only through the explicit control
+The six registry/session commands are visible only through the explicit control
 view:
 
 ```bash
@@ -161,6 +161,11 @@ Pass the JSON through `cs command --json --input <file>`. Built-in and custom
 commands use the same package-owned preflight. The CLI rejects stale execution
 contracts, unknown arguments, invalid types/ranges, ambiguous selectors, and
 unsafe empty mutations before Unity runs them.
+
+In 2.4.0, scene and prefab hierarchy results report their node count and any
+truncation, including the 5000-node and depth-128 safety limits. Returned
+component type names include their namespace and can be reused as `typeName`.
+See the [command reference](skills/unity-cli/references/commands.md) for details.
 
 `editor/menu.open` and `editor/window.open` are deny-policy intents, not executable
 contracts. Exact-ID discovery returns them as non-executing `denied` decisions;
