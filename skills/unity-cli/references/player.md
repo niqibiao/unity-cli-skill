@@ -17,6 +17,10 @@ probes 15500-15509 (all at once, 1s each) because a player writes no port file.
 If nothing answers there, commands that need the player exit 3 and say so rather
 than falling back to the editor.
 
+Only a development build has the service. It starts after the first scene
+loads, unless the project defines `ZH1ZH1_CSC_DISABLE_AUTOSTART`; then it starts
+only when game code calls `RuntimeInitializer.ConsoleInitialize()`.
+
 **The editor has to be running too**, except for `cs health` and `cs pull`.
 Every canonical command is checked against the package-owned registry before it
 is sent, and the editor is the registry's authority — with it closed, `cs

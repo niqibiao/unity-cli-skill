@@ -11,6 +11,13 @@ the section matching the pushed tag (without the leading `v`) as release notes.
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-11-17
+
+### Changed
+
+- Bump the version to 2.5.0. CLI behavior is unchanged.
+- The player guide states when a player's console service starts.
+
 ## [2.4.0] - 2026-09-20
 
 ### Added
